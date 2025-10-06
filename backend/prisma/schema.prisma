@@ -1,0 +1,393 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// User Management
+model User {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  phone     String?  @unique
+  password  String?
+  role      UserRole
+  isActive  Boolean  @default(true)
+  isVerified Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Role-specific profiles
+  studentProfile   Student?
+  coachProfile     Coach?
+  instituteProfile Institute?
+  clubProfile      Club?
+  adminProfile     Admin?
+
+  // OTP Management
+  otpRecords OTPRecord[]
+
+  @@map("users")
+}
+
+model OTPRecord {
+  id        String   @id @default(cuid())
+  userId    String
+  code      String
+  type      OTPType
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("otp_records")
+}
+
+// Student Module
+model Student {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  name        String
+  dateOfBirth DateTime?
+  sport       String?
+  level       String?
+  address     String?
+  city        String?
+  state       String?
+  pincode     String?
+  achievements String? // JSON string
+  profileCompletion Int @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relationships
+  coachConnections   StudentCoachConnection[]
+  eventRegistrations EventRegistration[]
+  instituteStudents  InstituteStudent[]
+  clubMembers        ClubMember[]
+
+  @@map("students")
+}
+
+// Coach Module
+model Coach {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  name            String
+  specialization  String?
+  experience      Int?
+  certifications  String? // JSON string
+  bio             String?
+  location        String?
+  city            String?
+  state           String?
+  pincode         String?
+  paymentStatus   PaymentStatus @default(PENDING)
+  subscriptionType SubscriptionType?
+  subscriptionExpiresAt DateTime?
+  isActive        Boolean  @default(false)
+  rating          Float?   @default(0)
+  totalStudents   Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relationships
+  studentConnections StudentCoachConnection[]
+  events             Event[]
+  payments           Payment[]
+  instituteCoaches   InstituteCoach[]
+
+  @@map("coaches")
+}
+
+// Institute Module
+model Institute {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  name          String
+  type          String?
+  location      String?
+  city          String?
+  state         String?
+  pincode       String?
+  established   String?
+  sportsOffered String? // JSON string
+  studentsCount Int      @default(0)
+  coachesCount  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relationships
+  students InstituteStudent[]
+  coaches  InstituteCoach[]
+
+  @@map("institutes")
+}
+
+// Club Module
+model Club {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  name          String
+  type          String?
+  location      String?
+  city          String?
+  state         String?
+  established   String?
+  facilities    String? // JSON string
+  membershipTypes String? // JSON string
+  membersCount  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relationships
+  members ClubMember[]
+
+  @@map("clubs")
+}
+
+// Admin Module
+model Admin {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  name        String
+  role        AdminRole @default(ADMIN)
+  permissions String?   // JSON string
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admins")
+}
+
+// Connection Models
+model StudentCoachConnection {
+  id        String            @id @default(cuid())
+  studentId String
+  coachId   String
+  status    ConnectionStatus  @default(PENDING)
+  initiatedBy InitiatedBy
+  message   String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  coach   Coach   @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, coachId])
+  @@map("student_coach_connections")
+}
+
+model InstituteStudent {
+  id          String   @id @default(cuid())
+  instituteId String
+  studentId   String
+  createdAt   DateTime @default(now())
+
+  institute Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([instituteId, studentId])
+  @@map("institute_students")
+}
+
+model InstituteCoach {
+  id          String   @id @default(cuid())
+  instituteId String
+  coachId     String
+  createdAt   DateTime @default(now())
+
+  institute Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  coach     Coach     @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@unique([instituteId, coachId])
+  @@map("institute_coaches")
+}
+
+model ClubMember {
+  id             String         @id @default(cuid())
+  clubId         String
+  studentId      String
+  membershipType String?
+  status         MemberStatus   @default(ACTIVE)
+  joinedAt       DateTime       @default(now())
+
+  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, studentId])
+  @@map("club_members")
+}
+
+// Event Management
+model Event {
+  id          String      @id @default(cuid())
+  coachId     String
+  name        String
+  description String?
+  sport       String
+  venue       String
+  address     String?
+  city        String?
+  state       String?
+  latitude    Float?
+  longitude   Float?
+  startDate   DateTime
+  endDate     DateTime?
+  maxParticipants Int?
+  currentParticipants Int @default(0)
+  eventFee    Float?
+  status      EventStatus @default(PENDING)
+  adminNotes  String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  coach Coach @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  // Relationships
+  registrations EventRegistration[]
+  payments      EventPayment[]
+
+  @@map("events")
+}
+
+model EventRegistration {
+  id        String             @id @default(cuid())
+  eventId   String
+  studentId String
+  status    RegistrationStatus @default(PENDING)
+  message   String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  event   Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, studentId])
+  @@map("event_registrations")
+}
+
+// Payment Management
+model Payment {
+  id              String        @id @default(cuid())
+  coachId         String
+  type            PaymentType
+  amount          Float
+  currency        String        @default("INR")
+  razorpayOrderId String?
+  razorpayPaymentId String?
+  status          PaymentStatus @default(PENDING)
+  description     String?
+  metadata        String?       // JSON string
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  coach Coach @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model EventPayment {
+  id              String        @id @default(cuid())
+  eventId         String
+  amount          Float
+  currency        String        @default("INR")
+  razorpayOrderId String?
+  razorpayPaymentId String?
+  status          PaymentStatus @default(PENDING)
+  description     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("event_payments")
+}
+
+// Enums
+enum UserRole {
+  STUDENT
+  COACH
+  INSTITUTE
+  CLUB
+  ADMIN
+}
+
+enum OTPType {
+  REGISTRATION
+  LOGIN
+  PASSWORD_RESET
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum PaymentType {
+  REGISTRATION
+  SUBSCRIPTION_MONTHLY
+  SUBSCRIPTION_ANNUAL
+  EVENT_FEE
+}
+
+enum SubscriptionType {
+  MONTHLY
+  ANNUAL
+}
+
+enum ConnectionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  BLOCKED
+}
+
+enum InitiatedBy {
+  STUDENT
+  COACH
+  INSTITUTE
+  CLUB
+}
+
+enum EventStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  AUTHORIZER
+  VIEWER
+}
+
+enum MemberStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
