@@ -35,7 +35,13 @@ export const AuthProvider = ({ children }) => {
         const userData = JSON.parse(storedUser);
         setUser(userData);
         
-        // Fetch fresh profile data
+        // Skip API calls for demo users
+        if (token && token.startsWith('demo-token-')) {
+          setLoading(false);
+          return;
+        }
+        
+        // Fetch fresh profile data for real users
         let profileResponse;
         switch (userData.role) {
           case 'STUDENT':
@@ -77,6 +83,63 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials, role) => {
     try {
       setLoading(true);
+      
+      // Demo login for development - Fixed for Vite
+      if (import.meta.env.DEV && credentials.email && credentials.email.startsWith('demo@')) {
+        const demoUser = {
+          id: `demo-${role}-${Date.now()}`,
+          email: credentials.email,
+          role: role.toUpperCase(),
+          name: `Demo ${role.charAt(0).toUpperCase() + role.slice(1)}`,
+          isVerified: true,
+          profile: {
+            firstName: 'Demo',
+            lastName: role.charAt(0).toUpperCase() + role.slice(1),
+            phone: '+1234567890',
+            dateOfBirth: '1990-01-01',
+            createdAt: new Date().toISOString(),
+            // Add role-specific demo data
+            ...(role === 'student' && {
+              parentContact: '+1234567891',
+              school: 'Demo High School'
+            }),
+            ...(role === 'coach' && {
+              specialization: 'Football, Basketball',
+              experience: '5 years',
+              city: 'Demo City',
+              state: 'Demo State',
+              certifications: 'UEFA Level 1, Basketball Coaching'
+            }),
+            ...(role === 'institute' && {
+              instituteName: 'Demo Sports Institute',
+              address: '123 Demo Street',
+              city: 'Demo City',
+              state: 'Demo State',
+              website: 'https://demo-institute.com'
+            }),
+            ...(role === 'club' && {
+              clubName: 'Demo Sports Club',
+              address: '456 Demo Avenue',
+              city: 'Demo City',
+              state: 'Demo State',
+              establishedYear: '2020'
+            })
+          }
+        };
+        
+        const demoToken = `demo-token-${role}-${Date.now()}`;
+        
+        // Store demo session
+        localStorage.setItem('token', demoToken);
+        localStorage.setItem('user', JSON.stringify(demoUser));
+        
+        setToken(demoToken);
+        setUser(demoUser);
+        
+        return { success: true, user: demoUser };
+      }
+      
+      // Production API login
       const response = await api.post('/api/auth/login', {
         ...credentials,
         role: role.toUpperCase()

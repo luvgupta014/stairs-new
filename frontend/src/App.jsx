@@ -4,6 +4,9 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
 
+// Landing Page
+import Landing from './pages/Landing';
+
 // Auth Pages
 import StudentLogin from './pages/auth/StudentLogin';
 import CoachLogin from './pages/auth/CoachLogin';
@@ -15,6 +18,11 @@ import StudentRegister from './pages/StudentRegister';
 import CoachRegister from './pages/CoachRegister';
 import InstituteRegister from './pages/InstituteRegister';
 import VerifyOtp from './pages/VerifyOtp';
+
+// Premium Registration Pages
+import CoachRegisterPremium from './pages/CoachRegisterPremium';
+import InstituteRegisterPremium from './pages/InstituteRegisterPremium';
+import ClubRegisterPremium from './pages/ClubRegisterPremium';
 
 // Dashboard Pages
 import StudentDashboard from './pages/dashboard/StudentDashboard';
@@ -32,87 +40,144 @@ function App() {
     <AuthProvider>
       <Router>
         <div className="min-h-screen bg-gray-50 flex flex-col">
-          <Header />
-          <main className="flex-grow">
-            <Routes>
-              {/* Home Route */}
-              <Route path="/" element={<Navigate to="/login/student" replace />} />
-              
-              {/* Auth Routes */}
-              <Route path="/login/student" element={<StudentLogin />} />
-              <Route path="/login/coach" element={<CoachLogin />} />
-              <Route path="/login/club" element={<ClubLogin />} />
-              <Route path="/login/institute" element={<InstituteLogin />} />
-              
-              {/* Registration Routes */}
-              <Route path="/register/student" element={<StudentRegister />} />
-              <Route path="/register/coach" element={<CoachRegister />} />
-              <Route path="/register/institute" element={<InstituteRegister />} />
-              <Route path="/verify-otp" element={<VerifyOtp />} />
-              
-              {/* Protected Dashboard Routes */}
-              <Route path="/dashboard/student" element={
-                <ProtectedRoute role="STUDENT">
-                  <StudentDashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/dashboard/coach" element={
-                <ProtectedRoute role="COACH">
-                  <CoachDashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/dashboard/club" element={
-                <ProtectedRoute role="CLUB">
-                  <ClubDashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/dashboard/institute" element={
-                <ProtectedRoute role="INSTITUTE">
-                  <InstituteDashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/dashboard/admin" element={
-                <ProtectedRoute role="ADMIN">
-                  <AdminDashboard />
-                </ProtectedRoute>
-              } />
-              
-              {/* Protected Coach Specific Routes */}
-              <Route path="/coach/event/create" element={
-                <ProtectedRoute role="COACH">
-                  <EventCreate />
-                </ProtectedRoute>
-              } />
-              <Route path="/coach/bulk-upload" element={
-                <ProtectedRoute role="COACH">
-                  <BulkUpload />
-                </ProtectedRoute>
-              } />
-              
-              {/* Other Protected Routes */}
-              <Route path="/events/create" element={
-                <ProtectedRoute>
-                  <EventCreate />
-                </ProtectedRoute>
-              } />
-              <Route path="/bulk-upload" element={
-                <ProtectedRoute>
-                  <BulkUpload />
-                </ProtectedRoute>
-              } />
-              
-              {/* Admin Routes */}
-              <Route path="/admin" element={
-                <ProtectedRoute role="ADMIN">
-                  <AdminDashboard />
-                </ProtectedRoute>
-              } />
-              
-              {/* Catch-all route */}
-              <Route path="*" element={<Navigate to="/login/student" replace />} />
-            </Routes>
-          </main>
-          <Footer />
+          <Routes>
+            {/* Landing Page Route (no header/footer) */}
+            <Route path="/" element={<Landing />} />
+            
+            {/* Auth Routes (no header/footer) */}
+            <Route path="/login/student" element={<StudentLogin />} />
+            <Route path="/login/coach" element={<CoachLogin />} />
+            <Route path="/login/club" element={<ClubLogin />} />
+            <Route path="/login/institute" element={<InstituteLogin />} />
+            
+            {/* Registration Routes (no header/footer) */}
+            <Route path="/register/student" element={<StudentRegister />} />
+            <Route path="/register/coach" element={<CoachRegister />} />
+            <Route path="/register/institute" element={<InstituteRegister />} />
+            <Route path="/verify-otp" element={<VerifyOtp />} />
+            
+            {/* Premium Registration Routes (no header/footer) */}
+            <Route path="/register/coach/premium" element={<CoachRegisterPremium />} />
+            <Route path="/register/institute/premium" element={<InstituteRegisterPremium />} />
+            <Route path="/register/club/premium" element={<ClubRegisterPremium />} />
+            
+            {/* Protected Dashboard Routes with Header and Footer */}
+            <Route path="/dashboard/student" element={
+              <>
+                <Header />
+                <main className="flex-grow">
+                  <ProtectedRoute role="STUDENT">
+                    <StudentDashboard />
+                  </ProtectedRoute>
+                </main>
+                <Footer />
+              </>
+            } />
+            <Route path="/dashboard/coach" element={
+              <>
+                <Header />
+                <main className="flex-grow">
+                  <ProtectedRoute role="COACH">
+                    <CoachDashboard />
+                  </ProtectedRoute>
+                </main>
+                <Footer />
+              </>
+            } />
+            <Route path="/dashboard/club" element={
+              <>
+                <Header />
+                <main className="flex-grow">
+                  <ProtectedRoute role="CLUB">
+                    <ClubDashboard />
+                  </ProtectedRoute>
+                </main>
+                <Footer />
+              </>
+            } />
+            <Route path="/dashboard/institute" element={
+              <>
+                <Header />
+                <main className="flex-grow">
+                  <ProtectedRoute role="INSTITUTE">
+                    <InstituteDashboard />
+                  </ProtectedRoute>
+                </main>
+                <Footer />
+              </>
+            } />
+            <Route path="/dashboard/admin" element={
+              <>
+                <Header />
+                <main className="flex-grow">
+                  <ProtectedRoute role="ADMIN">
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                </main>
+                <Footer />
+              </>
+            } />
+            
+            {/* Other Protected Routes with Header and Footer */}
+            <Route path="/coach/event/create" element={
+              <>
+                <Header />
+                <main className="flex-grow">
+                  <ProtectedRoute role="COACH">
+                    <EventCreate />
+                  </ProtectedRoute>
+                </main>
+                <Footer />
+              </>
+            } />
+            <Route path="/coach/bulk-upload" element={
+              <>
+                <Header />
+                <main className="flex-grow">
+                  <ProtectedRoute role="COACH">
+                    <BulkUpload />
+                  </ProtectedRoute>
+                </main>
+                <Footer />
+              </>
+            } />
+            <Route path="/events/create" element={
+              <>
+                <Header />
+                <main className="flex-grow">
+                  <ProtectedRoute>
+                    <EventCreate />
+                  </ProtectedRoute>
+                </main>
+                <Footer />
+              </>
+            } />
+            <Route path="/bulk-upload" element={
+              <>
+                <Header />
+                <main className="flex-grow">
+                  <ProtectedRoute>
+                    <BulkUpload />
+                  </ProtectedRoute>
+                </main>
+                <Footer />
+              </>
+            } />
+            <Route path="/admin" element={
+              <>
+                <Header />
+                <main className="flex-grow">
+                  <ProtectedRoute role="ADMIN">
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                </main>
+                <Footer />
+              </>
+            } />
+            
+            {/* Catch-all route */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </div>
       </Router>
     </AuthProvider>
