@@ -10,11 +10,12 @@ const InstituteLogin = () => {
   const navigate = useNavigate();
   const { login, isAuthenticated, getDashboardRoute } = useAuth();
 
-  useEffect(() => {
-    if (isAuthenticated()) {
-      navigate(getDashboardRoute());
-    }
-  }, [isAuthenticated, navigate, getDashboardRoute]);
+  // Remove auto-redirect to prevent immediate dashboard navigation
+  // useEffect(() => {
+  //   if (isAuthenticated()) {
+  //     navigate(getDashboardRoute());
+  //   }
+  // }, [isAuthenticated, navigate, getDashboardRoute]);
 
   const handleLogin = async (formData) => {
     setLoading(true);
@@ -56,7 +57,7 @@ const InstituteLogin = () => {
       onSubmit={handleLogin}
       loading={loading}
       error={error}
-      registerPath="/register/institute"
+      registerPath="/register/institute-premium"
       color="orange"
     />
   );

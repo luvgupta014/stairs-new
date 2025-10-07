@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { createEvent, processEventPayment } from '../api';
+import { useState, useEffect } from 'react';
+import { createEvent, processEventPayment, getCoachDashboard } from '../api';
 import Spinner from '../components/Spinner';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import { FaExclamationTriangle, FaCreditCard, FaLocationArrow } from 'react-icons/fa';
 
 const EventCreate = () => {
   const [formData, setFormData] = useState({
@@ -24,10 +25,37 @@ const EventCreate = () => {
   const [success, setSuccess] = useState(false);
   const [paymentStep, setPaymentStep] = useState(false);
   const [createdEvent, setCreatedEvent] = useState(null);
+  const [coachData, setCoachData] = useState(null);
+  const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(true);
+  const [gettingLocation, setGettingLocation] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    checkPaymentStatus();
+  }, []);
+
+  const checkPaymentStatus = async () => {
+    try {
+      const response = await getCoachDashboard();
+      if (response.success) {
+        setCoachData(response.data.coach);
+      }
+    } catch (error) {
+      console.error('Failed to check payment status:', error);
+    } finally {
+      setCheckingPaymentStatus(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Check payment status before allowing event creation
+    if (coachData?.paymentStatus === 'PENDING' && !coachData?.isActive) {
+      setError('Please complete your payment to create events. You can add events after payment completion.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -100,6 +128,109 @@ const EventCreate = () => {
     });
   };
 
+  const getCurrentLocation = async () => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by this browser.');
+      return;
+    }
+
+    setGettingLocation(true);
+    setError('');
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        
+        try {
+          // Use reverse geocoding to get address details
+          const response = await fetch(
+            `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=YOUR_OPENCAGE_API_KEY`
+          );
+          
+          if (!response.ok) {
+            // Fallback to a free service
+            const nominatimResponse = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`
+            );
+            
+            if (nominatimResponse.ok) {
+              const data = await nominatimResponse.json();
+              
+              setFormData(prev => ({
+                ...prev,
+                latitude: latitude.toString(),
+                longitude: longitude.toString(),
+                address: data.display_name || '',
+                city: data.address?.city || data.address?.town || data.address?.village || '',
+                state: data.address?.state || ''
+              }));
+            } else {
+              // Just set coordinates if reverse geocoding fails
+              setFormData(prev => ({
+                ...prev,
+                latitude: latitude.toString(),
+                longitude: longitude.toString()
+              }));
+            }
+          }
+        } catch (error) {
+          console.error('Reverse geocoding failed:', error);
+          // Just set coordinates if reverse geocoding fails
+          setFormData(prev => ({
+            ...prev,
+            latitude: latitude.toString(),
+            longitude: longitude.toString()
+          }));
+        } finally {
+          setGettingLocation(false);
+        }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        setGettingLocation(false);
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setError('Location access denied by user. Please enable location permissions and try again.');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setError('Location information is unavailable.');
+            break;
+          case error.TIMEOUT:
+            setError('Location request timed out.');
+            break;
+          default:
+            setError('An unknown error occurred while retrieving location.');
+            break;
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000 // 5 minutes
+      }
+    );
+  };
+
+  const clearLocation = () => {
+    setFormData(prev => ({
+      ...prev,
+      latitude: '',
+      longitude: '',
+      address: '',
+      city: '',
+      state: ''
+    }));
+  };
+
+  if (checkingPaymentStatus) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
   if (paymentStep) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -171,7 +302,54 @@ const EventCreate = () => {
           </div>
         )}
 
+        {/* Location Info */}
+        {!formData.latitude && !formData.longitude && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="flex items-start">
+              <FaLocationArrow className="text-blue-500 mt-1 mr-3 flex-shrink-0" />
+              <div>
+                <h4 className="text-sm font-medium text-blue-900 mb-1">
+                  Quick Location Setup
+                </h4>
+                <p className="text-sm text-blue-700">
+                  Use the "Use Current Location" button to automatically fill in your address, city, and state. 
+                  Make sure to allow location access when prompted by your browser.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Payment Status Alert */}
+        {coachData?.paymentStatus === 'PENDING' && !coachData?.isActive && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-6">
+            <div className="flex items-start">
+              <FaExclamationTriangle className="text-amber-500 mt-1 mr-3 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-amber-900 mb-2">
+                  Payment Required
+                </h3>
+                <p className="text-amber-700 mb-4">
+                  You need to complete your subscription payment to create events. Complete your payment to unlock full access to student management and event creation.
+                </p>
+                <Link
+                  to="/coach/payment"
+                  state={{ from: '/coach/event/create' }}
+                  className="inline-flex items-center bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors"
+                >
+                  <FaCreditCard className="mr-2" />
+                  Complete Payment
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Hidden fields for coordinates */}
+          <input type="hidden" name="latitude" value={formData.latitude} />
+          <input type="hidden" name="longitude" value={formData.longitude} />
+          
           {/* Basic Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -267,15 +445,35 @@ const EventCreate = () => {
           </div>
 
           <div>
-            <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
-              Address
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="address" className="block text-sm font-medium text-gray-700">
+                Address
+              </label>
+              <button
+                type="button"
+                onClick={getCurrentLocation}
+                disabled={gettingLocation}
+                className="inline-flex items-center px-3 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded-full hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {gettingLocation ? (
+                  <>
+                    <Spinner size="xs" color="blue" />
+                    <span className="ml-1">Getting location...</span>
+                  </>
+                ) : (
+                  <>
+                    <FaLocationArrow className="mr-1" />
+                    Use Current Location
+                  </>
+                )}
+              </button>
+            </div>
             <input
               type="text"
               id="address"
               name="address"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-              placeholder="Enter venue address"
+              placeholder="Enter venue address or use current location"
               value={formData.address}
               onChange={handleChange}
             />
@@ -312,6 +510,38 @@ const EventCreate = () => {
               />
             </div>
           </div>
+
+          {/* Coordinates Display */}
+          {(formData.latitude && formData.longitude) && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center">
+                  <FaLocationArrow className="text-green-600 mr-2" />
+                  <span className="text-sm font-medium text-green-800">Location Coordinates</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearLocation}
+                  className="text-xs text-red-600 hover:text-red-800 underline"
+                >
+                  Clear Location
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-green-700 font-medium">Latitude:</span>
+                  <span className="ml-2 text-green-600">{parseFloat(formData.latitude).toFixed(6)}</span>
+                </div>
+                <div>
+                  <span className="text-green-700 font-medium">Longitude:</span>
+                  <span className="ml-2 text-green-600">{parseFloat(formData.longitude).toFixed(6)}</span>
+                </div>
+              </div>
+              <p className="text-xs text-green-600 mt-2">
+                These coordinates will help students find your event location easily.
+              </p>
+            </div>
+          )}
 
           {/* Date and Time */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -13,11 +13,12 @@ const CoachLogin = () => {
   const navigate = useNavigate();
   const { login, loading, isAuthenticated, getDashboardRoute } = useAuth();
 
-  useEffect(() => {
-    if (isAuthenticated()) {
-      navigate(getDashboardRoute());
-    }
-  }, [isAuthenticated, navigate, getDashboardRoute]);
+  // Remove auto-redirect to prevent immediate dashboard navigation
+  // useEffect(() => {
+  //   if (isAuthenticated()) {
+  //     navigate(getDashboardRoute());
+  //   }
+  // }, [isAuthenticated, navigate, getDashboardRoute]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

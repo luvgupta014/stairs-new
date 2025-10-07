@@ -17,6 +17,9 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Clear any stale authentication data first
+    clearStaleAuth();
+    
     if (token) {
       // Set token in API headers
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -33,10 +36,10 @@ export const AuthProvider = ({ children }) => {
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
         const userData = JSON.parse(storedUser);
-        setUser(userData);
         
         // Skip API calls for demo users
         if (token && token.startsWith('demo-token-')) {
+          setUser(userData);
           setLoading(false);
           return;
         }
@@ -70,7 +73,11 @@ export const AuthProvider = ({ children }) => {
           };
           setUser(updatedUser);
           localStorage.setItem('user', JSON.stringify(updatedUser));
+        } else {
+          throw new Error('Profile fetch failed');
         }
+      } else {
+        throw new Error('No user data found');
       }
     } catch (error) {
       console.error('Token verification failed:', error);
@@ -173,31 +180,37 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (data, role) => {
-    try {
-      setLoading(true);
-      const endpoint = `/api/auth/${role.toLowerCase()}/register`;
-      const response = await api.post(endpoint, data);
+const register = async (data, role) => {
+  try {
+    setLoading(true);
+    console.log('Attempting registration with role:', role);
+    console.log('Registration data:', { ...data, password: '***' });
+    
+    const response = await api.post(`/auth/${role}/register`, data);
+    console.log('Registration response:', response.data);
 
-      if (response.data.success) {
-        return { 
-          success: true, 
-          data: response.data.data,
-          message: response.data.message 
-        };
-      }
-      
-      return { success: false, message: response.data.message };
-    } catch (error) {
-      console.error('Registration error:', error);
+    if (response.data.success) {
+      return { 
+        success: true, 
+        data: response.data.data,
+        message: response.data.message 
+      };
+    } else {
       return { 
         success: false, 
-        message: error.response?.data?.message || 'Registration failed. Please try again.' 
+        message: response.data.message || 'Registration failed' 
       };
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error) {
+    console.error('Registration error:', error);
+    return { 
+      success: false, 
+      message: error.response?.data?.message || 'Registration failed. Please try again.' 
+    };
+  } finally {
+    setLoading(false);
+  }
+};
 
   const verifyOtp = async (userId, otp) => {
     try {
@@ -254,6 +267,17 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     setUser(null);
     delete api.defaults.headers.common['Authorization'];
+  };
+
+  const clearStaleAuth = () => {
+    // Clear any stale authentication data
+    const storedToken = localStorage.getItem('token');
+    const storedUser = localStorage.getItem('user');
+    
+    // Clear if token exists but user doesn't, or vice versa
+    if ((storedToken && !storedUser) || (!storedToken && storedUser)) {
+      logout();
+    }
   };
 
   const updateProfile = async (profileData) => {
@@ -321,6 +345,7 @@ export const AuthProvider = ({ children }) => {
     verifyOtp,
     resendOtp,
     logout,
+    clearStaleAuth,
     updateProfile,
     isAuthenticated,
     getDashboardRoute

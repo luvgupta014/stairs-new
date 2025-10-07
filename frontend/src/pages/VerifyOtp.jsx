@@ -129,13 +129,8 @@ const VerifyOtp = () => {
             Verify OTP
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            Enter the 6-digit code sent to your phone
+            Enter the 6-digit code sent to your email
           </p>
-          {phone && (
-            <p className="text-sm font-medium text-blue-600">
-              {phone.slice(0, 2)}****{phone.slice(-2)}
-            </p>
-          )}
         </div>
 
         <div className="mt-8 bg-white py-8 px-6 shadow-lg rounded-lg">

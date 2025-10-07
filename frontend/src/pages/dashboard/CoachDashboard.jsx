@@ -2,24 +2,39 @@ import { useState, useEffect } from 'react';
 import { getCoachDashboard } from '../../api';
 import StudentCard from '../../components/StudentCard';
 import Spinner from '../../components/Spinner';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+import { FaExclamationTriangle, FaCreditCard, FaCheckCircle } from 'react-icons/fa';
 
 const CoachDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     loadDashboardData();
-  }, []);
+    
+    // Check if redirected from payment success
+    if (location.state?.paymentSuccess) {
+      setPaymentSuccess(true);
+      setTimeout(() => setPaymentSuccess(false), 5000);
+    }
+  }, [location]);
 
   const loadDashboardData = async () => {
     try {
-      const data = await getCoachDashboard();
-      setDashboardData(data);
+      const response = await getCoachDashboard();
+      console.log('Dashboard response:', response);
+      
+      if (response.success) {
+        setDashboardData(response.data);
+      } else {
+        throw new Error(response.message || 'Failed to load dashboard data');
+      }
     } catch (error) {
       console.error('Failed to load dashboard:', error);
-      // Using mock data for demo
+      // Using mock data for demo when API fails
       setDashboardData({
         coach: {
           name: 'Mike Johnson',
@@ -119,14 +134,56 @@ const CoachDashboard = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Payment Success Alert */}
+        {paymentSuccess && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
+            <div className="flex items-start">
+              <FaCheckCircle className="text-green-500 mt-1 mr-3 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-green-900 mb-2">
+                  Payment Successful!
+                </h3>
+                <p className="text-green-700">
+                  {location.state?.message || 'Your payment has been completed successfully. You now have full access to all features.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Payment Status Alert */}
+        {dashboardData?.coach?.paymentStatus === 'PENDING' && !dashboardData?.coach?.isActive && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-6">
+            <div className="flex items-start">
+              <FaExclamationTriangle className="text-amber-500 mt-1 mr-3 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-amber-900 mb-2">
+                  Complete Your Payment
+                </h3>
+                <p className="text-amber-700 mb-4">
+                  Your account has limited access. Complete your subscription payment to unlock student management, event creation, and advanced analytics.
+                </p>
+                <Link
+                  to="/coach/payment"
+                  state={{ from: '/dashboard/coach' }}
+                  className="inline-flex items-center bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors"
+                >
+                  <FaCreditCard className="mr-2" />
+                  Complete Payment
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Students</p>
-                <p className="text-3xl font-bold text-gray-900">{dashboardData?.coach?.studentsCount || 0}</p>
-                <p className="text-sm text-green-600 mt-1">↗ +3 this month</p>
+                <p className="text-3xl font-bold text-gray-900">{dashboardData?.totalStudents || dashboardData?.coach?.studentsCount || 0}</p>
+                <p className="text-sm text-green-600 mt-1">↗ +{dashboardData?.pendingRequests || 0} requests</p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                 <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,8 +197,8 @@ const CoachDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Events Created</p>
-                <p className="text-3xl font-bold text-gray-900">{dashboardData?.coach?.eventsCreated || 0}</p>
-                <p className="text-sm text-green-600 mt-1">↗ +2 this month</p>
+                <p className="text-3xl font-bold text-gray-900">{dashboardData?.totalEvents || dashboardData?.coach?.eventsCreated || 0}</p>
+                <p className="text-sm text-green-600 mt-1">↗ {dashboardData?.upcomingEvents || 0} upcoming</p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                 <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -155,7 +212,7 @@ const CoachDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Average Rating</p>
-                <p className="text-3xl font-bold text-gray-900">{dashboardData?.coach?.rating || 0}</p>
+                <p className="text-3xl font-bold text-gray-900">{dashboardData?.averageRating || dashboardData?.coach?.rating || 0}</p>
                 <div className="flex items-center mt-1">
                   <div className="flex text-yellow-400">
                     {[...Array(5)].map((_, i) => (
@@ -164,7 +221,7 @@ const CoachDashboard = () => {
                       </svg>
                     ))}
                   </div>
-                  <span className="text-sm text-gray-500 ml-2">Based on 45 reviews</span>
+                  <span className="text-sm text-gray-500 ml-2">Based on {dashboardData?.totalReviews || 0} reviews</span>
                 </div>
               </div>
               <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
@@ -179,8 +236,8 @@ const CoachDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-                <p className="text-3xl font-bold text-gray-900">₹{(dashboardData?.coach?.totalRevenue || 0).toLocaleString()}</p>
-                <p className="text-sm text-green-600 mt-1">↗ +12% this month</p>
+                <p className="text-3xl font-bold text-gray-900">₹{(dashboardData?.totalEarnings || dashboardData?.coach?.totalRevenue || 0).toLocaleString()}</p>
+                <p className="text-sm text-green-600 mt-1">↗ {dashboardData?.activeEvents || 0} active events</p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
                 <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

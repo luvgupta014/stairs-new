@@ -1,5 +1,7 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
+const Razorpay = require('razorpay');
+const crypto = require('crypto');
 const { authenticate, requireCoach, requireApproved } = require('../utils/authMiddleware');
 const { 
   successResponse, 
@@ -10,6 +12,12 @@ const {
 
 const router = express.Router();
 const prisma = new PrismaClient();
+
+// Initialize Razorpay
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET
+});
 
 // Get coach profile
 router.get('/profile', authenticate, requireCoach, async (req, res) => {
@@ -317,6 +325,15 @@ router.post('/students/add', authenticate, requireCoach, async (req, res) => {
       state,
       pincode
     } = req.body;
+
+    // Check if coach has completed payment or has active subscription
+    const coach = await prisma.coach.findUnique({
+      where: { userId: req.user.id }
+    });
+
+    if (!coach || (coach.paymentStatus === 'PENDING' && !coach.isActive)) {
+      return res.status(403).json(errorResponse('Please complete payment to add students. If you chose "Pay Later", please complete the payment to access this feature.', 403));
+    }
 
     if (!name || !email || !phone || !sport) {
       return res.status(400).json(errorResponse('Name, email, phone, and sport are required.', 400));
@@ -945,46 +962,30 @@ router.get('/dashboard', authenticate, requireCoach, async (req, res) => {
       totalEvents,
       upcomingEvents,
       totalEarnings,
-      averageRating,
-      recentReviews
+      activeEvents
     ] = await Promise.all([
       prisma.studentCoachConnection.count({
-        where: { coachId, status: 'ACTIVE' }
+        where: { coachId, status: 'ACCEPTED' }
       }),
       prisma.studentCoachConnection.count({
         where: { coachId, status: 'PENDING' }
       }),
       prisma.event.count({
-        where: { organizerId: coachId }
+        where: { coachId }
       }),
       prisma.event.count({
         where: { 
-          organizerId: coachId, 
+          coachId, 
           startDate: { gte: new Date() },
-          status: 'PUBLISHED'
+          status: { in: ['APPROVED', 'ACTIVE'] }
         }
       }),
       prisma.payment.aggregate({
-        where: { coachId, status: 'COMPLETED' },
+        where: { coachId, status: 'SUCCESS' },
         _sum: { amount: true }
       }),
-      prisma.coachReview.aggregate({
-        where: { coachId },
-        _avg: { rating: true },
-        _count: { rating: true }
-      }),
-      prisma.coachReview.findMany({
-        where: { coachId },
-        include: {
-          student: {
-            select: {
-              firstName: true,
-              lastName: true
-            }
-          }
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 5
+      prisma.event.count({
+        where: { coachId, status: 'ACTIVE' }
       })
     ]);
 
@@ -996,21 +997,131 @@ router.get('/dashboard', authenticate, requireCoach, async (req, res) => {
       by: ['createdAt'],
       where: {
         coachId,
-        status: 'COMPLETED',
+        status: 'SUCCESS',
         createdAt: { gte: sixMonthsAgo }
       },
       _sum: { amount: true }
     });
 
+    // Get coach profile for rating info
+    const coach = await prisma.coach.findUnique({
+      where: { id: coachId },
+      select: {
+        rating: true,
+        totalStudents: true,
+        name: true,
+        specialization: true,
+        createdAt: true,
+        paymentStatus: true,
+        isActive: true,
+        user: {
+          select: {
+            createdAt: true
+          }
+        }
+      }
+    });
+
+    // Get recent students (last 5 connections)
+    const recentStudents = await prisma.studentCoachConnection.findMany({
+      where: { coachId, status: 'ACCEPTED' },
+      include: {
+        student: {
+          select: {
+            id: true,
+            name: true,
+            sport: true,
+            level: true,
+            achievements: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5
+    });
+
+    // Get recent events (last 5)
+    const recentEvents = await prisma.event.findMany({
+      where: { coachId },
+      select: {
+        id: true,
+        name: true,
+        startDate: true,
+        status: true,
+        currentParticipants: true,
+        maxParticipants: true
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5
+    });
+
+    // Get recent notifications/activities
+    const notifications = [
+      {
+        id: 1,
+        type: 'student',
+        message: `You have ${pendingRequests} pending connection request${pendingRequests !== 1 ? 's' : ''}`,
+        time: '1 hour ago'
+      },
+      {
+        id: 2,
+        type: 'event',
+        message: `You have ${upcomingEvents} upcoming event${upcomingEvents !== 1 ? 's' : ''}`,
+        time: '2 hours ago'
+      },
+      {
+        id: 3,
+        type: 'payment',
+        message: `Total earnings: ₹${totalEarnings._sum.amount || 0}`,
+        time: '1 day ago'
+      }
+    ];
+
     res.json(successResponse({
+      // Coach basic info
+      coach: {
+        name: coach?.name || 'Coach',
+        specialization: coach?.specialization || 'Sports Training',
+        studentsCount: totalStudents,
+        eventsCreated: totalEvents,
+        rating: coach?.rating || 0,
+        totalRevenue: totalEarnings._sum.amount || 0,
+        joinedDate: coach?.user?.createdAt || coach?.createdAt,
+        paymentStatus: coach?.paymentStatus || 'PENDING',
+        isActive: coach?.isActive || false
+      },
+      // Students data
+      students: recentStudents.map(conn => ({
+        id: conn.student.id,
+        name: conn.student.name,
+        sport: conn.student.sport || 'General',
+        level: conn.student.level || 'Beginner',
+        achievements: conn.student.achievements ? JSON.parse(conn.student.achievements) : [],
+        joinedDate: conn.createdAt,
+        performance: Math.floor(Math.random() * 30) + 70 // Mock performance data
+      })),
+      // Events data
+      recentEvents: recentEvents.map(event => ({
+        id: event.id,
+        name: event.name,
+        date: event.startDate,
+        participants: event.currentParticipants || 0,
+        maxParticipants: event.maxParticipants || 50,
+        status: event.status === 'APPROVED' || event.status === 'ACTIVE' ? 'upcoming' : 
+               event.status === 'COMPLETED' ? 'completed' : 'pending'
+      })),
+      // Notifications
+      notifications,
+      // Analytics data
       totalStudents,
       pendingRequests,
       totalEvents,
       upcomingEvents,
+      activeEvents,
       totalEarnings: totalEarnings._sum.amount || 0,
-      averageRating: averageRating._avg.rating || 0,
-      totalReviews: averageRating._count.rating || 0,
-      recentReviews,
+      averageRating: coach?.rating || 0,
+      totalReviews: 0, // Will be implemented when review system is added
+      recentReviews: [],
       monthlyEarnings
     }, 'Analytics retrieved successfully.'));
 
@@ -1061,6 +1172,114 @@ router.get('/payments', authenticate, requireCoach, async (req, res) => {
   } catch (error) {
     console.error('Get payment history error:', error);
     res.status(500).json(errorResponse('Failed to retrieve payment history.', 500));
+  }
+});
+
+// Create payment order for coach subscription
+router.post('/create-payment-order', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { planId, amount } = req.body;
+
+    if (!planId || !amount) {
+      return res.status(400).json(errorResponse('Plan ID and amount are required.', 400));
+    }
+
+    // Create Razorpay order
+    const options = {
+      amount: amount * 100, // Amount in paise
+      currency: 'INR',
+      receipt: `c${req.coach.id}_${Date.now()}`.slice(0, 40),
+      payment_capture: 1
+    };
+
+    const order = await razorpay.orders.create(options);
+
+    // Store order details in database
+    await prisma.payment.create({
+      data: {
+        coachId: req.coach.id,
+        type: 'SUBSCRIPTION_MONTHLY',
+        amount: amount,
+        currency: 'INR',
+        razorpayOrderId: order.id,
+        status: 'PENDING',
+        description: `${planId} plan subscription`,
+        metadata: JSON.stringify({ planId })
+      }
+    });
+
+    res.json(successResponse({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency
+    }, 'Payment order created successfully.'));
+
+  } catch (error) {
+    console.error('Create payment order error:', error);
+    res.status(500).json(errorResponse('Failed to create payment order.', 500));
+  }
+});
+
+// Verify payment and update coach status
+router.post('/verify-payment', authenticate, requireCoach, async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      planId
+    } = req.body;
+
+    // Verify signature
+    const body = razorpay_order_id + '|' + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json(errorResponse('Invalid payment signature.', 400));
+    }
+
+    // Update payment record
+    const payment = await prisma.payment.updateMany({
+      where: {
+        coachId: req.coach.id,
+        razorpayOrderId: razorpay_order_id,
+        status: 'PENDING'
+      },
+      data: {
+        razorpayPaymentId: razorpay_payment_id,
+        status: 'SUCCESS'
+      }
+    });
+
+    if (payment.count === 0) {
+      return res.status(404).json(errorResponse('Payment record not found.', 404));
+    }
+
+    // Update coach status
+    const subscriptionExpiresAt = new Date();
+    subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1);
+
+    await prisma.coach.update({
+      where: { id: req.coach.id },
+      data: {
+        paymentStatus: 'SUCCESS',
+        isActive: true,
+        subscriptionType: 'MONTHLY',
+        subscriptionExpiresAt
+      }
+    });
+
+    res.json(successResponse({
+      paymentId: razorpay_payment_id,
+      status: 'SUCCESS'
+    }, 'Payment verified and coach activated successfully.'));
+
+  } catch (error) {
+    console.error('Verify payment error:', error);
+    res.status(500).json(errorResponse('Payment verification failed.', 500));
   }
 });
 

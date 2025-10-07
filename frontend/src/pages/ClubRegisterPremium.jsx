@@ -14,9 +14,15 @@ import {
   FaHandshake,
   FaChartLine
 } from 'react-icons/fa';
+import RegistrationSuccessModal from '../components/RegistrationSuccessModal';
+import api from '../api';
 
 const ClubRegisterPremium = () => {
   const [currentStep, setCurrentStep] = useState(1);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [registrationData, setRegistrationData] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     // Step 1: Club Info
     clubName: '',
@@ -25,6 +31,8 @@ const ClubRegisterPremium = () => {
     website: '',
     foundedYear: '',
     clubType: '',
+    password: '',
+    confirmPassword: '',
     
     // Step 2: Management
     presidentName: '',
@@ -42,7 +50,8 @@ const ClubRegisterPremium = () => {
     
     // Step 4: Payment
     plan: 'premium',
-    paymentMethod: 'card'
+    paymentMethod: 'card',
+    payLater: false
   });
   
   const navigate = useNavigate();
@@ -127,7 +136,68 @@ const ClubRegisterPremium = () => {
   };
 
   const handleSubmit = async () => {
-    console.log('Club registration:', formData);
+    try {
+      setError('');
+      setLoading(true);
+      
+      // Validation
+      if (!formData.clubName || !formData.email || !formData.phone || !formData.password) {
+        setError('Please fill in all required fields');
+        setLoading(false);
+        return;
+      }
+
+      if (formData.password !== formData.confirmPassword) {
+        setError('Passwords do not match');
+        setLoading(false);
+        return;
+      }
+
+      if (formData.password.length < 8) {
+        setError('Password must be at least 8 characters');
+        setLoading(false);
+        return;
+      }
+
+      const registrationData = {
+        name: formData.clubName,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+        address: '',
+        website: formData.website,
+        sportsOffered: formData.primarySports,
+        contactPerson: formData.presidentName,
+        establishedYear: formData.foundedYear,
+        payLater: formData.payLater
+      };
+
+      const response = await api.post('/auth/club/register', registrationData);
+
+      if (response.data.success) {
+        navigate('/verify-otp-premium', {
+          state: {
+            userId: response.data.data.userId,
+            email: formData.email,
+            role: 'CLUB',
+            name: formData.clubName,
+            payLater: formData.payLater
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      setError(error.response?.data?.message || 'Registration failed. Please try again.');
+      setLoading(false);
+    }
+  };
+
+  const handleModalClose = () => {
+    setShowSuccessModal(false);
+  };
+
+  const handleContinueToDashboard = () => {
+    setShowSuccessModal(false);
     navigate('/login/club');
   };
 
@@ -216,6 +286,14 @@ const ClubRegisterPremium = () => {
 
               {/* Step Content */}
               <div className="p-8">
+                {/* Error Display */}
+                {error && (
+                  <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-start space-x-2">
+                    <span>⚠️</span>
+                    <span>{error}</span>
+                  </div>
+                )}
+                
                 {/* Step 1: Club Information */}
                 {currentStep === 1 && (
                   <div className="space-y-6">
@@ -304,6 +382,41 @@ const ClubRegisterPremium = () => {
                           <option key={type} value={type}>{type}</option>
                         ))}
                       </select>
+                    </div>
+
+                    {/* Password Fields */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Password *
+                        </label>
+                        <input
+                          type="password"
+                          value={formData.password}
+                          onChange={(e) => handleInputChange('password', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                          placeholder="••••••••"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Min. 8 characters with uppercase, lowercase, and number
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Confirm Password *
+                        </label>
+                        <input
+                          type="password"
+                          value={formData.confirmPassword}
+                          onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                          placeholder="••••••••"
+                        />
+                        {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                          <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+                        )}
+                      </div>
                     </div>
 
                     <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
@@ -622,6 +735,24 @@ const ClubRegisterPremium = () => {
                         </div>
                       </div>
                     </div>
+
+                    {/* Pay Later Option */}
+                    <div className="bg-amber-50 rounded-xl p-6 border border-amber-200">
+                      <label className="flex items-start space-x-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.payLater}
+                          onChange={(e) => setFormData({ ...formData, payLater: e.target.checked })}
+                          className="mt-1 h-5 w-5 text-indigo-600 rounded focus:ring-indigo-500"
+                        />
+                        <div className="flex-1">
+                          <span className="font-medium text-gray-900">Pay Later</span>
+                          <p className="text-sm text-amber-700 mt-1">
+                            ⚠️ If you choose to pay later, you won't be able to add students or create events until payment is completed.
+                          </p>
+                        </div>
+                      </label>
+                    </div>
                   </div>
                 )}
 
@@ -651,10 +782,11 @@ const ClubRegisterPremium = () => {
                   ) : (
                     <button
                       onClick={handleSubmit}
-                      className="flex items-center space-x-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white px-8 py-3 rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 transition-all transform hover:scale-105"
+                      disabled={loading}
+                      className="flex items-center space-x-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white px-8 py-3 rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                     >
                       <FaCrown />
-                      <span>Launch Club</span>
+                      <span>{loading ? 'Processing...' : (formData.payLater ? 'Complete Registration' : 'Launch Club')}</span>
                     </button>
                   )}
                 </div>
@@ -663,6 +795,16 @@ const ClubRegisterPremium = () => {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Registration Success Modal */}
+      <RegistrationSuccessModal
+        isOpen={showSuccessModal}
+        onClose={handleModalClose}
+        uniqueId={registrationData?.uniqueId}
+        role="CLUB"
+        userName={registrationData?.name}
+        onContinue={handleContinueToDashboard}
+      />
     </div>
   );
 };

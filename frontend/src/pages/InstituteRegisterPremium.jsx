@@ -15,9 +15,15 @@ import {
   FaRunning,
   FaTableTennis
 } from 'react-icons/fa';
+import RegistrationSuccessModal from '../components/RegistrationSuccessModal';
+import api from '../api';
 
 const InstituteRegisterPremium = () => {
   const [currentStep, setCurrentStep] = useState(1);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [registrationData, setRegistrationData] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     // Step 1: Basic Info
     instituteName: '',
@@ -25,6 +31,8 @@ const InstituteRegisterPremium = () => {
     phone: '',
     website: '',
     establishedYear: '',
+    password: '',
+    confirmPassword: '',
     
     // Step 2: Institution Details
     address: '',
@@ -50,7 +58,8 @@ const InstituteRegisterPremium = () => {
     
     // Step 5: Payment
     plan: 'premium',
-    paymentMethod: 'card'
+    paymentMethod: 'card',
+    payLater: false
   });
   
   const navigate = useNavigate();
@@ -145,7 +154,68 @@ const InstituteRegisterPremium = () => {
   };
 
   const handleSubmit = async () => {
-    console.log('Institute registration:', formData);
+    try {
+      setError('');
+      setLoading(true);
+      
+      // Validation
+      if (!formData.instituteName || !formData.email || !formData.phone || !formData.password) {
+        setError('Please fill in all required fields');
+        setLoading(false);
+        return;
+      }
+
+      if (formData.password !== formData.confirmPassword) {
+        setError('Passwords do not match');
+        setLoading(false);
+        return;
+      }
+
+      if (formData.password.length < 8) {
+        setError('Password must be at least 8 characters');
+        setLoading(false);
+        return;
+      }
+
+      const registrationData = {
+        name: formData.instituteName,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+        address: formData.address,
+        website: formData.website,
+        sportsOffered: formData.sportsOffered,
+        contactPerson: formData.principalName,
+        licenseNumber: formData.registrationNumber,
+        payLater: formData.payLater
+      };
+
+      const response = await api.post('/auth/institute/register', registrationData);
+
+      if (response.data.success) {
+        navigate('/verify-otp-premium', {
+          state: {
+            userId: response.data.data.userId,
+            email: formData.email,
+            role: 'INSTITUTE',
+            name: formData.instituteName,
+            payLater: formData.payLater
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      setError(error.response?.data?.message || 'Registration failed. Please try again.');
+      setLoading(false);
+    }
+  };
+
+  const handleModalClose = () => {
+    setShowSuccessModal(false);
+  };
+
+  const handleContinueToDashboard = () => {
+    setShowSuccessModal(false);
     navigate('/login/institute');
   };
 
@@ -235,6 +305,14 @@ const InstituteRegisterPremium = () => {
 
               {/* Step Content */}
               <div className="p-8">
+                {/* Error Display */}
+                {error && (
+                  <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-start space-x-2">
+                    <span>⚠️</span>
+                    <span>{error}</span>
+                  </div>
+                )}
+                
                 {/* Step 1: Basic Information */}
                 {currentStep === 1 && (
                   <div className="space-y-6">
@@ -306,6 +384,41 @@ const InstituteRegisterPremium = () => {
                           min="1900"
                           max="2024"
                         />
+                      </div>
+                    </div>
+
+                    {/* Password Fields */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Password *
+                        </label>
+                        <input
+                          type="password"
+                          value={formData.password}
+                          onChange={(e) => handleInputChange('password', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                          placeholder="••••••••"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Min. 8 characters with uppercase, lowercase, and number
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Confirm Password *
+                        </label>
+                        <input
+                          type="password"
+                          value={formData.confirmPassword}
+                          onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                          placeholder="••••••••"
+                        />
+                        {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                          <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -673,6 +786,40 @@ const InstituteRegisterPremium = () => {
                         </div>
                       </div>
                     </div>
+
+                    {/* Pay Later Option */}
+                    <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                      <div className="flex items-start space-x-4">
+                        <input
+                          type="checkbox"
+                          id="payLater"
+                          checked={formData.payLater}
+                          onChange={(e) => handleInputChange('payLater', e.target.checked)}
+                          className="mt-1 w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 cursor-pointer"
+                        />
+                        <div className="flex-1">
+                          <label htmlFor="payLater" className="font-semibold text-gray-900 cursor-pointer flex items-center space-x-2">
+                            <span>💳 Pay Later Option</span>
+                          </label>
+                          <p className="text-sm text-gray-600 mt-2">
+                            Skip payment for now and complete it later from your dashboard. You can start setting up your institute profile immediately.
+                          </p>
+                          <div className="mt-3 bg-orange-50 border-l-4 border-orange-400 p-3 rounded">
+                            <p className="text-xs text-orange-800 font-medium">
+                              ⚠️ <strong>Note:</strong> With "Pay Later", some features will be restricted:
+                            </p>
+                            <ul className="text-xs text-orange-700 mt-2 space-y-1 ml-4">
+                              <li>• Limited student management</li>
+                              <li>• Restricted coach connections</li>
+                              <li>• Basic dashboard access</li>
+                            </ul>
+                            <p className="text-xs text-orange-800 mt-2">
+                              Complete payment anytime to unlock all features!
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -702,10 +849,20 @@ const InstituteRegisterPremium = () => {
                   ) : (
                     <button
                       onClick={handleSubmit}
-                      className="flex items-center space-x-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white px-8 py-3 rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 transition-all transform hover:scale-105"
+                      disabled={loading}
+                      className="flex items-center space-x-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white px-8 py-3 rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <FaCrown />
-                      <span>Launch Institute</span>
+                      {loading ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Registering...</span>
+                        </>
+                      ) : (
+                        <>
+                          <FaCrown />
+                          <span>{formData.payLater ? 'Complete Registration' : 'Launch Institute'}</span>
+                        </>
+                      )}
                     </button>
                   )}
                 </div>
@@ -714,6 +871,16 @@ const InstituteRegisterPremium = () => {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Registration Success Modal */}
+      <RegistrationSuccessModal
+        isOpen={showSuccessModal}
+        onClose={handleModalClose}
+        uniqueId={registrationData?.uniqueId}
+        role="INSTITUTE"
+        userName={registrationData?.name}
+        onContinue={handleContinueToDashboard}
+      />
     </div>
   );
 };

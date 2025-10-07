@@ -25,7 +25,7 @@ const Landing = () => {
       color: 'bg-green-500',
       hoverColor: 'hover:bg-green-600',
       loginPath: '/login/coach',
-      registerPath: '/register/coach/premium',
+      registerPath: '/register/coach-premium',
       features: ['Manage Students', 'Create Events', 'Track Performance', 'Grow Your Business']
     },
     {
@@ -36,7 +36,7 @@ const Landing = () => {
       color: 'bg-purple-500',
       hoverColor: 'hover:bg-purple-600',
       loginPath: '/login/institute',
-      registerPath: '/register/institute/premium',
+      registerPath: '/register/institute-premium',
       features: ['Manage Faculty', 'Student Enrollment', 'Event Management', 'Analytics Dashboard']
     },
     {
@@ -47,7 +47,7 @@ const Landing = () => {
       color: 'bg-orange-500',
       hoverColor: 'hover:bg-orange-600',
       loginPath: '/login/club',
-      registerPath: '/register/club/premium',
+      registerPath: '/register/club-premium',
       features: ['Member Management', 'Event Organization', 'Community Building', 'Tournament Hosting']
     }
   ];

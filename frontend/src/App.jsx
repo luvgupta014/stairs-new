@@ -23,6 +23,7 @@ import VerifyOtp from './pages/VerifyOtp';
 import CoachRegisterPremium from './pages/CoachRegisterPremium';
 import InstituteRegisterPremium from './pages/InstituteRegisterPremium';
 import ClubRegisterPremium from './pages/ClubRegisterPremium';
+import VerifyOtpPremium from './pages/VerifyOtpPremium';
 
 // Dashboard Pages
 import StudentDashboard from './pages/dashboard/StudentDashboard';
@@ -34,6 +35,7 @@ import AdminDashboard from './pages/AdminDashboard';
 // Other Pages
 import EventCreate from './pages/EventCreate';
 import BulkUpload from './pages/BulkUpload';
+import CoachPayment from './pages/CoachPayment';
 
 function App() {
   return (
@@ -52,14 +54,16 @@ function App() {
             
             {/* Registration Routes (no header/footer) */}
             <Route path="/register/student" element={<StudentRegister />} />
-            <Route path="/register/coach" element={<CoachRegister />} />
-            <Route path="/register/institute" element={<InstituteRegister />} />
+            <Route path="/register/coach" element={<Navigate to="/register/coach-premium" replace />} />
+            <Route path="/register/institute" element={<Navigate to="/register/institute-premium" replace />} />
+            <Route path="/register/club" element={<Navigate to="/register/club-premium" replace />} />
             <Route path="/verify-otp" element={<VerifyOtp />} />
             
             {/* Premium Registration Routes (no header/footer) */}
-            <Route path="/register/coach/premium" element={<CoachRegisterPremium />} />
-            <Route path="/register/institute/premium" element={<InstituteRegisterPremium />} />
-            <Route path="/register/club/premium" element={<ClubRegisterPremium />} />
+            <Route path="/register/coach-premium" element={<CoachRegisterPremium />} />
+            <Route path="/register/institute-premium" element={<InstituteRegisterPremium />} />
+            <Route path="/register/club-premium" element={<ClubRegisterPremium />} />
+            <Route path="/verify-otp-premium" element={<VerifyOtpPremium />} />
             
             {/* Protected Dashboard Routes with Header and Footer */}
             <Route path="/dashboard/student" element={
@@ -119,6 +123,11 @@ function App() {
             } />
             
             {/* Other Protected Routes with Header and Footer */}
+            <Route path="/coach/payment" element={
+              <ProtectedRoute role="COACH">
+                <CoachPayment />
+              </ProtectedRoute>
+            } />
             <Route path="/coach/event/create" element={
               <>
                 <Header />

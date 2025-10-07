@@ -1,553 +1,539 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { FaUser, FaBriefcase, FaStar, FaCrown, FaCheck, FaArrowRight, FaArrowLeft } from 'react-icons/fa';
+import api from '../api';
 
 const CoachRegisterPremium = () => {
-  const [currentStep, setCurrentStep] = useState(1);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    // Step 1: Personal Info
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
+    fullName: '',
+    fatherName: '',
+    motherName: '',
+    aadhaar: '',
+    gender: '',
     dateOfBirth: '',
-    
-    // Step 2: Professional Details
-    experience: '',
-    education: '',
-    certifications: '',
-    previousClubs: '',
-    
-    // Step 3: Specialization
-    sports: [],
-    ageGroups: [],
-    skillLevel: [],
-    trainingStyle: '',
-    achievements: '',
-    
-    // Step 4: Payment
-    plan: 'professional',
-    paymentMethod: 'card'
+    state: '',
+    district: '',
+    address: '',
+    pinCode: '',
+    mobileNumber: '',
+    emailId: '',
+    panNumber: '',
+    utrNumber: '',
+    password: '',
+    confirmPassword: '',
+    membershipStatus: 'NEW',
+    applyingAs: 'Chief District coordinator',
+    primarySports: '',
+    otherSports: '',
+    payLater: false
   });
   
   const navigate = useNavigate();
 
-  const steps = [
-    {
-      id: 1,
-      title: 'Personal Information',
-      subtitle: 'Tell us about yourself',
-      icon: FaUser,
-      color: 'blue'
-    },
-    {
-      id: 2,
-      title: 'Professional Background',
-      subtitle: 'Your coaching experience',
-      icon: FaBriefcase,
-      color: 'green'
-    },
-    {
-      id: 3,
-      title: 'Specialization',
-      subtitle: 'What makes you unique',
-      icon: FaStar,
-      color: 'purple'
-    },
-    {
-      id: 4,
-      title: 'Launch Your Profile',
-      subtitle: 'Choose your plan',
-      icon: FaCrown,
-      color: 'gold'
-    }
-  ];
-
-  const sportsOptions = [
-    'Football', 'Basketball', 'Cricket', 'Tennis', 'Swimming', 
-    'Badminton', 'Hockey', 'Athletics', 'Volleyball', 'Boxing'
-  ];
-
-  const ageGroupOptions = [
-    'Under 8', '8-12 years', '13-16 years', '17-21 years', 'Adults (21+)', 'Seniors (40+)'
-  ];
-
-  const skillLevelOptions = [
-    'Beginner', 'Intermediate', 'Advanced', 'Professional', 'Elite'
-  ];
-
   const handleInputChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleArrayToggle = (field, value) => {
     setFormData(prev => ({
       ...prev,
-      [field]: prev[field].includes(value) 
-        ? prev[field].filter(item => item !== value)
-        : [...prev[field], value]
+      [field]: value
     }));
   };
 
-  const nextStep = () => {
-    if (currentStep < 4) {
-      setCurrentStep(currentStep + 1);
-    }
-  };
-
-  const prevStep = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
-  };
-
   const handleSubmit = async () => {
-    // Handle registration logic here
-    console.log('Coach registration:', formData);
-    navigate('/login/coach');
+    try {
+      setError('');
+      setLoading(true);
+      
+      // Validation
+      if (!formData.fullName || !formData.fatherName || !formData.emailId || 
+          !formData.mobileNumber || !formData.password || !formData.aadhaar ||
+          !formData.gender || !formData.dateOfBirth || !formData.state ||
+          !formData.district || !formData.address || !formData.pinCode ||
+          !formData.panNumber || !formData.utrNumber || !formData.primarySports) {
+        setError('Please fill in all required fields');
+        setLoading(false);
+        return;
+      }
+
+      if (formData.password !== formData.confirmPassword) {
+        setError('Passwords do not match');
+        setLoading(false);
+        return;
+      }
+
+      if (formData.password.length < 8) {
+        setError('Password must be at least 8 characters');
+        setLoading(false);
+        return;
+      }
+
+      // Prepare registration data
+      const registrationData = {
+        name: formData.fullName,
+        fatherName: formData.fatherName,
+        motherName: formData.motherName,
+        aadhaar: formData.aadhaar,
+        gender: formData.gender,
+        dateOfBirth: formData.dateOfBirth,
+        state: formData.state,
+        district: formData.district,
+        address: formData.address,
+        pincode: formData.pinCode,
+        email: formData.emailId,
+        phone: formData.mobileNumber,
+        panNumber: formData.panNumber,
+        utrNumber: formData.utrNumber,
+        membershipStatus: formData.membershipStatus,
+        applyingAs: formData.applyingAs,
+        primarySport: formData.primarySports,
+        otherSports: formData.otherSports,
+        password: formData.password,
+        specialization: formData.primarySports,
+        experience: '0-1',
+        certifications: '',
+        bio: '',
+        location: formData.address,
+        payLater: formData.payLater
+      };
+
+      console.log('Registering coach:', registrationData);
+
+      // Call API
+      const response = await api.post('/api/auth/coach/register', registrationData);
+
+      if (response.data.success) {
+        // Navigate to OTP verification
+        navigate('/verify-otp-premium', {
+          state: {
+            userId: response.data.data.userId,
+            email: formData.emailId,
+            role: 'COACH',
+            name: formData.fullName,
+            payLater: formData.payLater
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      setError(error.response?.data?.message || 'Registration failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-100 flex flex-col">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">S</span>
-            </div>
-            <span className="font-bold text-xl text-gray-900">STAIRS</span>
-          </div>
-          
-          {/* Progress Bar */}
-          <div className="hidden md:flex items-center space-x-2">
-            {steps.map((step, index) => (
-              <div key={step.id} className="flex items-center">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  currentStep > step.id 
-                    ? 'bg-green-500 text-white' 
-                    : currentStep === step.id 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-gray-200 text-gray-500'
-                }`}>
-                  {currentStep > step.id ? <FaCheck /> : step.id}
-                </div>
-                {index < steps.length - 1 && (
-                  <div className={`w-12 h-0.5 mx-2 ${
-                    currentStep > step.id ? 'bg-green-500' : 'bg-gray-200'
-                  }`} />
-                )}
-              </div>
-            ))}
-          </div>
-
-          <button 
-            onClick={() => navigate('/login/coach')}
-            className="text-gray-600 hover:text-gray-900 font-medium"
-          >
-            Already have an account?
-          </button>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">
+            🏆 STAIRS Coach Registration
+          </h1>
+          <p className="text-gray-600 text-lg">
+            Join the elite community of verified coaches
+          </p>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="max-w-4xl w-full">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentStep}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.3 }}
-              className="bg-white rounded-2xl shadow-xl overflow-hidden"
-            >
-              {/* Step Header */}
-              <div className={`bg-gradient-to-r ${
-                currentStep === 1 ? 'from-blue-500 to-blue-600' :
-                currentStep === 2 ? 'from-green-500 to-green-600' :
-                currentStep === 3 ? 'from-purple-500 to-purple-600' :
-                'from-yellow-400 to-orange-500'
-              } p-8 text-white`}>
-                <div className="flex items-center space-x-4">
-                  <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
-                    {React.createElement(steps[currentStep - 1].icon, { className: "w-8 h-8" })}
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-bold">{steps[currentStep - 1].title}</h2>
-                    <p className="text-lg opacity-90">{steps[currentStep - 1].subtitle}</p>
-                  </div>
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden p-8">
+            {/* Error Display */}
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-start space-x-2">
+                <span>⚠️</span>
+                <span>{error}</span>
+              </div>
+            )}
+            
+            <div className="space-y-6">
+              {/* Membership Application Status */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Membership Application Status *
+                  </label>
+                  <select
+                    value={formData.membershipStatus}
+                    onChange={(e) => handleInputChange('membershipStatus', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  >
+                    <option value="NEW">NEW</option>
+                    <option value="RENEWAL">RENEWAL</option>
+                  </select>
                 </div>
                 
-                {/* Mobile Progress */}
-                <div className="md:hidden mt-6">
-                  <div className="flex justify-between text-sm opacity-75 mb-2">
-                    <span>Step {currentStep} of {steps.length}</span>
-                    <span>{Math.round((currentStep / steps.length) * 100)}% Complete</span>
-                  </div>
-                  <div className="w-full bg-white bg-opacity-20 rounded-full h-2">
-                    <div 
-                      className="bg-white h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${(currentStep / steps.length) * 100}%` }}
-                    />
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Applying As *
+                  </label>
+                  <select
+                    value={formData.applyingAs}
+                    onChange={(e) => handleInputChange('applyingAs', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  >
+                    <option value="Chief District coordinator">Chief District coordinator</option>
+                    <option value="District coordinator">District coordinator</option>
+                    <option value="Coach">Coach</option>
+                    <option value="Trainer">Trainer</option>
+                  </select>
                 </div>
               </div>
 
-              {/* Step Content */}
-              <div className="p-8">
-                {/* Step 1: Personal Information */}
-                {currentStep === 1 && (
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          First Name *
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.firstName}
-                          onChange={(e) => handleInputChange('firstName', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                          placeholder="Enter your first name"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Last Name *
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.lastName}
-                          onChange={(e) => handleInputChange('lastName', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                          placeholder="Enter your last name"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Email Address *
-                      </label>
-                      <input
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => handleInputChange('email', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        placeholder="coach@example.com"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Phone Number *
-                        </label>
-                        <input
-                          type="tel"
-                          value={formData.phone}
-                          onChange={(e) => handleInputChange('phone', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                          placeholder="+91 9876543210"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Date of Birth *
-                        </label>
-                        <input
-                          type="date"
-                          value={formData.dateOfBirth}
-                          onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 2: Professional Background */}
-                {currentStep === 2 && (
-                  <div className="space-y-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Years of Experience *
-                      </label>
-                      <select
-                        value={formData.experience}
-                        onChange={(e) => handleInputChange('experience', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
-                      >
-                        <option value="">Select experience level</option>
-                        <option value="0-1">0-1 years</option>
-                        <option value="2-5">2-5 years</option>
-                        <option value="6-10">6-10 years</option>
-                        <option value="11-15">11-15 years</option>
-                        <option value="15+">15+ years</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Education Background *
-                      </label>
-                      <textarea
-                        value={formData.education}
-                        onChange={(e) => handleInputChange('education', e.target.value)}
-                        rows="3"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
-                        placeholder="Degree in Sports Science, Physical Education, etc."
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Certifications & Licenses
-                      </label>
-                      <textarea
-                        value={formData.certifications}
-                        onChange={(e) => handleInputChange('certifications', e.target.value)}
-                        rows="3"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
-                        placeholder="FIFA License, AIFF Certification, etc."
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Previous Clubs/Organizations
-                      </label>
-                      <textarea
-                        value={formData.previousClubs}
-                        onChange={(e) => handleInputChange('previousClubs', e.target.value)}
-                        rows="3"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
-                        placeholder="List your previous coaching positions..."
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 3: Specialization */}
-                {currentStep === 3 && (
-                  <div className="space-y-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-4">
-                        Sports You Coach * (Select all that apply)
-                      </label>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                        {sportsOptions.map(sport => (
-                          <button
-                            key={sport}
-                            type="button"
-                            onClick={() => handleArrayToggle('sports', sport)}
-                            className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                              formData.sports.includes(sport)
-                                ? 'border-purple-500 bg-purple-50 text-purple-700'
-                                : 'border-gray-200 hover:border-purple-300 text-gray-700'
-                            }`}
-                          >
-                            {sport}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-4">
-                        Age Groups You Train *
-                      </label>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        {ageGroupOptions.map(age => (
-                          <button
-                            key={age}
-                            type="button"
-                            onClick={() => handleArrayToggle('ageGroups', age)}
-                            className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                              formData.ageGroups.includes(age)
-                                ? 'border-purple-500 bg-purple-50 text-purple-700'
-                                : 'border-gray-200 hover:border-purple-300 text-gray-700'
-                            }`}
-                          >
-                            {age}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-4">
-                        Skill Levels You Handle *
-                      </label>
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        {skillLevelOptions.map(level => (
-                          <button
-                            key={level}
-                            type="button"
-                            onClick={() => handleArrayToggle('skillLevel', level)}
-                            className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                              formData.skillLevel.includes(level)
-                                ? 'border-purple-500 bg-purple-50 text-purple-700'
-                                : 'border-gray-200 hover:border-purple-300 text-gray-700'
-                            }`}
-                          >
-                            {level}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Training Philosophy & Style
-                      </label>
-                      <textarea
-                        value={formData.trainingStyle}
-                        onChange={(e) => handleInputChange('trainingStyle', e.target.value)}
-                        rows="4"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
-                        placeholder="Describe your coaching philosophy, methods, and what makes your training unique..."
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 4: Payment & Launch */}
-                {currentStep === 4 && (
-                  <div className="space-y-8">
-                    <div className="text-center">
-                      <h3 className="text-2xl font-bold text-gray-900 mb-2">Choose Your Plan</h3>
-                      <p className="text-gray-600">Start building your coaching empire today</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      {/* Basic Plan */}
-                      <div className={`rounded-xl border-2 p-6 cursor-pointer transition-all ${
-                        formData.plan === 'basic' 
-                          ? 'border-blue-500 bg-blue-50' 
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      onClick={() => handleInputChange('plan', 'basic')}>
-                        <div className="text-center">
-                          <h4 className="text-lg font-semibold text-gray-900">Basic</h4>
-                          <div className="mt-2">
-                            <span className="text-3xl font-bold text-gray-900">₹999</span>
-                            <span className="text-gray-500">/month</span>
-                          </div>
-                          <ul className="mt-4 space-y-2 text-sm text-gray-600">
-                            <li>• Up to 50 students</li>
-                            <li>• Basic analytics</li>
-                            <li>• Email support</li>
-                            <li>• Mobile app access</li>
-                          </ul>
-                        </div>
-                      </div>
-
-                      {/* Professional Plan */}
-                      <div className={`rounded-xl border-2 p-6 cursor-pointer transition-all relative ${
-                        formData.plan === 'professional' 
-                          ? 'border-green-500 bg-green-50' 
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      onClick={() => handleInputChange('plan', 'professional')}>
-                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                          <span className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-medium">
-                            Most Popular
-                          </span>
-                        </div>
-                        <div className="text-center">
-                          <h4 className="text-lg font-semibold text-gray-900">Professional</h4>
-                          <div className="mt-2">
-                            <span className="text-3xl font-bold text-gray-900">₹1,999</span>
-                            <span className="text-gray-500">/month</span>
-                          </div>
-                          <ul className="mt-4 space-y-2 text-sm text-gray-600">
-                            <li>• Up to 200 students</li>
-                            <li>• Advanced analytics</li>
-                            <li>• Priority support</li>
-                            <li>• Payment processing</li>
-                            <li>• Event management</li>
-                          </ul>
-                        </div>
-                      </div>
-
-                      {/* Elite Plan */}
-                      <div className={`rounded-xl border-2 p-6 cursor-pointer transition-all ${
-                        formData.plan === 'elite' 
-                          ? 'border-purple-500 bg-purple-50' 
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      onClick={() => handleInputChange('plan', 'elite')}>
-                        <div className="text-center">
-                          <h4 className="text-lg font-semibold text-gray-900">Elite</h4>
-                          <div className="mt-2">
-                            <span className="text-3xl font-bold text-gray-900">₹3,999</span>
-                            <span className="text-gray-500">/month</span>
-                          </div>
-                          <ul className="mt-4 space-y-2 text-sm text-gray-600">
-                            <li>• Unlimited students</li>
-                            <li>• Premium analytics</li>
-                            <li>• 24/7 support</li>
-                            <li>• White-label solution</li>
-                            <li>• API access</li>
-                            <li>• Custom branding</li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-6 border border-yellow-200">
-                      <div className="flex items-center space-x-3">
-                        <FaCrown className="text-yellow-500 text-xl" />
-                        <div>
-                          <h4 className="font-semibold text-gray-900">🎉 Launch Special Offer!</h4>
-                          <p className="text-sm text-gray-600">Get your first month 50% off + 1 month free trial</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Navigation Buttons */}
-                <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
-                  <button
-                    onClick={prevStep}
-                    disabled={currentStep === 1}
-                    className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-medium transition-colors ${
-                      currentStep === 1
-                        ? 'text-gray-400 cursor-not-allowed'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                    }`}
+              {/* Sports Selection */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Primary Sports *
+                  </label>
+                  <select
+                    value={formData.primarySports}
+                    onChange={(e) => handleInputChange('primarySports', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   >
-                    <FaArrowLeft />
-                    <span>Previous</span>
-                  </button>
+                    <option value="">Choose...</option>
+                    <option value="Football">Football</option>
+                    <option value="Cricket">Cricket</option>
+                    <option value="Basketball">Basketball</option>
+                    <option value="Tennis">Tennis</option>
+                    <option value="Athletics">Athletics</option>
+                    <option value="Swimming">Swimming</option>
+                    <option value="Badminton">Badminton</option>
+                    <option value="Hockey">Hockey</option>
+                    <option value="Volleyball">Volleyball</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Other Sports *
+                  </label>
+                  <select
+                    value={formData.otherSports}
+                    onChange={(e) => handleInputChange('otherSports', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  >
+                    <option value="">Choose...</option>
+                    <option value="Football">Football</option>
+                    <option value="Cricket">Cricket</option>
+                    <option value="Basketball">Basketball</option>
+                    <option value="Tennis">Tennis</option>
+                    <option value="Athletics">Athletics</option>
+                    <option value="Swimming">Swimming</option>
+                    <option value="Badminton">Badminton</option>
+                    <option value="Hockey">Hockey</option>
+                    <option value="Volleyball">Volleyball</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
 
-                  {currentStep < 4 ? (
-                    <button
-                      onClick={nextStep}
-                      className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105"
-                    >
-                      <span>Continue</span>
-                      <FaArrowRight />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleSubmit}
-                      className="flex items-center space-x-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white px-8 py-3 rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 transition-all transform hover:scale-105"
-                    >
-                      <FaCrown />
-                      <span>Launch My Profile</span>
-                    </button>
+              {/* Personal Information */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  value={formData.fullName}
+                  onChange={(e) => handleInputChange('fullName', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  placeholder="Enter your full name"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Father's Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.fatherName}
+                    onChange={(e) => handleInputChange('fatherName', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Enter your father's name"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Mother's Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.motherName}
+                    onChange={(e) => handleInputChange('motherName', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Enter your mother's name"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Aadhaar *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.aadhaar}
+                    onChange={(e) => handleInputChange('aadhaar', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Enter your Aadhaar number"
+                    maxLength="12"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Gender *
+                  </label>
+                  <select
+                    value={formData.gender}
+                    onChange={(e) => handleInputChange('gender', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  >
+                    <option value="">Select gender...</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Date of Birth *
+                </label>
+                <input
+                  type="date"
+                  value={formData.dateOfBirth}
+                  onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    State *
+                  </label>
+                  <select
+                    value={formData.state}
+                    onChange={(e) => handleInputChange('state', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  >
+                    <option value="">Select State...</option>
+                    <option value="Andhra Pradesh">Andhra Pradesh</option>
+                    <option value="Arunachal Pradesh">Arunachal Pradesh</option>
+                    <option value="Assam">Assam</option>
+                    <option value="Bihar">Bihar</option>
+                    <option value="Chhattisgarh">Chhattisgarh</option>
+                    <option value="Goa">Goa</option>
+                    <option value="Gujarat">Gujarat</option>
+                    <option value="Haryana">Haryana</option>
+                    <option value="Himachal Pradesh">Himachal Pradesh</option>
+                    <option value="Jharkhand">Jharkhand</option>
+                    <option value="Karnataka">Karnataka</option>
+                    <option value="Kerala">Kerala</option>
+                    <option value="Madhya Pradesh">Madhya Pradesh</option>
+                    <option value="Maharashtra">Maharashtra</option>
+                    <option value="Manipur">Manipur</option>
+                    <option value="Meghalaya">Meghalaya</option>
+                    <option value="Mizoram">Mizoram</option>
+                    <option value="Nagaland">Nagaland</option>
+                    <option value="Odisha">Odisha</option>
+                    <option value="Punjab">Punjab</option>
+                    <option value="Rajasthan">Rajasthan</option>
+                    <option value="Sikkim">Sikkim</option>
+                    <option value="Tamil Nadu">Tamil Nadu</option>
+                    <option value="Telangana">Telangana</option>
+                    <option value="Tripura">Tripura</option>
+                    <option value="Uttar Pradesh">Uttar Pradesh</option>
+                    <option value="Uttarakhand">Uttarakhand</option>
+                    <option value="West Bengal">West Bengal</option>
+                    <option value="Delhi">Delhi</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    District *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.district}
+                    onChange={(e) => handleInputChange('district', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Select District..."
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Address *
+                </label>
+                <textarea
+                  value={formData.address}
+                  onChange={(e) => handleInputChange('address', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  placeholder="Enter your address"
+                  rows="3"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Pin Code *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.pinCode}
+                    onChange={(e) => handleInputChange('pinCode', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Enter your pin code"
+                    maxLength="6"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Mobile Number *
+                  </label>
+                  <input
+                    type="tel"
+                    value={formData.mobileNumber}
+                    onChange={(e) => handleInputChange('mobileNumber', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Enter your mobile number"
+                    maxLength="10"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email ID *
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.emailId}
+                    onChange={(e) => handleInputChange('emailId', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Enter your email ID"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Pan Number *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.panNumber}
+                    onChange={(e) => handleInputChange('panNumber', e.target.value.toUpperCase())}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Enter your Pan Number"
+                    maxLength="10"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  UTR Number (Mentioned on the Transaction message) *
+                </label>
+                <input
+                  type="text"
+                  value={formData.utrNumber}
+                  onChange={(e) => handleInputChange('utrNumber', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  placeholder="Enter UTR Number"
+                />
+              </div>
+
+              {/* Password Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Password *
+                  </label>
+                  <input
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => handleInputChange('password', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="••••••••"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Min. 8 characters with uppercase, lowercase, and number
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Confirm Password *
+                  </label>
+                  <input
+                    type="password"
+                    value={formData.confirmPassword}
+                    onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="••••••••"
+                  />
+                  {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                    <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
                   )}
                 </div>
               </div>
-            </motion.div>
-          </AnimatePresence>
+
+              {/* Pay Later Option */}
+              <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                <div className="flex items-start space-x-4">
+                  <input
+                    type="checkbox"
+                    id="payLater"
+                    checked={formData.payLater}
+                    onChange={(e) => handleInputChange('payLater', e.target.checked)}
+                    className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <label htmlFor="payLater" className="font-semibold text-gray-900 cursor-pointer flex items-center space-x-2">
+                      <span>💳 Pay Later Option</span>
+                    </label>
+                    <p className="text-sm text-gray-600 mt-2">
+                      Skip payment for now and complete it later from your dashboard. You can start setting up your profile immediately.
+                    </p>
+                    <div className="mt-3 bg-orange-50 border-l-4 border-orange-400 p-3 rounded">
+                      <p className="text-xs text-orange-800 font-medium">
+                        ⚠️ <strong>Note:</strong> With "Pay Later", some features will be restricted:
+                      </p>
+                      <ul className="text-xs text-orange-700 mt-2 space-y-1 ml-4">
+                        <li>• Cannot add or manage students</li>
+                        <li>• Cannot create tournaments or events</li>
+                        <li>• Limited dashboard access</li>
+                      </ul>
+                      <p className="text-xs text-orange-800 mt-2">
+                        Complete payment anytime to unlock all features!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <div className="flex justify-center pt-8 border-t mt-8">
+              <button
+                onClick={handleSubmit}
+                disabled={loading}
+                className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-8 py-3 rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Processing...' : (formData.payLater ? 'Complete Registration' : 'Launch My Profile')}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

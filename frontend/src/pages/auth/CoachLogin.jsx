@@ -10,11 +10,12 @@ const CoachLogin = () => {
   const navigate = useNavigate();
   const { login, isAuthenticated, getDashboardRoute } = useAuth();
 
-  useEffect(() => {
-    if (isAuthenticated()) {
-      navigate(getDashboardRoute());
-    }
-  }, [isAuthenticated, navigate, getDashboardRoute]);
+  // Remove auto-redirect to prevent immediate dashboard navigation
+  // useEffect(() => {
+  //   if (isAuthenticated()) {
+  //     navigate(getDashboardRoute());
+  //   }
+  // }, [isAuthenticated, navigate, getDashboardRoute]);
 
   const handleLogin = async (formData) => {
     setLoading(true);
@@ -45,7 +46,7 @@ const CoachLogin = () => {
       onSubmit={handleLogin}
       loading={loading}
       error={error}
-      registerPath="/register/coach"
+      registerPath="/register/coach-premium"
       color="green"
     />
   );

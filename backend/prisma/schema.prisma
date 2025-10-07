@@ -10,6 +10,7 @@ datasource db {
 // User Management
 model User {
   id        String   @id @default(cuid())
+  uniqueId  String?  @unique // Unique numeric ID for each user (optional for migration)
   email     String?  @unique
   phone     String?  @unique
   password  String?
@@ -51,13 +52,22 @@ model Student {
   id          String   @id @default(cuid())
   userId      String   @unique
   name        String
+  fatherName  String?
+  aadhaar     String?  @unique
+  gender      String?
   dateOfBirth DateTime?
-  sport       String?
-  level       String?
-  address     String?
-  city        String?
   state       String?
+  district    String?
+  address     String?
   pincode     String?
+  sport       String?  // Primary game
+  sport2      String?  // Game 2 (Optional)
+  sport3      String?  // Game 3 (Optional)
+  level       String?
+  school      String?
+  club        String?
+  coachName   String?
+  coachMobile String?
   achievements String? // JSON string
   profileCompletion Int @default(0)
   createdAt   DateTime @default(now())
@@ -79,14 +89,27 @@ model Coach {
   id              String   @id @default(cuid())
   userId          String   @unique
   name            String
+  fatherName      String?
+  motherName      String?
+  aadhaar         String?  @unique
+  gender          String?
+  dateOfBirth     DateTime?
+  state           String?
+  district        String?
+  address         String?
+  pincode         String?
+  panNumber       String?  @unique
+  utrNumber       String?
+  membershipStatus String? @default("NEW")
+  applyingAs      String?  @default("Chief District coordinator")
+  primarySport    String?
+  otherSports     String?  // JSON string for multiple sports
   specialization  String?
   experience      Int?
   certifications  String? // JSON string
   bio             String?
   location        String?
   city            String?
-  state           String?
-  pincode         String?
   paymentStatus   PaymentStatus @default(PENDING)
   subscriptionType SubscriptionType?
   subscriptionExpiresAt DateTime?
