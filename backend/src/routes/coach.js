@@ -3,11 +3,11 @@ const { PrismaClient } = require('@prisma/client');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const { authenticate, requireCoach, requireApproved } = require('../utils/authMiddleware');
-const { 
-  successResponse, 
-  errorResponse, 
-  getPaginationParams, 
-  getPaginationMeta 
+const {
+  successResponse,
+  errorResponse,
+  getPaginationParams,
+  getPaginationMeta
 } = require('../utils/helpers');
 
 const router = express.Router();
@@ -355,7 +355,7 @@ router.post('/students/add', authenticate, requireCoach, async (req, res) => {
       student = await prisma.student.findUnique({
         where: { userId: user.id }
       });
-      
+
       if (!student) {
         // Create student profile for existing user
         student = await prisma.student.create({
@@ -376,7 +376,7 @@ router.post('/students/add', authenticate, requireCoach, async (req, res) => {
       // Create new user and student profile
       const tempPassword = Math.random().toString(36).slice(-8);
       const hashedPassword = await require('../utils/helpers').hashPassword(tempPassword);
-      
+
       user = await prisma.user.create({
         data: {
           email,
@@ -402,9 +402,9 @@ router.post('/students/add', authenticate, requireCoach, async (req, res) => {
           studentProfile: true
         }
       });
-      
+
       student = user.studentProfile;
-      
+
       // TODO: Send login credentials to student via email/SMS
       console.log(`Temporary password for ${email}: ${tempPassword}`);
     }
@@ -439,17 +439,85 @@ router.post('/students/add', authenticate, requireCoach, async (req, res) => {
   }
 });
 
-// Bulk upload students
-router.post('/students/bulk-upload', authenticate, requireCoach, async (req, res) => {
+// Test CSV parsing endpoint
+router.post('/students/test-csv', authenticate, requireCoach, async (req, res) => {
   try {
     if (!req.files || !req.files.file) {
       return res.status(400).json(errorResponse('Please upload a file.', 400));
     }
 
     const file = req.files.file;
+    console.log('Test file details:', {
+      name: file.name,
+      size: file.size,
+      mimetype: file.mimetype
+    });
+
+    // Show raw file content
+    const rawContent = file.data.toString();
+    console.log('Raw file content (first 1000 chars):', rawContent.substring(0, 1000));
+
+    if (file.mimetype.includes('csv')) {
+      const csv = require('csv-parser');
+      const Readable = require('stream').Readable;
+      const testData = [];
+
+      return new Promise((resolve) => {
+        const stream = Readable.from(file.data);
+        stream
+          .pipe(csv())
+          .on('headers', (headers) => {
+            console.log('Detected headers:', headers);
+          })
+          .on('data', (data) => {
+            console.log('Row data:', data);
+            testData.push(data);
+          })
+          .on('end', () => {
+            resolve(res.json(successResponse({
+              rawContent: rawContent.substring(0, 500),
+              parsedData: testData,
+              totalRows: testData.length
+            }, 'CSV test completed.')));
+          })
+          .on('error', (error) => {
+            console.error('CSV test error:', error);
+            resolve(res.status(500).json(errorResponse('CSV test failed.', 500)));
+          });
+      });
+    }
+
+    res.json(successResponse({ rawContent: rawContent.substring(0, 500) }, 'File test completed.'));
+
+  } catch (error) {
+    console.error('Test error:', error);
+    res.status(500).json(errorResponse('Test failed.', 500));
+  }
+});
+
+// Bulk upload students
+router.post('/students/bulk-upload', authenticate, requireCoach, async (req, res) => {
+  try {
+    console.log('=== Starting bulk upload process ===');
+    console.log('Coach ID:', req.coach.id);
+    console.log('Coach Name:', req.coach.name);
+
+    if (!req.files || !req.files.file) {
+      console.log('ERROR: No file uploaded');
+      return res.status(400).json(errorResponse('Please upload a file.', 400));
+    }
+
+    const file = req.files.file;
+    console.log('File details:', {
+      name: file.name,
+      size: file.size,
+      mimetype: file.mimetype
+    });
+
     const allowedTypes = ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/csv'];
-    
+
     if (!allowedTypes.includes(file.mimetype)) {
+      console.log('ERROR: Invalid file type:', file.mimetype);
       return res.status(400).json(errorResponse('Please upload a valid Excel or CSV file.', 400));
     }
 
@@ -458,31 +526,82 @@ router.post('/students/bulk-upload', authenticate, requireCoach, async (req, res
 
     // Parse file based on type
     let studentData = [];
-    
+
     if (file.mimetype.includes('csv')) {
+      console.log('Processing CSV file...');
       const csv = require('csv-parser');
-      const Readable = require('stream').Readable;
-      
+      const { Readable } = require('stream');
+
+      // Convert buffer to UTF-8 string before streaming
+
+
       return new Promise((resolve, reject) => {
-        const stream = Readable.from(file.data);
+        let rowCount = 0;
+        const stream = Readable.from(file.data.toString('utf8'));
+
+
         stream
-          .pipe(csv())
-          .on('data', (data) => studentData.push(data))
+          .pipe(csv({
+            skipEmptyLines: true,
+            skipLinesWithError: true
+          }))
+          .on('data', (data) => {
+            rowCount++;
+            console.log(`CSV row ${rowCount} data:`, data);
+            console.log('Row keys:', Object.keys(data));
+            console.log('Row values:', Object.values(data));
+
+            // Skip empty rows
+            const hasData = Object.values(data).some(value => value && value.toString().trim() !== '');
+            if (hasData) {
+              studentData.push(data);
+            } else {
+              console.log(`Skipping empty row ${rowCount}`);
+            }
+          })
+          .on('headers', (headers) => {
+            console.log('CSV headers detected:', headers);
+          })
           .on('end', async () => {
+            console.log(`CSV parsing complete. Total rows read: ${rowCount}, Valid rows: ${studentData.length}`);
+
+            if (studentData.length === 0) {
+              console.log('WARNING: No valid data rows found in CSV file');
+              console.log('File content preview:', file.data.toString().substring(0, 500));
+              console.log('File content preview 2:', file.data);
+              resolve(res.json(successResponse({
+                results: [],
+                errors: [{
+                  row: 1,
+                  error: 'No valid data found in CSV file. Please check the file format and ensure it contains data rows.'
+                }]
+              }, 'Bulk upload completed with warnings.')));
+              return;
+            }
+
             await processBulkStudents(studentData, req.coach.id, results, errors);
+            console.log('=== Bulk upload process completed ===');
             resolve(res.json(successResponse({ results, errors }, 'Bulk upload completed.')));
           })
-          .on('error', reject);
+          .on('error', (error) => {
+            console.error('CSV parsing error:', error);
+            console.log('File content preview:', file.data.toString().substring(0, 500));
+            reject(error);
+          });
       });
     } else {
       // Handle Excel files
+      console.log('Processing Excel file...');
       const XLSX = require('xlsx');
       const workbook = XLSX.read(file.data, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
+      console.log('Excel sheet name:', sheetName);
       const worksheet = workbook.Sheets[sheetName];
       studentData = XLSX.utils.sheet_to_json(worksheet);
-      
+      console.log(`Excel parsing complete. Total rows: ${studentData.length}`);
+
       await processBulkStudents(studentData, req.coach.id, results, errors);
+      console.log('=== Bulk upload process completed ===');
       res.json(successResponse({ results, errors }, 'Bulk upload completed.'));
     }
 
@@ -494,17 +613,98 @@ router.post('/students/bulk-upload', authenticate, requireCoach, async (req, res
 
 // Helper function for processing bulk students
 async function processBulkStudents(studentData, coachId, results, errors) {
+  console.log(`--- Processing ${studentData.length} student records ---`);
+
   for (let i = 0; i < studentData.length; i++) {
     const row = studentData[i];
+    console.log(`\n--- Processing row ${i + 1} ---`);
+    console.log('Raw row data:', row);
+
     try {
-      const { name, email, phone, sport, level, dateOfBirth, address, city, state, pincode } = row;
-      
+      console.log('Available row keys:', Object.keys(row));
+      console.log('Row values:', Object.values(row));
+
+      // Extract and normalize field names (handle different case variations)
+      const normalizedRow = {};
+      Object.keys(row).forEach(key => {
+        const normalizedKey = key.toLowerCase().trim().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ');
+        normalizedRow[normalizedKey] = row[key] ? row[key].toString().trim() : '';
+        console.log(`Normalized "${key}" -> "${normalizedKey}" = "${normalizedRow[normalizedKey]}"`);
+      });
+
+      console.log('Normalized row:', normalizedRow);
+
+      // Map fields according to Prisma schema with multiple possible field name variations
+      const name = normalizedRow['name'] || normalizedRow['student name'] || normalizedRow['full name'];
+      const email = normalizedRow['email'] || normalizedRow['email address'] || normalizedRow['e mail'];
+      const phone = normalizedRow['phone'] || normalizedRow['mobile'] || normalizedRow['phone number'] || normalizedRow['contact'];
+      const sport = normalizedRow['sport'] || normalizedRow['game'] || normalizedRow['sports'];
+      const level = normalizedRow['level'] || normalizedRow['skill level'] || normalizedRow['grade'];
+      const dateOfBirth = normalizedRow['date of birth'] || normalizedRow['dob'] || normalizedRow['birth date'];
+      const fatherName = normalizedRow['father name'] || normalizedRow['fathers name'] || normalizedRow['parent name'];
+      const aadhaar = normalizedRow['aadhaar'] || normalizedRow['aadhar'] || normalizedRow['aadhaar number'];
+      const gender = normalizedRow['gender'] || normalizedRow['sex'];
+      const address = normalizedRow['address'] || normalizedRow['full address'];
+      const city = normalizedRow['city'] || normalizedRow['town'];
+      const state = normalizedRow['state'] || normalizedRow['province'];
+      const district = normalizedRow['district'];
+      const pincode = normalizedRow['pincode'] || normalizedRow['pin code'] || normalizedRow['postal code'] || normalizedRow['zip'];
+      const sport2 = normalizedRow['sport 2'] || normalizedRow['sport2'] || normalizedRow['second sport'];
+      const sport3 = normalizedRow['sport 3'] || normalizedRow['sport3'] || normalizedRow['third sport'];
+      const school = normalizedRow['school'] || normalizedRow['institution'] || normalizedRow['college'];
+      const club = normalizedRow['club'] || normalizedRow['sports club'];
+      const coachName = normalizedRow['coach name'] || normalizedRow['coach'];
+      const coachMobile = normalizedRow['coach mobile'] || normalizedRow['coach phone'] || normalizedRow['emergency contact'];
+      const achievements = normalizedRow['achievements'] || normalizedRow['awards'];
+
+      console.log('Extracted fields:', {
+        name,
+        email,
+        phone,
+        sport,
+        level,
+        dateOfBirth,
+        fatherName,
+        aadhaar,
+        gender,
+        address,
+        city,
+        state
+      });
+
+      // Validate required fields
       if (!name || !email || !phone || !sport) {
-        errors.push({ row: i + 1, error: 'Missing required fields' });
+        const missingFields = [];
+        if (!name) missingFields.push('name');
+        if (!email) missingFields.push('email');
+        if (!phone) missingFields.push('phone');
+        if (!sport) missingFields.push('sport');
+
+        console.log(`ERROR: Missing required fields: ${missingFields.join(', ')}`);
+        errors.push({
+          row: i + 1,
+          name: name || 'Unknown',
+          email: email || 'No email',
+          error: `Missing required fields: ${missingFields.join(', ')}`
+        });
+        continue;
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        console.log('ERROR: Invalid email format:', email);
+        errors.push({
+          row: i + 1,
+          name,
+          email,
+          error: 'Invalid email format'
+        });
         continue;
       }
 
       // Check if user already exists
+      console.log('Checking for existing user...');
       let user = await prisma.user.findFirst({
         where: {
           OR: [
@@ -515,17 +715,54 @@ async function processBulkStudents(studentData, coachId, results, errors) {
       });
 
       let student;
-      if (user && user.role === 'STUDENT') {
-        student = await prisma.student.findUnique({
-          where: { userId: user.id }
-        });
+      let tempPassword = null;
+      let isNewUser = false;
+
+      if (user) {
+        console.log('Existing user found:', user.id, user.role);
+        if (user.role === 'STUDENT') {
+          student = await prisma.student.findUnique({
+            where: { userId: user.id }
+          });
+          console.log('Existing student profile found:', student?.id);
+        } else {
+          console.log('ERROR: User exists but is not a student, role:', user.role);
+          errors.push({
+            row: i + 1,
+            name,
+            email,
+            error: `User exists with role: ${user.role}, cannot create student profile`
+          });
+          continue;
+        }
       }
 
       if (!student) {
-        // Create new user and student
-        const tempPassword = Math.random().toString(36).slice(-8);
+        console.log('Creating new user and student profile...');
+        isNewUser = true;
+
+        // Generate temporary password
+        tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+        console.log('Generated temp password:', tempPassword);
+
         const hashedPassword = await require('../utils/helpers').hashPassword(tempPassword);
-        
+
+        // Parse date of birth if provided
+        let parsedDateOfBirth = null;
+        if (dateOfBirth) {
+          try {
+            parsedDateOfBirth = new Date(dateOfBirth);
+            if (isNaN(parsedDateOfBirth.getTime())) {
+              console.log('WARNING: Invalid date format for dateOfBirth:', dateOfBirth);
+              parsedDateOfBirth = null;
+            }
+          } catch (error) {
+            console.log('WARNING: Error parsing dateOfBirth:', error.message);
+            parsedDateOfBirth = null;
+          }
+        }
+
+        // Create user with student profile according to Prisma schema
         user = await prisma.user.create({
           data: {
             email,
@@ -537,13 +774,27 @@ async function processBulkStudents(studentData, coachId, results, errors) {
             studentProfile: {
               create: {
                 name,
-                sport,
+                fatherName: fatherName || null,
+                aadhaar: aadhaar || null,
+                gender: gender || null,
+                dateOfBirth: parsedDateOfBirth,
+                state: state || null,
+                district: district || null,
+                address: address || null,
+                pincode: pincode || null,
+                sport: sport,
+                sport2: sport2 || null,
+                sport3: sport3 || null,
                 level: level || 'BEGINNER',
-                dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
-                address,
-                city,
-                state,
-                pincode
+                school: school || null,
+                club: club || null,
+                coachName: coachName || null,
+                coachMobile: coachMobile || null,
+                achievements: achievements ? JSON.stringify([achievements]) : null,
+                profileCompletion: calculateProfileCompletion({
+                  name, email, phone, sport, fatherName,
+                  dateOfBirth: parsedDateOfBirth, address, city, state
+                })
               }
             }
           },
@@ -551,11 +802,17 @@ async function processBulkStudents(studentData, coachId, results, errors) {
             studentProfile: true
           }
         });
-        
+
         student = user.studentProfile;
+        console.log('Created new user and student:', {
+          userId: user.id,
+          studentId: student.id,
+          profileCompletion: student.profileCompletion
+        });
       }
 
-      // Create connection
+      // Create connection between coach and student
+      console.log('Creating coach-student connection...');
       const existingConnection = await prisma.studentCoachConnection.findUnique({
         where: {
           studentId_coachId: {
@@ -574,14 +831,68 @@ async function processBulkStudents(studentData, coachId, results, errors) {
             initiatedBy: 'COACH'
           }
         });
+        console.log('Created new coach-student connection');
+      } else {
+        console.log('Connection already exists, skipping...');
       }
 
-      results.push({ row: i + 1, name, email, status: 'success' });
+      // Add to results with temporary password if new user
+      const resultEntry = {
+        row: i + 1,
+        name,
+        email,
+        phone,
+        sport,
+        status: 'success',
+        isNewUser,
+        studentId: student.id
+      };
+
+      if (isNewUser && tempPassword) {
+        resultEntry.tempPassword = tempPassword;
+      }
+
+      results.push(resultEntry);
+      console.log('Successfully processed row:', i + 1);
 
     } catch (error) {
-      errors.push({ row: i + 1, error: error.message });
+      console.error(`ERROR processing row ${i + 1}:`, error);
+      errors.push({
+        row: i + 1,
+        name: row.name || row.Name || 'Unknown',
+        email: row.email || row.Email || 'No email',
+        error: error.message
+      });
     }
   }
+
+  console.log(`\n=== Processing Summary ===`);
+  console.log(`Total processed: ${studentData.length}`);
+  console.log(`Successful: ${results.length}`);
+  console.log(`Errors: ${errors.length}`);
+}
+
+// Helper function to calculate profile completion percentage
+function calculateProfileCompletion(data) {
+  const requiredFields = ['name', 'email', 'phone', 'sport'];
+  const optionalFields = ['fatherName', 'dateOfBirth', 'address', 'city', 'state'];
+
+  let completedRequired = 0;
+  let completedOptional = 0;
+
+  requiredFields.forEach(field => {
+    if (data[field]) completedRequired++;
+  });
+
+  optionalFields.forEach(field => {
+    if (data[field]) completedOptional++;
+  });
+
+  // Required fields are 70% of total, optional are 30%
+  const requiredPercentage = (completedRequired / requiredFields.length) * 70;
+  const optionalPercentage = (completedOptional / optionalFields.length) * 30;
+
+  return Math.round(requiredPercentage + optionalPercentage);
 }
 
 // Create event
@@ -974,8 +1285,8 @@ router.get('/dashboard', authenticate, requireCoach, async (req, res) => {
         where: { coachId }
       }),
       prisma.event.count({
-        where: { 
-          coachId, 
+        where: {
+          coachId,
           startDate: { gte: new Date() },
           status: { in: ['APPROVED', 'ACTIVE'] }
         }
@@ -1107,8 +1418,8 @@ router.get('/dashboard', authenticate, requireCoach, async (req, res) => {
         date: event.startDate,
         participants: event.currentParticipants || 0,
         maxParticipants: event.maxParticipants || 50,
-        status: event.status === 'APPROVED' || event.status === 'ACTIVE' ? 'upcoming' : 
-               event.status === 'COMPLETED' ? 'completed' : 'pending'
+        status: event.status === 'APPROVED' || event.status === 'ACTIVE' ? 'upcoming' :
+          event.status === 'COMPLETED' ? 'completed' : 'pending'
       })),
       // Notifications
       notifications,

@@ -63,9 +63,9 @@ app.use(fileUpload({
 
 // Request logging middleware
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  console.log('Request body:', JSON.stringify(req.body, null, 2));
-  console.log('Request headers:', req.headers);
+  // console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  // console.log('Request body:', JSON.stringify(req.body, null, 2));
+  // console.log('Request headers:', req.headers);
   next();
 });
 

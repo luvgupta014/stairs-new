@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useAuth } from '../contexts/AuthContext';
 
 const Landing = () => {
   const [selectedRole, setSelectedRole] = useState(null);
+  const { user, logout, isAuthenticated, getDashboardRoute } = useAuth();
+  const navigate = useNavigate();
 
   const roles = [
     {
@@ -73,18 +76,68 @@ const Landing = () => {
                 </span>
               </motion.div>
             </div>
-            <div className="hidden md:block">
-              <div className="ml-10 flex items-baseline space-x-4">
-                <Link to="/about" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors">
-                  About
-                </Link>
-                <Link to="/features" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors">
-                  Features
-                </Link>
-                <Link to="/contact" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors">
-                  Contact
-                </Link>
+            <div className="flex items-center space-x-4">
+              <div className="hidden md:block">
+                <div className="flex items-baseline space-x-4">
+                  <Link to="/about" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                    About
+                  </Link>
+                  <Link to="/features" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                    Features
+                  </Link>
+                  <Link to="/contact" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                    Contact
+                  </Link>
+                </div>
               </div>
+              
+              {/* User Authentication Section */}
+              {isAuthenticated() ? (
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-2 bg-white rounded-lg px-3 py-2 shadow-sm">
+                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-green-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-sm font-semibold">
+                        {user?.profile?.name?.charAt(0)?.toUpperCase() || user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                      </span>
+                    </div>
+                    <div className="text-sm">
+                      <p className="font-medium text-gray-900">
+                        {user?.profile?.name || user?.name || 'User'}
+                      </p>
+                      <p className="text-gray-500 capitalize">
+                        {user?.role?.toLowerCase()}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigate(getDashboardRoute())}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    Dashboard
+                  </button>
+                  <button
+                    onClick={logout}
+                    className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                  >
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <Link
+                    to="/login/student"
+                    className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/register/student"
+                    className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    Get Started
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -94,33 +147,85 @@ const Landing = () => {
       <div className="relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="text-center">
-            <motion.h1 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="text-4xl md:text-6xl font-bold text-gray-900 mb-6"
-            >
-              Welcome to{' '}
-              <span className="bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
-                STAIRS
-              </span>
-            </motion.h1>
-            <motion.p 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="text-xl md:text-2xl text-gray-600 mb-8 max-w-3xl mx-auto"
-            >
-              Sports Training and Athletic Instruction Registration System
-            </motion.p>
-            <motion.p 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-              className="text-lg text-gray-500 mb-12 max-w-2xl mx-auto"
-            >
-              Connect students with expert coaches, manage institutes, and organize sporting events all in one platform
-            </motion.p>
+            {isAuthenticated() ? (
+              // Personalized Hero for Logged-in Users
+              <>
+                <motion.h1 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6 }}
+                  className="text-4xl md:text-6xl font-bold text-gray-900 mb-6"
+                >
+                  Welcome back,{' '}
+                  <span className="bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
+                    {user?.profile?.name || user?.name || 'User'}!
+                  </span>
+                </motion.h1>
+                <motion.p 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.2 }}
+                  className="text-xl md:text-2xl text-gray-600 mb-8 max-w-3xl mx-auto"
+                >
+                  {user?.role === 'STUDENT' && "Continue your sports journey and connect with amazing coaches"}
+                  {user?.role === 'COACH' && "Manage your students and grow your coaching business"}
+                  {user?.role === 'INSTITUTE' && "Oversee your sports programs and track student progress"}
+                  {user?.role === 'CLUB' && "Organize events and build your sports community"}
+                </motion.p>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.4 }}
+                  className="flex justify-center space-x-4"
+                >
+                  <button
+                    onClick={() => navigate(getDashboardRoute())}
+                    className="bg-gradient-to-r from-blue-600 to-green-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:from-blue-700 hover:to-green-700 transition-all duration-300 shadow-lg"
+                  >
+                    Go to Dashboard
+                  </button>
+                  {user?.role === 'COACH' && (
+                    <button
+                      onClick={() => navigate('/bulk-upload')}
+                      className="bg-white text-gray-700 px-8 py-3 rounded-lg text-lg font-semibold border border-gray-300 hover:bg-gray-50 transition-colors shadow-lg"
+                    >
+                      Add Students
+                    </button>
+                  )}
+                </motion.div>
+              </>
+            ) : (
+              // Default Hero for Non-logged-in Users
+              <>
+                <motion.h1 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6 }}
+                  className="text-4xl md:text-6xl font-bold text-gray-900 mb-6"
+                >
+                  Welcome to{' '}
+                  <span className="bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
+                    STAIRS
+                  </span>
+                </motion.h1>
+                <motion.p 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.2 }}
+                  className="text-xl md:text-2xl text-gray-600 mb-8 max-w-3xl mx-auto"
+                >
+                  Sports Training and Athletic Instruction Registration System
+                </motion.p>
+                <motion.p 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.4 }}
+                  className="text-lg text-gray-500 mb-12 max-w-2xl mx-auto"
+                >
+                  Connect students with expert coaches, manage institutes, and organize sporting events all in one platform
+                </motion.p>
+              </>
+            )}
           </div>
         </div>
 
@@ -133,18 +238,19 @@ const Landing = () => {
         </div>
       </div>
 
-      {/* Role Selection Section */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.6 }}
-          className="text-center mb-12"
-        >
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            Choose Your Role
-          </h2>
-          <p className="text-lg text-gray-600">
+      {/* Role Selection Section - Only for non-authenticated users */}
+      {!isAuthenticated() && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.6 }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              Choose Your Role
+            </h2>
+            <p className="text-lg text-gray-600">
             Select how you'd like to join the STAIRS community
           </p>
         </motion.div>
@@ -211,6 +317,7 @@ const Landing = () => {
           ))}
         </div>
       </div>
+      )}
 
       {/* Features Section */}
       <div className="bg-gray-50 py-16">

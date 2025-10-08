@@ -19,6 +19,38 @@ const BulkUpload = () => {
     setSuccess(false);
   };
 
+  const handleTestUpload = async () => {
+    if (!file) {
+      setError('Please select a file first.');
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch('/api/coach/students/test-csv', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: formData
+      });
+      
+      const result = await response.json();
+      console.log('Test result:', result);
+      
+      if (result.success) {
+        alert(`Test successful! Found ${result.data.totalRows} data rows. Check console for details.`);
+      } else {
+        setError(result.message || 'Test failed');
+      }
+    } catch (error) {
+      console.error('Test error:', error);
+      setError('Test failed. Check console for details.');
+    }
+  };
+
   const handleUpload = async () => {
     if (!file) {
       setError('Please select a file to upload');
@@ -56,11 +88,11 @@ const BulkUpload = () => {
   };
 
   const downloadTemplate = () => {
-    // Create a sample CSV content
-    const csvContent = `Name,Email,Phone,Sport,Level,Date of Birth,Institution,Emergency Contact
-John Doe,john.doe@email.com,+1234567890,Football,Intermediate,2005-01-15,State University,+1234567891
-Jane Smith,jane.smith@email.com,+1234567892,Basketball,Advanced,2004-03-22,State University,+1234567893
-Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,State University,+1234567895`;
+    // Create a comprehensive CSV template with all supported fields
+    const csvContent = `Name,Email,Phone,Sport,Level,Date of Birth,Father Name,Aadhaar,Gender,Address,City,State,District,Pincode,Sport 2,Sport 3,School,Club,Coach Name,Coach Mobile,Achievements
+John Doe,john.doe@email.com,+1234567890,Football,Intermediate,2005-01-15,Robert Doe,123456789012,Male,123 Main St,New York,NY,Manhattan,10001,Basketball,,State High School,City Football Club,Mike Johnson,+1234567895,Regional Champion 2023
+Jane Smith,jane.smith@email.com,+1234567892,Basketball,Advanced,2004-03-22,David Smith,123456789013,Female,456 Oak Ave,Los Angeles,CA,Los Angeles,90001,Tennis,Swimming,Metro High School,Sports Academy,Sarah Wilson,+1234567896,State Level Player
+Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom Johnson,123456789014,Male,789 Pine St,Chicago,IL,Cook,60601,,,Central High School,,John Coach,+1234567897,`;
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -71,7 +103,65 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,State
     window.URL.revokeObjectURL(url);
   };
 
+  const downloadReport = () => {
+    if (!uploadResults) return;
+
+    // Create detailed CSV report
+    let csvContent = '';
+    
+    // Header
+    csvContent += 'Student Upload Report\n';
+    csvContent += `Generated on: ${new Date().toLocaleString()}\n`;
+    csvContent += `Total Records: ${(uploadResults.results?.length || 0) + (uploadResults.errors?.length || 0)}\n`;
+    csvContent += `Successful: ${uploadResults.results?.length || 0}\n`;
+    csvContent += `Failed: ${uploadResults.errors?.length || 0}\n\n`;
+
+    // Successful records
+    if (uploadResults.results && uploadResults.results.length > 0) {
+      csvContent += 'SUCCESSFUL RECORDS\n';
+      csvContent += 'Row,Name,Email,Phone,Sport,Status,Student ID,New User,Temporary Password\n';
+      
+      uploadResults.results.forEach(result => {
+        csvContent += `${result.row || ''},`;
+        csvContent += `"${result.name || ''}",`;
+        csvContent += `"${result.email || ''}",`;
+        csvContent += `"${result.phone || ''}",`;
+        csvContent += `"${result.sport || ''}",`;
+        csvContent += `"${result.status || ''}",`;
+        csvContent += `"${result.studentId || ''}",`;
+        csvContent += `"${result.isNewUser ? 'Yes' : 'No'}",`;
+        csvContent += `"${result.tempPassword || 'N/A'}"\n`;
+      });
+      csvContent += '\n';
+    }
+
+    // Failed records
+    if (uploadResults.errors && uploadResults.errors.length > 0) {
+      csvContent += 'FAILED RECORDS\n';
+      csvContent += 'Row,Name,Email,Error\n';
+      
+      uploadResults.errors.forEach(error => {
+        csvContent += `${error.row || ''},`;
+        csvContent += `"${error.name || ''}",`;
+        csvContent += `"${error.email || ''}",`;
+        csvContent += `"${error.error || ''}"\n`;
+      });
+    }
+
+    // Download the report
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `student_upload_report_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
   if (success && uploadResults) {
+    const newUsers = uploadResults.results?.filter(r => r.isNewUser) || [];
+    const existingUsers = uploadResults.results?.filter(r => !r.isNewUser) || [];
+    
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-lg shadow-md p-8">
@@ -102,20 +192,69 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,State
                 <div className="text-sm text-gray-600">Failed</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-yellow-600">
-                  0
+                <div className="text-2xl font-bold text-blue-600">
+                  {newUsers.length}
                 </div>
-                <div className="text-sm text-gray-600">Duplicates</div>
+                <div className="text-sm text-gray-600">New Students</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">
-                  {uploadResults.results && uploadResults.errors ? 
-                    uploadResults.results.length + uploadResults.errors.length : '0'}
+                <div className="text-2xl font-bold text-purple-600">
+                  {existingUsers.length}
                 </div>
-                <div className="text-sm text-gray-600">Total Records</div>
+                <div className="text-sm text-gray-600">Existing Students</div>
               </div>
             </div>
           </div>
+
+          {/* New Students with Passwords */}
+          {newUsers.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+              <h3 className="text-lg font-semibold text-blue-900 mb-4">
+                New Students Created ({newUsers.length})
+              </h3>
+              <p className="text-blue-800 mb-4">
+                The following students were created with temporary passwords. Please share these credentials with them:
+              </p>
+              <div className="max-h-60 overflow-y-auto">
+                <table className="min-w-full">
+                  <thead className="bg-blue-100">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-blue-900 uppercase tracking-wider">Name</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-blue-900 uppercase tracking-wider">Email</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-blue-900 uppercase tracking-wider">Password</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white">
+                    {newUsers.map((user, index) => (
+                      <tr key={index} className="border-b border-blue-200">
+                        <td className="px-3 py-2 text-sm text-gray-900">{user.name}</td>
+                        <td className="px-3 py-2 text-sm text-gray-900">{user.email}</td>
+                        <td className="px-3 py-2 text-sm font-mono bg-gray-100 rounded">
+                          {user.tempPassword}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Error Details */}
+          {uploadResults.errors && uploadResults.errors.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+              <h3 className="text-lg font-semibold text-red-900 mb-4">
+                Failed Records ({uploadResults.errors.length})
+              </h3>
+              <div className="max-h-40 overflow-y-auto">
+                {uploadResults.errors.map((error, index) => (
+                  <div key={index} className="text-sm text-red-800 mb-2">
+                    Row {error.row}: {error.name} - {error.error}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex justify-center space-x-4">
@@ -131,7 +270,10 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,State
             >
               Back to Dashboard
             </button>
-            <button className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <button 
+              onClick={downloadReport}
+              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            >
               Download Report
             </button>
           </div>
@@ -252,20 +394,39 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,State
 
         {/* Supported Columns Info */}
         <div className="bg-gray-50 rounded-lg p-6 mb-8">
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">Required Columns</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">Supported Columns</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {[
-              'Name', 'Email', 'Phone', 'Sport',
-              'Level', 'Date of Birth', 'Institution', 'Emergency Contact'
+              'Name*', 'Email*', 'Phone*', 'Sport*',
+              'Level', 'Date of Birth', 'Father Name', 'Aadhaar',
+              'Gender', 'Address', 'City', 'State',
+              'District', 'Pincode', 'Sport 2', 'Sport 3',
+              'School', 'Club', 'Coach Name', 'Coach Mobile',
+              'Achievements'
             ].map((column) => (
-              <div key={column} className="bg-white rounded px-3 py-2 text-sm font-medium text-gray-700">
+              <div 
+                key={column} 
+                className={`rounded px-2 py-1 text-xs font-medium ${
+                  column.includes('*') 
+                    ? 'bg-red-100 text-red-700 border border-red-200' 
+                    : 'bg-white text-gray-700 border border-gray-200'
+                }`}
+              >
                 {column}
               </div>
             ))}
           </div>
-          <p className="text-sm text-gray-600 mt-3">
-            * Name, Email, and Sport are required fields. Other fields are optional but recommended.
-          </p>
+          <div className="mt-4 space-y-1">
+            <p className="text-sm text-red-600">
+              * Required fields: Name, Email, Phone, Sport
+            </p>
+            <p className="text-sm text-gray-600">
+              All other fields are optional and can enhance the student profile.
+            </p>
+            <p className="text-sm text-gray-500">
+              New students will be created with temporary passwords that coaches can see in the upload results.
+            </p>
+          </div>
         </div>
 
         {/* Action Buttons */}
@@ -276,11 +437,21 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,State
           >
             Cancel
           </button>
-          <button
-            onClick={handleUpload}
-            disabled={!file || loading}
-            className="px-6 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 flex items-center"
-          >
+          <div className="flex space-x-3">
+            {file && (
+              <button
+                onClick={handleTestUpload}
+                disabled={loading}
+                className="px-6 py-2 border border-blue-300 text-blue-700 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              >
+                Test File
+              </button>
+            )}
+            <button
+              onClick={handleUpload}
+              disabled={!file || loading}
+              className="px-6 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 flex items-center"
+            >
             {loading ? (
               <>
                 <Spinner size="sm" color="white" />
@@ -289,7 +460,8 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,State
             ) : (
               'Upload Students'
             )}
-          </button>
+            </button>
+          </div>
         </div>
       </div>
     </div>
