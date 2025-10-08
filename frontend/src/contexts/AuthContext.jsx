@@ -148,7 +148,8 @@ export const AuthProvider = ({ children }) => {
       
       // Production API login
       const response = await api.post('/api/auth/login', {
-        ...credentials,
+        email: credentials.email,
+        password: credentials.password,
         role: role.toUpperCase()
       });
 
@@ -186,7 +187,7 @@ const register = async (data, role) => {
     console.log('Attempting registration with role:', role);
     console.log('Registration data:', { ...data, password: '***' });
     
-    const response = await api.post(`/auth/${role}/register`, data);
+    const response = await api.post(`/api/auth/${role}/register`, data);
     console.log('Registration response:', response.data);
 
     if (response.data.success) {

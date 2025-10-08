@@ -18,35 +18,29 @@ const StudentLogin = () => {
   // }, [isAuthenticated, navigate, getDashboardRoute]);
 
   const handleLogin = async (formData) => {
-    setLoading(true);
-    setError('');
+  setLoading(true);
+  setError('');
 
-    try {
-      // Check if it's a demo login
-      if (formData.email.startsWith('demo@')) {
-        // Use demo authentication
-        const result = await login(formData.email, formData.password, 'student');
-        if (result.success) {
-          navigate('/dashboard/student');
-        } else {
-          setError(result.message || 'Demo login failed');
-        }
-      } else {
-        // Use real API authentication
-        const result = await login(formData.email, formData.password, 'student');
-        if (result.success) {
-          navigate('/dashboard/student');
-        } else {
-          setError(result.message || 'Login failed');
-        }
-      }
-    } catch (err) {
-      console.error('Login error:', err);
-      setError('An error occurred during login. Please try again.');
-    } finally {
-      setLoading(false);
+  try {
+    console.log('Login attempt with data:', { email: formData.email, password: '***' });
+    
+    // Use consistent parameter structure for both demo and real login
+    const result = await login(formData, 'student');
+    
+    console.log('Login result:', { success: result.success, message: result.message });
+    
+    if (result.success) {
+      navigate('/dashboard/student');
+    } else {
+      setError(result.message || 'Login failed');
     }
-  };
+  } catch (err) {
+    console.error('Login error:', err);
+    setError('An error occurred during login. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <LoginLayout

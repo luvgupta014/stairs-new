@@ -28,11 +28,12 @@ const LoginLayout = ({
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (onSubmit) {
-      await onSubmit(formData);
-    }
-  };
+  e.preventDefault();
+  console.log('Form submitted with data:', formData);
+  if (onSubmit) {
+    await onSubmit(formData);
+  }
+};
 
   const colorClasses = {
     blue: {
