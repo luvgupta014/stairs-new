@@ -12,7 +12,7 @@ const Landing = () => {
     {
       id: 'student',
       title: 'Student',
-      description: 'Find and connect with top coaches to enhance your sports skills',
+      description: 'Find and connect with top coaches to enhance your skills',
       icon: '🎯',
       color: 'bg-blue-500',
       hoverColor: 'hover:bg-blue-600',
