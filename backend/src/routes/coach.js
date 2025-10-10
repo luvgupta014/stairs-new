@@ -497,117 +497,173 @@ router.post('/students/test-csv', authenticate, requireCoach, async (req, res) =
 
 // Bulk upload students
 router.post('/students/bulk-upload', authenticate, requireCoach, async (req, res) => {
+  const fs = require('fs');
+  const csv = require('csv-parser');
+  const XLSX = require('xlsx');
+
+  let tempFilePath = null;
+
   try {
     console.log('=== Starting bulk upload process ===');
     console.log('Coach ID:', req.coach.id);
     console.log('Coach Name:', req.coach.name);
 
+    // Validate file upload
     if (!req.files || !req.files.file) {
       console.log('ERROR: No file uploaded');
       return res.status(400).json(errorResponse('Please upload a file.', 400));
     }
 
     const file = req.files.file;
+    tempFilePath = file.tempFilePath; // Store for cleanup
+
     console.log('File details:', {
       name: file.name,
       size: file.size,
-      mimetype: file.mimetype
+      mimetype: file.mimetype,
+      tempFilePath: file.tempFilePath
     });
 
-    const allowedTypes = ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/csv'];
+    // Validate file type
+    const allowedTypes = [
+      'application/vnd.ms-excel', 
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+      'text/csv',
+      'application/csv'
+    ];
 
-    if (!allowedTypes.includes(file.mimetype)) {
+    if (!allowedTypes.includes(file.mimetype) && !file.name.endsWith('.csv') && !file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
       console.log('ERROR: Invalid file type:', file.mimetype);
-      return res.status(400).json(errorResponse('Please upload a valid Excel or CSV file.', 400));
+      return res.status(400).json(errorResponse('Please upload a valid Excel (.xlsx, .xls) or CSV (.csv) file.', 400));
     }
 
     const results = [];
     const errors = [];
-
-    // Parse file based on type
     let studentData = [];
 
-    if (file.mimetype.includes('csv')) {
-      console.log('Processing CSV file...');
-      const csv = require('csv-parser');
-      const { Readable } = require('stream');
+    // Determine file type and parse accordingly
+    const isCsv = file.mimetype.includes('csv') || file.name.endsWith('.csv');
 
-      // Convert buffer to UTF-8 string before streaming
+    if (isCsv) {
+      // Process CSV file
+      console.log('Processing CSV file from temp path...');
 
-
-      return new Promise((resolve, reject) => {
+      studentData = await new Promise((resolve, reject) => {
+        const rows = [];
         let rowCount = 0;
-        const stream = Readable.from(file.data.toString('utf8'));
+        let headers = [];
 
-
-        stream
+        fs.createReadStream(file.tempFilePath, { encoding: 'utf8' })
           .pipe(csv({
             skipEmptyLines: true,
-            skipLinesWithError: true
+            mapHeaders: ({ header }) => header.trim(), // Trim whitespace from headers
           }))
-          .on('data', (data) => {
-            rowCount++;
-            console.log(`CSV row ${rowCount} data:`, data);
-            console.log('Row keys:', Object.keys(data));
-            console.log('Row values:', Object.values(data));
-
-            // Skip empty rows
-            const hasData = Object.values(data).some(value => value && value.toString().trim() !== '');
-            if (hasData) {
-              studentData.push(data);
-            } else {
-              console.log(`Skipping empty row ${rowCount}`);
-            }
-          })
-          .on('headers', (headers) => {
+          .on('headers', (detectedHeaders) => {
+            headers = detectedHeaders;
             console.log('CSV headers detected:', headers);
           })
-          .on('end', async () => {
-            console.log(`CSV parsing complete. Total rows read: ${rowCount}, Valid rows: ${studentData.length}`);
+          .on('data', (data) => {
+            rowCount++;
+            
+            // Check if row has any non-empty values
+            const hasData = Object.values(data).some(value => 
+              value && value.toString().trim() !== ''
+            );
 
-            if (studentData.length === 0) {
-              console.log('WARNING: No valid data rows found in CSV file');
-              console.log('File content preview:', file.data.toString().substring(0, 500));
-              console.log('File content preview 2:', file.data);
-              resolve(res.json(successResponse({
-                results: [],
-                errors: [{
-                  row: 1,
-                  error: 'No valid data found in CSV file. Please check the file format and ensure it contains data rows.'
-                }]
-              }, 'Bulk upload completed with warnings.')));
-              return;
+            if (hasData) {
+              rows.push(data);
+              console.log(`Row ${rowCount}: Valid data found`);
+            } else {
+              console.log(`Row ${rowCount}: Skipping empty row`);
             }
-
-            await processBulkStudents(studentData, req.coach.id, results, errors);
-            console.log('=== Bulk upload process completed ===');
-            resolve(res.json(successResponse({ results, errors }, 'Bulk upload completed.')));
+          })
+          .on('end', () => {
+            console.log(`CSV parsing complete. Total rows: ${rowCount}, Valid rows: ${rows.length}`);
+            
+            if (rows.length === 0) {
+              console.log('WARNING: No valid data rows found in CSV file');
+              console.log('Headers found:', headers);
+            }
+            
+            resolve(rows);
           })
           .on('error', (error) => {
             console.error('CSV parsing error:', error);
-            console.log('File content preview:', file.data.toString().substring(0, 500));
             reject(error);
           });
       });
-    } else {
-      // Handle Excel files
-      console.log('Processing Excel file...');
-      const XLSX = require('xlsx');
-      const workbook = XLSX.read(file.data, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      console.log('Excel sheet name:', sheetName);
-      const worksheet = workbook.Sheets[sheetName];
-      studentData = XLSX.utils.sheet_to_json(worksheet);
-      console.log(`Excel parsing complete. Total rows: ${studentData.length}`);
 
-      await processBulkStudents(studentData, req.coach.id, results, errors);
-      console.log('=== Bulk upload process completed ===');
-      res.json(successResponse({ results, errors }, 'Bulk upload completed.'));
+    } else {
+      // Process Excel file
+      console.log('Processing Excel file from temp path...');
+      
+      const workbook = XLSX.readFile(file.tempFilePath);
+      const sheetName = workbook.SheetNames[0];
+      
+      console.log('Excel sheet name:', sheetName);
+      console.log('Total sheets:', workbook.SheetNames.length);
+      
+      const worksheet = workbook.Sheets[sheetName];
+      studentData = XLSX.utils.sheet_to_json(worksheet, {
+        defval: '', // Default value for empty cells
+        raw: false, // Get formatted strings instead of raw values
+      });
+      
+      console.log(`Excel parsing complete. Total rows: ${studentData.length}`);
+      
+      // Filter out completely empty rows
+      studentData = studentData.filter(row => {
+        const hasData = Object.values(row).some(value => 
+          value && value.toString().trim() !== ''
+        );
+        return hasData;
+      });
+      
+      console.log(`After filtering empty rows: ${studentData.length} valid rows`);
     }
+
+    // Check if we have data to process
+    if (studentData.length === 0) {
+      console.log('ERROR: No valid data found in file');
+      return res.status(400).json(errorResponse(
+        'No valid data found in the uploaded file. Please ensure the file contains data rows with at least one column filled.',
+        400
+      ));
+    }
+
+    // Log first row as sample
+    console.log('Sample data (first row):', studentData[0]);
+    console.log('Available columns:', Object.keys(studentData[0]));
+
+    // Process the student data
+    await processBulkStudents(studentData, req.coach.id, results, errors);
+    
+    console.log('=== Bulk upload process completed ===');
+    console.log(`Successfully processed: ${results.length} students`);
+    console.log(`Errors encountered: ${errors.length}`);
+
+    res.json(successResponse(
+      { results, errors, total: studentData.length, successful: results.length, failed: errors.length },
+      'Bulk upload completed.'
+    ));
 
   } catch (error) {
     console.error('Bulk upload error:', error);
-    res.status(500).json(errorResponse('Bulk upload failed.', 500));
+    console.error('Error stack:', error.stack);
+    res.status(500).json(errorResponse(
+      `Bulk upload failed: ${error.message}`,
+      500
+    ));
+  } finally {
+    // Clean up temp file
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      try {
+        fs.unlinkSync(tempFilePath);
+        console.log('Temp file cleaned up:', tempFilePath);
+      } catch (cleanupError) {
+        console.error('Failed to clean up temp file:', cleanupError);
+      }
+    }
   }
 });
 
