@@ -3,6 +3,7 @@ import { getStudentDashboard, getAvailableCoaches, requestCoachConnection } from
 import CoachCard from '../../components/CoachCard';
 import Spinner from '../../components/Spinner';
 import Modal from '../../components/Modal';
+import { useNavigate } from 'react-router-dom';
 
 const StudentDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -11,6 +12,7 @@ const StudentDashboard = () => {
   const [showCoachModal, setShowCoachModal] = useState(false);
   const [connectedCoaches, setConnectedCoaches] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
+  const navigate = useNavigate();
 
   // Get user profile from localStorage
   const localUser = (() => {
@@ -32,6 +34,11 @@ const StudentDashboard = () => {
     loadDashboardData();
     loadCoaches();
   }, []);
+
+  const handleUpdateProfile = () => {
+    navigate('/student/profile');
+  };
+  };
 
   const loadDashboardData = async () => {
     try {
@@ -331,7 +338,7 @@ const StudentDashboard = () => {
                     <button className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors">
                       🏆 Browse Events
                     </button>
-                    <button className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors">
+                    <button className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors" onClick={() => handleUpdateProfile()}>
                       📝 Update Profile
                     </button>
                     <button className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors">
