@@ -4,7 +4,6 @@ import CoachCard from '../../components/CoachCard';
 import Spinner from '../../components/Spinner';
 import Modal from '../../components/Modal';
 import { useNavigate } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
 
 const StudentDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -14,8 +13,7 @@ const StudentDashboard = () => {
   const [connectedCoaches, setConnectedCoaches] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
   const navigate = useNavigate();
-  const navigate = useNavigate();
-
+  
   // Get user profile from localStorage
   const localUser = (() => {
     try {
