@@ -333,6 +333,101 @@ export const getAdminStats = async () => {
   }
 };
 
+// Event Management APIs for Admin
+export const getAdminEvents = async (params = {}) => {
+  try {
+    const response = await api.get('/api/admin/events', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Get admin events error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getPendingEvents = async (params = {}) => {
+  try {
+    const response = await api.get('/api/admin/pending-events', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Get pending events error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const moderateEvent = async (eventId, action, remarks) => {
+  try {
+    const response = await api.put(`/api/admin/events/${eventId}/moderate`, {
+      action,
+      remarks
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Moderate event error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const bulkModerateEvents = async (eventIds, action, remarks) => {
+  try {
+    const response = await api.put('/api/admin/events/bulk-moderate', {
+      eventIds,
+      action,
+      remarks
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Bulk moderate events error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+// Coach and Institute Approval APIs
+export const getPendingCoaches = async (params = {}) => {
+  try {
+    const response = await api.get('/api/admin/pending-coaches', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Get pending coaches error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getPendingInstitutes = async (params = {}) => {
+  try {
+    const response = await api.get('/api/admin/pending-institutes', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Get pending institutes error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const approveCoach = async (coachId, action, remarks) => {
+  try {
+    const response = await api.put(`/api/admin/coaches/${coachId}/approval`, {
+      action,
+      remarks
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Approve coach error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const approveInstitute = async (instituteId, action, remarks) => {
+  try {
+    const response = await api.put(`/api/admin/institutes/${instituteId}/approval`, {
+      action,
+      remarks
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Approve institute error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 // Utility functions
 export const setAuthToken = (token) => {
   localStorage.setItem('authToken', token);

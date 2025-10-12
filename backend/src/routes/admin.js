@@ -113,8 +113,44 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
       stats.pendingInstituteApprovals = 0;
     }
 
+    // ADDED: Get event statistics
+    try {
+      stats.totalEvents = await prisma.event.count();
+      console.log(`📊 Total events: ${stats.totalEvents}`);
+    } catch (error) {
+      console.error('Error counting total events:', error);
+      stats.totalEvents = 0;
+    }
+
+    try {
+      stats.pendingEvents = await prisma.event.count({
+        where: { status: 'PENDING' }
+      });
+      console.log(`⏳ Pending events: ${stats.pendingEvents}`);
+    } catch (error) {
+      console.error('Error counting pending events:', error);
+      stats.pendingEvents = 0;
+    }
+
+    try {
+      stats.approvedEvents = await prisma.event.count({
+        where: { status: 'APPROVED' }
+      });
+    } catch (error) {
+      console.error('Error counting approved events:', error);
+      stats.approvedEvents = 0;
+    }
+
+    try {
+      stats.activeEvents = await prisma.event.count({
+        where: { status: 'ACTIVE' }
+      });
+    } catch (error) {
+      console.error('Error counting active events:', error);
+      stats.activeEvents = 0;
+    }
+
     // Set default values for features not yet implemented
-    stats.totalEvents = 0;
     stats.totalConnections = 0;
 
     // Get recent registrations with error handling
@@ -145,11 +181,38 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
           }
         },
         orderBy: { createdAt: 'desc' },
-        take: 15
+        take: 10
       });
     } catch (error) {
       console.error('Error fetching recent registrations:', error);
       recentRegistrations = [];
+    }
+
+    // ADDED: Get recent events for approval
+    let recentEvents = [];
+    try {
+      recentEvents = await prisma.event.findMany({
+        where: {
+          status: 'PENDING'
+        },
+        include: {
+          coach: {
+            include: {
+              user: {
+                select: {
+                  email: true
+                }
+              }
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10
+      });
+      console.log(`📋 Recent pending events found: ${recentEvents.length}`);
+    } catch (error) {
+      console.error('Error fetching recent events:', error);
+      recentEvents = [];
     }
 
     // Calculate monthly growth with error handling
@@ -208,13 +271,37 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
             'Unknown'
     }));
 
+    // ADDED: Format recent events
+    const formattedRecentEvents = recentEvents.map(event => ({
+      id: event.id,
+      name: event.name,
+      sport: event.sport,
+      venue: event.venue,
+      city: event.city,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      maxParticipants: event.maxParticipants,
+      eventFee: event.eventFee,
+      status: event.status,
+      createdAt: event.createdAt,
+      coach: {
+        id: event.coach?.id,
+        name: event.coach?.name,
+        email: event.coach?.user?.email
+      }
+    }));
+
     const dashboardData = {
       stats,
       recentUsers: formattedRecentRegistrations,
+      recentEvents: formattedRecentEvents,          // ADDED: Include recent events
+      pendingEvents: formattedRecentEvents,         // ADDED: Include pending events
       monthlyRegistrations: [] // Placeholder for now
     };
 
     console.log('✅ Admin dashboard data fetched successfully');
+    console.log(`📊 Dashboard summary: ${stats.totalUsers} users, ${stats.totalEvents} events, ${stats.pendingEvents} pending`);
+    
     res.json(successResponse(dashboardData, 'Dashboard data retrieved successfully.'));
 
   } catch (error) {
@@ -723,40 +810,38 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
       limit = 10 
     } = req.query;
 
+    console.log('🔍 Fetching events for admin approval...');
+
     const { skip, take } = getPaginationParams(page, limit);
 
-    const where = {
-      ...(status && { status: status.toUpperCase() }),
-      ...(sport && { sport: { contains: sport, mode: 'insensitive' } }),
-      ...(search && {
-        OR: [
-          { title: { contains: search, mode: 'insensitive' } },
-          { description: { contains: search, mode: 'insensitive' } },
-          { location: { contains: search, mode: 'insensitive' } }
-        ]
-      })
-    };
+    const where = {};
+    
+    // Add filters if provided
+    if (status) where.status = status.toUpperCase();
+    if (sport) where.sport = { contains: sport, mode: 'insensitive' };
+    
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },        // FIXED: name instead of title
+        { description: { contains: search, mode: 'insensitive' } },
+        { venue: { contains: search, mode: 'insensitive' } },       // FIXED: venue instead of location
+        { city: { contains: search, mode: 'insensitive' } }
+      ];
+    }
 
     const [events, total] = await Promise.all([
       prisma.event.findMany({
         where,
         include: {
-          organizer: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
+          coach: {                                                   // FIXED: coach instead of createdBy
+            include: {
               user: {
                 select: {
+                  id: true,
                   email: true,
-                  phone: true
+                  role: true
                 }
               }
-            }
-          },
-          _count: {
-            select: {
-              registrations: true
             }
           }
         },
@@ -769,34 +854,75 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
 
     const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
 
+    // Format events for admin view with correct field names
+    const formattedEvents = events.map(event => ({
+      id: event.id,
+      title: event.name,                                            // FIXED: Map name to title for frontend
+      name: event.name,
+      description: event.description,
+      sport: event.sport,
+      location: event.venue,                                        // FIXED: Map venue to location for frontend
+      venue: event.venue,
+      address: event.address,
+      city: event.city,
+      state: event.state,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      maxParticipants: event.maxParticipants,
+      currentParticipants: event.currentParticipants,
+      registrationFee: event.eventFee,                              // FIXED: Map eventFee to registrationFee for frontend
+      eventFee: event.eventFee,
+      status: event.status,
+      adminNotes: event.adminNotes,
+      createdAt: event.createdAt,
+      organizer: {
+        id: event.coach?.user?.id,
+        email: event.coach?.user?.email,
+        role: event.coach?.user?.role,
+        name: event.coach?.name || 'Unknown Coach'
+      },
+      coach: {
+        id: event.coach?.id,
+        name: event.coach?.name,
+        primarySport: event.coach?.primarySport,
+        city: event.coach?.city
+      }
+    }));
+
     res.json(successResponse({
-      events,
+      events: formattedEvents,
       pagination
     }, 'Events retrieved successfully.'));
 
   } catch (error) {
-    console.error('Get events error:', error);
+    console.error('❌ Get events error:', error);
     res.status(500).json(errorResponse('Failed to retrieve events.', 500));
   }
 });
 
-// Moderate event (approve/reject/suspend)
+// Moderate event (approve/reject/suspend) - CORRECTED for your schema
 router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, res) => {
   try {
     const { eventId } = req.params;
     const { action, remarks } = req.body; // action: 'APPROVE', 'REJECT', 'SUSPEND'
 
-    if (!['APPROVE', 'REJECT', 'SUSPEND'].includes(action)) {
-      return res.status(400).json(errorResponse('Action must be APPROVE, REJECT, or SUSPEND.', 400));
+    if (!['APPROVE', 'REJECT', 'SUSPEND', 'ACTIVE', 'CANCELLED'].includes(action)) {
+      return res.status(400).json(errorResponse('Action must be APPROVE, REJECT, SUSPEND, ACTIVE, or CANCELLED.', 400));
     }
+
+    console.log(`🔍 Moderating event ${eventId} with action: ${action}`);
 
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       include: {
-        organizer: {
-          select: {
-            firstName: true,
-            lastName: true
+        coach: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true
+              }
+            }
           }
         }
       }
@@ -809,13 +935,17 @@ router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, 
     let newStatus;
     switch (action) {
       case 'APPROVE':
-        newStatus = 'PUBLISHED';
+        newStatus = 'APPROVED';
         break;
       case 'REJECT':
         newStatus = 'REJECTED';
         break;
       case 'SUSPEND':
-        newStatus = 'SUSPENDED';
+      case 'CANCELLED':
+        newStatus = 'CANCELLED';
+        break;
+      case 'ACTIVE':
+        newStatus = 'ACTIVE';
         break;
     }
 
@@ -823,19 +953,16 @@ router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, 
       where: { id: eventId },
       data: {
         status: newStatus,
-        moderationRemarks: remarks,
-        moderatedBy: req.admin.id,
-        moderatedAt: new Date()
+        adminNotes: remarks,                                        // FIXED: Use adminNotes instead of moderationRemarks
+        updatedAt: new Date()
       },
       include: {
-        organizer: {
-          select: {
-            firstName: true,
-            lastName: true,
+        coach: {
+          include: {
             user: {
               select: {
-                email: true,
-                phone: true
+                id: true,
+                email: true
               }
             }
           }
@@ -843,13 +970,164 @@ router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, 
       }
     });
 
-    // TODO: Send notification to organizer about moderation decision
+    console.log(`✅ Event ${eventId} ${action.toLowerCase()}d successfully`);
 
-    res.json(successResponse(updatedEvent, `Event ${action.toLowerCase()}d successfully.`));
+    res.json(successResponse({
+      id: updatedEvent.id,
+      name: updatedEvent.name,
+      status: updatedEvent.status,
+      adminNotes: updatedEvent.adminNotes,
+      coach: {
+        name: updatedEvent.coach?.name,
+        email: updatedEvent.coach?.user?.email
+      }
+    }, `Event ${action.toLowerCase()}d successfully.`));
 
   } catch (error) {
-    console.error('Event moderation error:', error);
+    console.error('❌ Event moderation error:', error);
     res.status(500).json(errorResponse('Failed to moderate event.', 500));
+  }
+});
+
+// Get pending events for approval - CORRECTED for your schema
+router.get('/pending-events', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const { skip, take } = getPaginationParams(page, limit);
+
+    console.log('🔍 Fetching pending events for approval...');
+
+    const where = { 
+      status: 'PENDING' // Events waiting for admin approval
+    };
+
+    const [events, total] = await Promise.all([
+      prisma.event.findMany({
+        where,
+        include: {
+          coach: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                  role: true
+                }
+              }
+            }
+          }
+        },
+        skip,
+        take,
+        orderBy: { createdAt: 'asc' } // Oldest first for approval queue
+      }),
+      prisma.event.count({ where })
+    ]);
+
+    const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
+
+    const formattedEvents = events.map(event => ({
+      id: event.id,
+      title: event.name,
+      name: event.name,
+      description: event.description,
+      sport: event.sport,
+      location: event.venue,
+      venue: event.venue,
+      address: event.address,
+      city: event.city,
+      state: event.state,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      maxParticipants: event.maxParticipants,
+      currentParticipants: event.currentParticipants,
+      registrationFee: event.eventFee,
+      eventFee: event.eventFee,
+      status: event.status,
+      createdAt: event.createdAt,
+      organizer: {
+        id: event.coach?.user?.id,
+        email: event.coach?.user?.email,
+        role: event.coach?.user?.role,
+        name: event.coach?.name || 'Unknown Coach'
+      },
+      coach: {
+        id: event.coach?.id,
+        name: event.coach?.name,
+        primarySport: event.coach?.primarySport,
+        city: event.coach?.city
+      }
+    }));
+
+    res.json(successResponse({
+      events: formattedEvents,
+      pagination
+    }, 'Pending events retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get pending events error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve pending events.', 500));
+  }
+});
+
+// Bulk approve/reject events - NEW ENDPOINT
+router.put('/events/bulk-moderate', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventIds, action, remarks } = req.body;
+
+    if (!Array.isArray(eventIds) || eventIds.length === 0) {
+      return res.status(400).json(errorResponse('eventIds must be a non-empty array.', 400));
+    }
+
+    if (!['APPROVE', 'REJECT', 'SUSPEND'].includes(action)) {
+      return res.status(400).json(errorResponse('Action must be APPROVE, REJECT, or SUSPEND.', 400));
+    }
+
+    console.log(`🔍 Bulk moderating ${eventIds.length} events with action: ${action}`);
+
+    try {
+      let newStatus;
+      switch (action) {
+        case 'APPROVE':
+          newStatus = 'APPROVED';
+          break;
+        case 'REJECT':
+          newStatus = 'REJECTED';
+          break;
+        case 'SUSPEND':
+          newStatus = 'SUSPENDED';
+          break;
+      }
+
+      const updatedEvents = await prisma.event.updateMany({
+        where: {
+          id: { in: eventIds },
+          status: 'PENDING' // Only update pending events
+        },
+        data: {
+          status: newStatus,
+          moderationRemarks: remarks,
+          moderatedBy: req.user.id,
+          moderatedAt: new Date()
+        }
+      });
+
+      console.log(`✅ Bulk moderated ${updatedEvents.count} events`);
+
+      res.json(successResponse({
+        updatedCount: updatedEvents.count
+      }, `${updatedEvents.count} events ${action.toLowerCase()}d successfully.`));
+
+    } catch (error) {
+      if (error.code === 'P2021' || error.message.includes('does not exist')) {
+        return res.status(501).json(errorResponse('Event moderation system not yet implemented.', 501));
+      }
+      throw error;
+    }
+
+  } catch (error) {
+    console.error('❌ Bulk event moderation error:', error);
+    res.status(500).json(errorResponse('Failed to bulk moderate events.', 500));
   }
 });
 
