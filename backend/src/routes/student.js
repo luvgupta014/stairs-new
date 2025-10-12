@@ -463,7 +463,7 @@ router.delete('/connections/:connectionId', authenticate, requireStudent, async 
   }
 });
 
-// Get available events
+// Get available events - FIXED to show approved events
 router.get('/events', authenticate, requireStudent, async (req, res) => {
   try {
     const { 
@@ -477,21 +477,30 @@ router.get('/events', authenticate, requireStudent, async (req, res) => {
       search 
     } = req.query;
 
+    console.log('🔍 Student fetching available events...');
+
     const { skip, take } = getPaginationParams(page, limit);
 
     const where = {
-      status: 'PUBLISHED',
-      startDate: { gte: new Date() }, // Only future events
+      status: { in: ['APPROVED', 'ACTIVE'] },    // FIXED: Show approved and active events
+      startDate: { gte: new Date() },            // Only future events
       ...(sport && { sport: { contains: sport, mode: 'insensitive' } }),
-      ...(location && { location: { contains: location, mode: 'insensitive' } }),
+      ...(location && { 
+        OR: [
+          { venue: { contains: location, mode: 'insensitive' } },     // FIXED: venue instead of location
+          { city: { contains: location, mode: 'insensitive' } },
+          { address: { contains: location, mode: 'insensitive' } }
+        ]
+      }),
       ...(dateFrom && { startDate: { gte: new Date(dateFrom) } }),
       ...(dateTo && { endDate: { lte: new Date(dateTo) } }),
-      ...(maxFees && { fees: { lte: parseFloat(maxFees) } }),
+      ...(maxFees && { eventFee: { lte: parseFloat(maxFees) } }),     // FIXED: eventFee instead of fees
       ...(search && {
         OR: [
-          { title: { contains: search, mode: 'insensitive' } },
+          { name: { contains: search, mode: 'insensitive' } },        // FIXED: name instead of title
           { description: { contains: search, mode: 'insensitive' } },
-          { sport: { contains: search, mode: 'insensitive' } }
+          { sport: { contains: search, mode: 'insensitive' } },
+          { venue: { contains: search, mode: 'insensitive' } }
         ]
       })
     };
@@ -499,22 +508,18 @@ router.get('/events', authenticate, requireStudent, async (req, res) => {
     const [events, total] = await Promise.all([
       prisma.event.findMany({
         where,
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          sport: true,
-          startDate: true,
-          endDate: true,
-          location: true,
-          fees: true,
-          maxParticipants: true,
-          currentParticipants: true,
-          registrationDeadline: true,
-          organizer: {
+        include: {                                                   // FIXED: Include coach details
+          coach: {
             select: {
-              firstName: true,
-              lastName: true
+              id: true,
+              name: true,
+              primarySport: true,
+              user: {
+                select: {
+                  email: true,
+                  phone: true
+                }
+              }
             }
           }
         },
@@ -527,50 +532,107 @@ router.get('/events', authenticate, requireStudent, async (req, res) => {
       prisma.event.count({ where })
     ]);
 
+    console.log(`📊 Found ${events.length} available events for student`);
+
+    // Format events for frontend compatibility
+    const formattedEvents = events.map(event => ({
+      id: event.id,
+      title: event.name,                    // Map name to title for frontend
+      name: event.name,
+      description: event.description,
+      sport: event.sport,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      location: event.venue,                // Map venue to location for frontend
+      venue: event.venue,
+      address: event.address,
+      city: event.city,
+      state: event.state,
+      fees: event.eventFee,                 // Map eventFee to fees for frontend
+      eventFee: event.eventFee,
+      maxParticipants: event.maxParticipants,
+      currentParticipants: event.currentParticipants,
+      status: event.status,
+      organizer: {                          // FIXED: Use coach as organizer
+        id: event.coach?.id,
+        firstName: event.coach?.name?.split(' ')[0] || 'Unknown',
+        lastName: event.coach?.name?.split(' ').slice(1).join(' ') || '',
+        name: event.coach?.name || 'Unknown Coach',
+        email: event.coach?.user?.email,
+        phone: event.coach?.user?.phone
+      },
+      coach: event.coach,
+      createdAt: event.createdAt
+    }));
+
     const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
 
     res.json(successResponse({
-      events,
+      events: formattedEvents,
       pagination
     }, 'Events retrieved successfully.'));
 
   } catch (error) {
-    console.error('Get events error:', error);
+    console.error('❌ Get events error:', error);
     res.status(500).json(errorResponse('Failed to retrieve events.', 500));
   }
 });
 
-// Register for event
+// Register for event - FIXED
 router.post('/events/:eventId/register', authenticate, requireStudent, async (req, res) => {
   try {
     const { eventId } = req.params;
 
+    console.log(`🔍 Student ${req.user.id} registering for event ${eventId}`);
+
     // Check if event exists and is available
     const event = await prisma.event.findUnique({
-      where: { id: eventId }
+      where: { id: eventId },
+      include: {
+        coach: {
+          select: {
+            name: true,
+            user: {
+              select: {
+                email: true
+              }
+            }
+          }
+        }
+      }
     });
 
     if (!event) {
       return res.status(404).json(errorResponse('Event not found.', 404));
     }
 
-    if (event.status !== 'PUBLISHED') {
+    // FIXED: Check for approved or active events
+    if (!['APPROVED', 'ACTIVE'].includes(event.status)) {
       return res.status(400).json(errorResponse('Event is not available for registration.', 400));
     }
 
-    if (new Date() > event.registrationDeadline) {
-      return res.status(400).json(errorResponse('Registration deadline has passed.', 400));
+    if (new Date() > event.startDate) {
+      return res.status(400).json(errorResponse('Event has already started.', 400));
     }
 
     if (event.currentParticipants >= event.maxParticipants) {
       return res.status(400).json(errorResponse('Event is full.', 400));
     }
 
+    // Get student profile
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user.id }
+    });
+
+    if (!student) {
+      return res.status(404).json(errorResponse('Student profile not found.', 404));
+    }
+
     // Check if already registered
     const existingRegistration = await prisma.eventRegistration.findUnique({
       where: {
-        studentId_eventId: {
-          studentId: req.student.id,
+        eventId_studentId: {                // FIXED: Use correct unique constraint name
+          studentId: student.id,
           eventId: eventId
         }
       }
@@ -584,18 +646,18 @@ router.post('/events/:eventId/register', authenticate, requireStudent, async (re
     const [registration] = await prisma.$transaction([
       prisma.eventRegistration.create({
         data: {
-          studentId: req.student.id,
+          studentId: student.id,
           eventId: eventId,
-          registrationDate: new Date(),
-          status: 'REGISTERED'
+          status: 'PENDING'                // FIXED: Use correct status
         },
         include: {
           event: {
             select: {
-              title: true,
+              id: true,
+              name: true,
               startDate: true,
-              location: true,
-              fees: true
+              venue: true,
+              eventFee: true
             }
           }
         }
@@ -610,22 +672,33 @@ router.post('/events/:eventId/register', authenticate, requireStudent, async (re
       })
     ]);
 
+    console.log(`✅ Student registered for event successfully`);
+
     res.status(201).json(successResponse(registration, 'Event registration successful.', 201));
 
   } catch (error) {
-    console.error('Event registration error:', error);
+    console.error('❌ Event registration error:', error);
     res.status(500).json(errorResponse('Failed to register for event.', 500));
   }
 });
 
-// Get student event registrations
+// Get student event registrations - FIXED
 router.get('/event-registrations', authenticate, requireStudent, async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
     const { skip, take } = getPaginationParams(page, limit);
 
+    // Get student profile
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user.id }
+    });
+
+    if (!student) {
+      return res.status(404).json(errorResponse('Student profile not found.', 404));
+    }
+
     const where = {
-      studentId: req.student.id,
+      studentId: student.id,
       ...(status && { status: status.toUpperCase() })
     };
 
@@ -636,21 +709,26 @@ router.get('/event-registrations', authenticate, requireStudent, async (req, res
           event: {
             select: {
               id: true,
-              title: true,
+              name: true,
               description: true,
               sport: true,
               startDate: true,
               endDate: true,
-              location: true,
-              fees: true,
-              status: true
+              venue: true,
+              eventFee: true,
+              status: true,
+              coach: {
+                select: {
+                  name: true
+                }
+              }
             }
           }
         },
         skip,
         take,
         orderBy: {
-          registrationDate: 'desc'
+          createdAt: 'desc'
         }
       }),
       prisma.eventRegistration.count({ where })
@@ -658,97 +736,58 @@ router.get('/event-registrations', authenticate, requireStudent, async (req, res
 
     const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
 
+    // Format for frontend compatibility
+    const formattedRegistrations = registrations.map(reg => ({
+      id: reg.id,
+      status: reg.status,
+      message: reg.message,
+      createdAt: reg.createdAt,
+      updatedAt: reg.updatedAt,
+      event: {
+        id: reg.event.id,
+        title: reg.event.name,      // Map name to title
+        name: reg.event.name,
+        description: reg.event.description,
+        sport: reg.event.sport,
+        startDate: reg.event.startDate,
+        endDate: reg.event.endDate,
+        location: reg.event.venue,  // Map venue to location
+        venue: reg.event.venue,
+        fees: reg.event.eventFee,   // Map eventFee to fees
+        eventFee: reg.event.eventFee,
+        status: reg.event.status,
+        organizer: {
+          name: reg.event.coach?.name || 'Unknown Coach'
+        }
+      }
+    }));
+
     res.json(successResponse({
-      registrations,
+      registrations: formattedRegistrations,
       pagination
     }, 'Event registrations retrieved successfully.'));
 
   } catch (error) {
-    console.error('Get event registrations error:', error);
+    console.error('❌ Get event registrations error:', error);
     res.status(500).json(errorResponse('Failed to retrieve event registrations.', 500));
   }
 });
 
-// Rate coach
-router.post('/coaches/:coachId/rate', authenticate, requireStudent, async (req, res) => {
-  try {
-    const { coachId } = req.params;
-    const { rating, comment } = req.body;
-
-    if (!rating || rating < 1 || rating > 5) {
-      return res.status(400).json(errorResponse('Rating must be between 1 and 5.', 400));
-    }
-
-    // Check if there's an active connection
-    const connection = await prisma.studentCoachConnection.findUnique({
-      where: {
-        studentId_coachId: {
-          studentId: req.student.id,
-          coachId: coachId
-        }
-      }
-    });
-
-    if (!connection || connection.status !== 'ACTIVE') {
-      return res.status(400).json(errorResponse('You can only rate coaches you have an active connection with.', 400));
-    }
-
-    // Check if already rated
-    const existingReview = await prisma.coachReview.findUnique({
-      where: {
-        studentId_coachId: {
-          studentId: req.student.id,
-          coachId: coachId
-        }
-      }
-    });
-
-    if (existingReview) {
-      return res.status(409).json(errorResponse('You have already rated this coach.', 409));
-    }
-
-    // Create review and update coach rating
-    const [review, updatedCoach] = await prisma.$transaction(async (prisma) => {
-      const newReview = await prisma.coachReview.create({
-        data: {
-          studentId: req.student.id,
-          coachId: coachId,
-          rating: parseInt(rating),
-          comment
-        }
-      });
-
-      // Recalculate coach rating
-      const allRatings = await prisma.coachReview.findMany({
-        where: { coachId: coachId },
-        select: { rating: true }
-      });
-
-      const avgRating = allRatings.reduce((sum, r) => sum + r.rating, 0) / allRatings.length;
-
-      const coach = await prisma.coach.update({
-        where: { id: coachId },
-        data: {
-          rating: avgRating,
-          totalRatings: allRatings.length
-        }
-      });
-
-      return [newReview, coach];
-    });
-
-    res.status(201).json(successResponse(review, 'Rating submitted successfully.', 201));
-
-  } catch (error) {
-    console.error('Rate coach error:', error);
-    res.status(500).json(errorResponse('Failed to submit rating.', 500));
-  }
-});
-
-// Get student dashboard
+// FIXED: Update dashboard to show correct upcoming events
 router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
   try {
-    const studentId = req.student.id;
+    console.log('🔍 Fetching student dashboard...');
+
+    // Get student profile
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user.id }
+    });
+
+    if (!student) {
+      return res.status(404).json(errorResponse('Student profile not found.', 404));
+    }
+
+    const studentId = student.id;
 
     // Get dashboard analytics
     const [
@@ -757,10 +796,10 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
       totalEvents,
       upcomingEvents,
       recentConnections,
-      recentEvents
+      recentEventRegistrations
     ] = await Promise.all([
       prisma.studentCoachConnection.count({
-        where: { studentId, status: 'ACCEPTED' } // <-- FIXED HERE
+        where: { studentId, status: 'ACCEPTED' }
       }),
       prisma.studentCoachConnection.count({
         where: { studentId, status: 'PENDING' }
@@ -773,7 +812,7 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
           studentId,
           event: {
             startDate: { gte: new Date() },
-            status: 'ACTIVE' // <-- FIXED: use a valid EventStatus value
+            status: { in: ['APPROVED', 'ACTIVE'] }    // FIXED: Use correct status
           }
         }
       }),
@@ -784,7 +823,7 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
             select: {
               id: true,
               name: true,
-              specialization: true,
+              primarySport: true,
               rating: true
             }
           }
@@ -797,7 +836,7 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
           studentId,
           event: {
             startDate: { gte: new Date() },
-            status: 'ACTIVE' // <-- FIXED here too
+            status: { in: ['APPROVED', 'ACTIVE'] }    // FIXED: Use correct status
           }
         },
         include: {
@@ -807,11 +846,17 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
               name: true,
               sport: true,
               startDate: true,
-              venue: true
+              venue: true,
+              eventFee: true,
+              status: true
             }
           }
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { 
+          event: {
+            startDate: 'asc'
+          }
+        },
         take: 5
       })
     ]);
@@ -824,13 +869,29 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
         upcomingEvents
       },
       recentConnections,
-      upcomingEvents: recentEvents
+      upcomingEvents: recentEventRegistrations.map(reg => ({
+        id: reg.id,
+        registrationStatus: reg.status,
+        event: {
+          id: reg.event.id,
+          title: reg.event.name,
+          name: reg.event.name,
+          sport: reg.event.sport,
+          startDate: reg.event.startDate,
+          location: reg.event.venue,
+          venue: reg.event.venue,
+          fees: reg.event.eventFee,
+          status: reg.event.status
+        }
+      }))
     };
+
+    console.log('✅ Student dashboard data retrieved successfully');
 
     res.json(successResponse(dashboardData, 'Dashboard data retrieved successfully.'));
 
   } catch (error) {
-    console.error('Get student dashboard error:', error);
+    console.error('❌ Get student dashboard error:', error);
     res.status(500).json(errorResponse('Failed to retrieve dashboard data.', 500));
   }
 });

@@ -1,5 +1,12 @@
 import { useState, useEffect } from 'react';
-import { getStudentDashboard, getAvailableCoaches, requestCoachConnection } from '../../api';
+import { 
+  getStudentDashboard, 
+  getAvailableCoaches, 
+  requestCoachConnection,
+  getStudentEvents,
+  registerForEvent,
+  getStudentEventRegistrations
+} from '../../api';
 import CoachCard from '../../components/CoachCard';
 import Spinner from '../../components/Spinner';
 import Modal from '../../components/Modal';
@@ -8,10 +15,15 @@ import { useNavigate } from 'react-router-dom';
 const StudentDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [coaches, setCoaches] = useState([]);
+  const [availableEvents, setAvailableEvents] = useState([]);
+  const [myEventRegistrations, setMyEventRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [eventsLoading, setEventsLoading] = useState(false);
   const [showCoachModal, setShowCoachModal] = useState(false);
+  const [showEventsModal, setShowEventsModal] = useState(false);
   const [connectedCoaches, setConnectedCoaches] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
+  const [registeringEventId, setRegisteringEventId] = useState(null);
   const navigate = useNavigate();
   
   // Get user profile from localStorage
@@ -33,6 +45,8 @@ const StudentDashboard = () => {
   useEffect(() => {
     loadDashboardData();
     loadCoaches();
+    loadAvailableEvents();
+    loadMyEventRegistrations();
   }, []);
 
   const handleUpdateProfile = () => {
@@ -42,8 +56,9 @@ const StudentDashboard = () => {
   const loadDashboardData = async () => {
     try {
       const data = await getStudentDashboard();
-      setDashboardData(data);
-      setConnectedCoaches(data.connectedCoaches || []);
+      console.log('✅ Dashboard data loaded:', data);
+      setDashboardData(data.data || data);
+      setConnectedCoaches(data.data?.connectedCoaches || data.connectedCoaches || []);
     } catch (error) {
       console.error('Failed to load dashboard:', error);
       // Using mock data for demo
@@ -85,9 +100,8 @@ const StudentDashboard = () => {
   const loadCoaches = async () => {
     try {
       const coachesData = await getAvailableCoaches();
-      setCoaches(coachesData.data.coaches || []);
+      setCoaches(coachesData.data?.coaches || []);
       console.log('Fetched coaches:', coachesData);
-      console.log(coaches);
     } catch (error) {
       console.error('Failed to load coaches:', error);
       // Using mock data for demo
@@ -129,6 +143,46 @@ const StudentDashboard = () => {
     }
   };
 
+  // ADDED: Load available events for registration
+  const loadAvailableEvents = async () => {
+    try {
+      setEventsLoading(true);
+      console.log('🔄 Loading available events...');
+      
+      const eventsData = await getStudentEvents({
+        page: 1,
+        limit: 20,
+        status: 'APPROVED'
+      });
+      
+      console.log('✅ Available events loaded:', eventsData);
+      setAvailableEvents(eventsData.data?.events || []);
+    } catch (error) {
+      console.error('❌ Failed to load available events:', error);
+      setAvailableEvents([]);
+    } finally {
+      setEventsLoading(false);
+    }
+  };
+
+  // ADDED: Load student's event registrations
+  const loadMyEventRegistrations = async () => {
+    try {
+      console.log('🔄 Loading student event registrations...');
+      
+      const registrationsData = await getStudentEventRegistrations({
+        page: 1,
+        limit: 20
+      });
+      
+      console.log('✅ Event registrations loaded:', registrationsData);
+      setMyEventRegistrations(registrationsData.data?.registrations || []);
+    } catch (error) {
+      console.error('❌ Failed to load event registrations:', error);
+      setMyEventRegistrations([]);
+    }
+  };
+
   const handleConnectCoach = async (coachId) => {
     try {
       await requestCoachConnection(coachId);
@@ -140,10 +194,51 @@ const StudentDashboard = () => {
     }
   };
 
+  // ADDED: Handle event registration
+  const handleRegisterForEvent = async (eventId) => {
+    try {
+      setRegisteringEventId(eventId);
+      console.log(`🔄 Registering for event ${eventId}...`);
+      
+      const response = await registerForEvent(eventId);
+      
+      if (response.success) {
+        console.log('✅ Successfully registered for event');
+        
+        // Refresh the events and registrations data
+        await Promise.all([
+          loadAvailableEvents(),
+          loadMyEventRegistrations(),
+          loadDashboardData()
+        ]);
+        
+        alert('Successfully registered for the event!');
+      } else {
+        throw new Error(response.message || 'Failed to register for event');
+      }
+    } catch (error) {
+      console.error('❌ Failed to register for event:', error);
+      alert(`Failed to register for event: ${error.message || 'Unknown error'}`);
+    } finally {
+      setRegisteringEventId(null);
+    }
+  };
+
+  // ADDED: Browse events handler
+  const handleBrowseEvents = () => {
+    setShowEventsModal(true);
+    if (availableEvents.length === 0) {
+      loadAvailableEvents();
+    }
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Spinner size="lg" />
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading student dashboard...</p>
+        </div>
       </div>
     );
   }
@@ -178,8 +273,11 @@ const StudentDashboard = () => {
               >
                 Find Coaches
               </button>
-              <button className="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-400 transition-colors">
-                Register for Event
+              <button 
+                onClick={handleBrowseEvents}
+                className="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-400 transition-colors"
+              >
+                Browse Events
               </button>
             </div>
           </div>
@@ -209,12 +307,27 @@ const StudentDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Events Registered</p>
-                <p className="text-3xl font-bold text-gray-900">{dashboardData?.events?.length || (localProfile.eventRegistrations?.length || 0)}</p>
+                <p className="text-3xl font-bold text-gray-900">{myEventRegistrations.length}</p>
                 <p className="text-sm text-blue-600 mt-1">{getStudentField('upcomingEvents', 0)} upcoming</p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                 <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          {/* Available Events */}
+          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Available Events</p>
+                <p className="text-3xl font-bold text-gray-900">{availableEvents.length}</p>
+                <p className="text-sm text-orange-600 mt-1">Ready to join</p>
+              </div>
+              <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
                 </svg>
               </div>
             </div>
@@ -239,21 +352,6 @@ const StudentDashboard = () => {
               </div>
             </div>
           </div>
-          {/* Achievements */}
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-yellow-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Achievements</p>
-                <p className="text-3xl font-bold text-gray-900">{(getStudentField('achievements') || []).length}</p>
-                <p className="text-sm text-yellow-600 mt-1">Earned badges</p>
-              </div>
-              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Tab Navigation */}
@@ -263,7 +361,7 @@ const StudentDashboard = () => {
               {[
                 { id: 'overview', name: 'Overview', icon: '📊' },
                 { id: 'coaches', name: 'My Coaches', icon: '👨‍🏫' },
-                { id: 'events', name: 'Events', icon: '🏆' },
+                { id: 'events', name: 'My Events', icon: '🏆' },
                 { id: 'progress', name: 'Progress', icon: '📈' }
               ].map((tab) => (
                 <button
@@ -306,20 +404,43 @@ const StudentDashboard = () => {
                     ))}
                   </div>
 
+                  {/* UPDATED: Show upcoming events from API */}
                   <div className="mt-8">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Upcoming Events</h3>
                     <div className="space-y-3">
-                      {dashboardData?.events?.filter(event => event.status === 'registered').slice(0, 3).map(event => (
-                        <div key={event.id} className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+                      {myEventRegistrations.filter(reg => 
+                        new Date(reg.event.startDate) > new Date()
+                      ).slice(0, 3).map(registration => (
+                        <div key={registration.id} className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
                           <div>
-                            <h4 className="font-medium text-gray-900">{event.name}</h4>
-                            <p className="text-sm text-gray-600">{new Date(event.date).toLocaleDateString()}</p>
+                            <h4 className="font-medium text-gray-900">{registration.event.title || registration.event.name}</h4>
+                            <p className="text-sm text-gray-600">
+                              {new Date(registration.event.startDate).toLocaleDateString()} • {registration.event.location || registration.event.venue}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              Registration: {registration.status}
+                            </p>
                           </div>
                           <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
-                            {event.category}
+                            {registration.event.sport}
                           </span>
                         </div>
                       ))}
+                      
+                      {myEventRegistrations.filter(reg => 
+                        new Date(reg.event.startDate) > new Date()
+                      ).length === 0 && (
+                        <div className="text-center py-8 text-gray-500">
+                          <div className="text-4xl mb-2">📅</div>
+                          <p>No upcoming events</p>
+                          <button 
+                            onClick={handleBrowseEvents}
+                            className="mt-3 text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            Browse available events
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -334,7 +455,10 @@ const StudentDashboard = () => {
                     >
                       🔍 Find New Coaches
                     </button>
-                    <button className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors">
+                    <button 
+                      onClick={handleBrowseEvents}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors"
+                    >
                       🏆 Browse Events
                     </button>
                     <button className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors" onClick={() => handleUpdateProfile()}>
@@ -432,55 +556,74 @@ const StudentDashboard = () => {
               </div>
             )}
 
+            {/* UPDATED: Events tab to show real data */}
             {activeTab === 'events' && (
               <div>
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900">My Events</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">My Events ({myEventRegistrations.length})</h3>
                   <div className="flex space-x-3">
                     <select className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                       <option>All Events</option>
                       <option>Registered</option>
                       <option>Pending</option>
-                      <option>Completed</option>
+                      <option>Approved</option>
                     </select>
-                    <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium">
+                    <button 
+                      onClick={handleBrowseEvents}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
+                    >
                       Browse Events
                     </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {dashboardData?.events?.map(event => (
-                    <div key={event.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-                      <div className="flex justify-between items-start mb-4">
-                        <h4 className="font-semibold text-gray-900">{event.name}</h4>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          event.status === 'registered' ? 'bg-green-100 text-green-800' :
-                          event.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-blue-100 text-blue-800'
-                        }`}>
-                          {event.status}
-                        </span>
-                      </div>
-                      
-                      <div className="space-y-2 mb-4">
-                        <p className="text-sm text-gray-600">📅 {new Date(event.date).toLocaleDateString()}</p>
-                        <p className="text-sm text-gray-600">🏷️ {event.category}</p>
-                      </div>
+                {myEventRegistrations.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {myEventRegistrations.map(registration => (
+                      <div key={registration.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-start mb-4">
+                          <h4 className="font-semibold text-gray-900">{registration.event.title || registration.event.name}</h4>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            registration.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
+                            registration.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {registration.status}
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-2 mb-4">
+                          <p className="text-sm text-gray-600">📅 {new Date(registration.event.startDate).toLocaleDateString()}</p>
+                          <p className="text-sm text-gray-600">📍 {registration.event.location || registration.event.venue}</p>
+                          <p className="text-sm text-gray-600">🏷️ {registration.event.sport}</p>
+                          {registration.event.fees !== undefined && (
+                            <p className="text-sm text-gray-600">💰 ₹{registration.event.fees || registration.event.eventFee || 0}</p>
+                          )}
+                        </div>
 
-                      <div className="flex space-x-2">
-                        <button className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
-                          View Details
-                        </button>
-                        {event.status === 'pending' && (
-                          <button className="flex-1 bg-green-600 text-white px-3 py-2 rounded text-sm hover:bg-green-700 transition-colors">
-                            Register
+                        <div className="flex space-x-2">
+                          <button className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
+                            View Details
                           </button>
-                        )}
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <span className="text-gray-400 text-4xl">🏆</span>
                     </div>
-                  ))}
-                </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Event Registrations</h3>
+                    <p className="text-gray-600 mb-6">Browse available events and register to participate.</p>
+                    <button
+                      onClick={handleBrowseEvents}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
+                    >
+                      Browse Events
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -535,6 +678,81 @@ const StudentDashboard = () => {
             />
           ))}
         </div>
+      </Modal>
+
+      {/* ADDED: Browse Events Modal */}
+      <Modal
+        isOpen={showEventsModal}
+        onClose={() => setShowEventsModal(false)}
+        title={`Available Events (${availableEvents.length})`}
+        maxWidth="max-w-6xl"
+      >
+        <div className="mb-4">
+          <div className="flex space-x-4 mb-4">
+            <input
+              type="text"
+              placeholder="Search events..."
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+            <select className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+              <option>All Sports</option>
+              <option>Football</option>
+              <option>Basketball</option>
+              <option>Cricket</option>
+              <option>Swimming</option>
+            </select>
+          </div>
+        </div>
+        
+        {eventsLoading ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-2 text-gray-600">Loading events...</p>
+          </div>
+        ) : availableEvents.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-h-96 overflow-y-auto">
+            {availableEvents.map(event => (
+              <div key={event.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+                <div className="flex justify-between items-start mb-4">
+                  <h4 className="font-semibold text-gray-900">{event.title || event.name}</h4>
+                  <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                    {event.status}
+                  </span>
+                </div>
+                
+                <div className="space-y-2 mb-4">
+                  <p className="text-sm text-gray-600">📅 {new Date(event.startDate).toLocaleDateString()}</p>
+                  <p className="text-sm text-gray-600">📍 {event.location || event.venue}</p>
+                  <p className="text-sm text-gray-600">🏷️ {event.sport}</p>
+                  <p className="text-sm text-gray-600">👨‍🏫 {event.organizer?.name || event.coach?.name || 'Unknown Organizer'}</p>
+                  <p className="text-sm text-gray-600">👥 {event.currentParticipants || 0}/{event.maxParticipants || 'Unlimited'}</p>
+                  {(event.fees !== undefined || event.eventFee !== undefined) && (
+                    <p className="text-sm text-gray-600">💰 ₹{event.fees || event.eventFee || 0}</p>
+                  )}
+                </div>
+
+                <div className="flex space-x-2">
+                  <button className="flex-1 bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200 transition-colors">
+                    View Details
+                  </button>
+                  <button
+                    onClick={() => handleRegisterForEvent(event.id)}
+                    disabled={registeringEventId === event.id}
+                    className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    {registeringEventId === event.id ? 'Registering...' : 'Register'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <div className="text-gray-400 text-4xl mb-4">🏆</div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Events Available</h3>
+            <p className="text-gray-600">Check back later for upcoming events.</p>
+          </div>
+        )}
       </Modal>
     </div>
   );

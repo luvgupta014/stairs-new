@@ -279,15 +279,33 @@ export const requestCoachConnection = async (coachId) => {
   }
 };
 
-export const registerForEvent = async (eventId, registrationType) => {
+// Student Event APIs
+export const getStudentEvents = async (params = {}) => {
   try {
-    // TODO: Integrate with backend event registration (3A direct, 3B through coach)
-    const response = await api.post('/api/student/events/register', { 
-      eventId, 
-      registrationType 
-    });
+    const response = await api.get('/api/student/events', { params });
     return response.data;
   } catch (error) {
+    console.error('Get student events error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getStudentEventRegistrations = async (params = {}) => {
+  try {
+    const response = await api.get('/api/student/event-registrations', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Get student event registrations error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const registerForEvent = async (eventId) => {
+  try {
+    const response = await api.post(`/api/student/events/${eventId}/register`);
+    return response.data;
+  } catch (error) {
+    console.error('Register for event error:', error);
     throw error.response?.data || error.message;
   }
 };
