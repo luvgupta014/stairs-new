@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
 import LoginLayout from '../../components/LoginLayout';
-import { aLogin } from '../../api';
 
 const AdminLogin = () => {
   const [loading, setLoading] = useState(false);
@@ -12,12 +11,12 @@ const AdminLogin = () => {
   const { login } = useAuth();
 
   const handleLogin = async (formData) => {
-    setLoading(true);a
+    setLoading(true);
     setError('');
 
     try {
       // Call admin login API
-      const response = await adminLogin(formData.email, formData.password);
+      const response = await login(formData.email, formData.password, 'ADMIN');
       
       if (response.success) {
         // Store auth data

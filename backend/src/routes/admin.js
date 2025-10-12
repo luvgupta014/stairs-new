@@ -8,7 +8,7 @@ const {
   getPaginationMeta,
   hashPassword
 } = require('../utils/helpers');
-r
+
 const router = express.Router();
 const prisma = new PrismaClient();
 
