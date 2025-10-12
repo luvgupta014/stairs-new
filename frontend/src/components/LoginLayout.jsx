@@ -1,69 +1,71 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { useAuth } from '../contexts/AuthContext';
-import Spinner from './Spinner';
+import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import { useAuth } from "../contexts/AuthContext";
+import Spinner from "./Spinner";
 
-const LoginLayout = ({ 
-  role, 
-  title, 
-  subtitle, 
-  icon, 
-  color = 'blue',
+const LoginLayout = ({
+  role,
+  title,
+  subtitle,
+  icon,
+  color = "blue",
   registerPath,
   onSubmit,
   loading,
-  error
+  error,
 }) => {
   const [formData, setFormData] = useState({
-    email: '',
-    password: ''
+    email: "",
+    password: "",
   });
+
+  const navigate = useNavigate();
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  console.log('Form submitted with data:', formData);
-  if (onSubmit) {
-    await onSubmit(formData);
-  }
-};
+    e.preventDefault();
+    console.log("Form submitted with data:", formData);
+    if (onSubmit) {
+      await onSubmit(formData);
+    }
+  };
 
   const colorClasses = {
     blue: {
-      bg: 'bg-blue-500',
-      hover: 'hover:bg-blue-600',
-      focus: 'focus:ring-blue-500',
-      text: 'text-blue-600',
-      border: 'border-blue-500'
+      bg: "bg-blue-500",
+      hover: "hover:bg-blue-600",
+      focus: "focus:ring-blue-500",
+      text: "text-blue-600",
+      border: "border-blue-500",
     },
     green: {
-      bg: 'bg-green-500',
-      hover: 'hover:bg-green-600',
-      focus: 'focus:ring-green-500',
-      text: 'text-green-600',
-      border: 'border-green-500'
+      bg: "bg-green-500",
+      hover: "hover:bg-green-600",
+      focus: "focus:ring-green-500",
+      text: "text-green-600",
+      border: "border-green-500",
     },
     purple: {
-      bg: 'bg-purple-500',
-      hover: 'hover:bg-purple-600',
-      focus: 'focus:ring-purple-500',
-      text: 'text-purple-600',
-      border: 'border-purple-500'
+      bg: "bg-purple-500",
+      hover: "hover:bg-purple-600",
+      focus: "focus:ring-purple-500",
+      text: "text-purple-600",
+      border: "border-purple-500",
     },
     orange: {
-      bg: 'bg-orange-500',
-      hover: 'hover:bg-orange-600',
-      focus: 'focus:ring-orange-500',
-      text: 'text-orange-600',
-      border: 'border-orange-500'
-    }
+      bg: "bg-orange-500",
+      hover: "hover:bg-orange-600",
+      focus: "focus:ring-orange-500",
+      text: "text-orange-600",
+      border: "border-orange-500",
+    },
   };
 
   const currentColor = colorClasses[color] || colorClasses.blue;
@@ -77,8 +79,18 @@ const LoginLayout = ({
             to="/"
             className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors"
           >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            <svg
+              className="w-4 h-4 mr-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
             Back to Home
           </Link>
@@ -118,7 +130,10 @@ const LoginLayout = ({
           {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Email Address
               </label>
               <input
@@ -134,7 +149,10 @@ const LoginLayout = ({
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Password
               </label>
               <input
@@ -157,15 +175,22 @@ const LoginLayout = ({
                   type="checkbox"
                   className={`h-4 w-4 ${currentColor.text} focus:ring-2 ${currentColor.focus} border-gray-300 rounded`}
                 />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
+                <label
+                  htmlFor="remember-me"
+                  className="ml-2 block text-sm text-gray-700"
+                >
                   Remember me
                 </label>
               </div>
 
               <div className="text-sm">
-                <Link to="/forgot-password" className={`${currentColor.text} hover:opacity-80 transition-opacity`}>
+                <button
+                  type="button"
+                  onClick={() => navigate("/forgot-password")}
+                  className={`${currentColor.text} hover:opacity-80 transition-opacity`}
+                >
                   Forgot password?
-                </Link>
+                </button>
               </div>
             </div>
 
@@ -180,7 +205,7 @@ const LoginLayout = ({
                   <span className="ml-2">Signing in...</span>
                 </>
               ) : (
-                'Sign In'
+                "Sign In"
               )}
             </button>
           </form>
@@ -188,8 +213,11 @@ const LoginLayout = ({
           {/* Register Link */}
           <div className="mt-6 text-center">
             <p className="text-gray-600">
-              Don't have an account?{' '}
-              <Link to={registerPath} className={`${currentColor.text} hover:opacity-80 font-semibold transition-opacity`}>
+              Don't have an account?{" "}
+              <Link
+                to={registerPath}
+                className={`${currentColor.text} hover:opacity-80 font-semibold transition-opacity`}
+              >
                 Register here
               </Link>
             </p>
@@ -198,12 +226,18 @@ const LoginLayout = ({
           {/* Demo Credentials */}
           {import.meta.env.DEV && (
             <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-              <p className="text-xs text-gray-500 text-center mb-2">Demo Credentials (Development)</p>
+              <p className="text-xs text-gray-500 text-center mb-2">
+                Demo Credentials (Development)
+              </p>
               <div className="grid grid-cols-1 gap-2 text-xs">
                 <div className="bg-white p-2 rounded border">
-                  <p className="font-medium text-gray-700">Email: demo@{role.toLowerCase()}.com</p>
+                  <p className="font-medium text-gray-700">
+                    Email: demo@{role.toLowerCase()}.com
+                  </p>
                   <p className="text-gray-600">Password: demo123456</p>
-                  <p className="text-xs text-green-600 mt-1">✨ Click to auto-fill and login!</p>
+                  <p className="text-xs text-green-600 mt-1">
+                    ✨ Click to auto-fill and login!
+                  </p>
                 </div>
               </div>
               <button
@@ -211,7 +245,7 @@ const LoginLayout = ({
                 onClick={() => {
                   setFormData({
                     email: `demo@${role.toLowerCase()}.com`,
-                    password: 'demo123456'
+                    password: "demo123456",
                   });
                 }}
                 className={`mt-2 w-full text-xs ${currentColor.text} hover:opacity-80 transition-opacity border ${currentColor.border} rounded px-2 py-1`}

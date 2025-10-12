@@ -19,6 +19,10 @@ import CoachLogin from "./pages/auth/CoachLogin";
 import ClubLogin from "./pages/auth/ClubLogin";
 import InstituteLogin from "./pages/auth/InstituteLogin";
 
+// Forgot / Reset Password Pages
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import ResetPassword from "./pages/auth/ResetPassword";
+
 // Registration Pages
 import StudentRegister from "./pages/StudentRegister";
 import CoachRegister from "./pages/CoachRegister";
@@ -70,6 +74,8 @@ function App() {
               path="/register/club"
               element={<Navigate to="/register/club-premium" replace />}
             />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/verify-otp" element={<VerifyOtp />} />
             {/* Premium Registration Routes (no header/footer) */}
             <Route

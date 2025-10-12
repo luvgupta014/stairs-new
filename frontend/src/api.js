@@ -80,6 +80,30 @@ export const login = async (data, role) => {
   }
 };
 
+// Add forgot password API
+export const forgotPassword = async (email) => {
+  try {
+    const response = await api.post('/auth/forgot-password', { email });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Add reset password API
+export const resetPassword = async (email, otp, newPassword) => {
+  try {
+    const response = await api.post('/auth/reset-password', {
+      email,
+      otp,
+      newPassword
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 // Coach Registration and Management APIs
 export const registerCoach = async (data) => {
   try {
