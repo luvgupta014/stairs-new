@@ -15,28 +15,16 @@ const AdminLogin = () => {
     setError('');
 
     try {
-      // Call admin login API
-      const response = await login(formData.email, formData.password, 'ADMIN');
+      console.log('Attempting admin login with:', formData.email);
+      
+      // FIXED: Call login with correct parameters (credentials, role)
+      const response = await login(formData, 'ADMIN');
+      
+      console.log('Admin login response:', response);
       
       if (response.success) {
-        // Store auth data
-        const authData = {
-          user: response.data.user,
-          admin: response.data.admin,
-          token: response.data.token,
-          role: 'ADMIN'
-        };
-
-        // Update auth context
-        login(authData);
-
-        // Store in localStorage
-        localStorage.setItem('authToken', response.data.token);
-        localStorage.setItem('userRole', 'ADMIN');
-        localStorage.setItem('userData', JSON.stringify(authData));
-
-        // Navigate to admin dashboard
-        navigate('/admin/dashboard', { replace: true });
+        // Navigate to admin dashboard - FIXED path
+        navigate('/dashboard/admin', { replace: true });
       } else {
         setError(response.message || 'Login failed. Please try again.');
       }

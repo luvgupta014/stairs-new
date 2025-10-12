@@ -12,76 +12,6 @@ const {
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Admin login
-router.post('/login/admin', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    // Validation
-    if (!email || !password) {
-      return res.status(400).json(errorResponse('Email and password are required.', 400));
-    }
-
-    // Find admin user
-    const user = await prisma.user.findUnique({
-      where: { 
-        email,
-        role: 'ADMIN',
-        isActive: true
-      },
-      include: {
-        adminProfile: true
-      }
-    });
-
-    if (!user) {
-      return res.status(401).json(errorResponse('Invalid credentials.', 401));
-    }
-
-    // Verify password
-    const bcrypt = require('bcryptjs');
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    if (!isValidPassword) {
-      return res.status(401).json(errorResponse('Invalid credentials.', 401));
-    }
-
-    // Generate JWT token
-    const jwt = require('jsonwebtoken');
-    const token = jwt.sign(
-      { 
-        userId: user.id, 
-        role: user.role,
-        adminId: user.adminProfile.id 
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    // Update last login
-    await prisma.admin.update({
-      where: { userId: user.id },
-      data: { lastLoginAt: new Date() }
-    });
-
-    // Return success response
-    res.json(successResponse({
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        isActive: user.isActive,
-        isVerified: user.isVerified
-      },
-      admin: user.adminProfile,
-      token
-    }, 'Admin login successful.'));
-
-  } catch (error) {
-    console.error('Admin login error:', error);
-    res.status(500).json(errorResponse('Login failed.', 500));
-  }
-});
-
 // Get admin profile
 router.get('/profile', authenticate, requireAdmin, async (req, res) => {
   try {
@@ -116,91 +46,304 @@ router.get('/profile', authenticate, requireAdmin, async (req, res) => {
 // Get dashboard analytics
 router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
   try {
-    const [
-      totalUsers,
-      totalStudents,
-      totalCoaches,
-      totalInstitutes,
-      totalClubs,
-      pendingCoachApprovals,
-      pendingInstituteApprovals,
-      totalEvents,
-      totalConnections,
-      recentRegistrations
-    ] = await Promise.all([
-      prisma.user.count(),
-      prisma.student.count(),
-      prisma.coach.count(),
-      prisma.institute.count(),
-      prisma.club.count(),
-      prisma.coach.count({ where: { approvalStatus: 'PENDING' } }),
-      prisma.institute.count({ where: { approvalStatus: 'PENDING' } }),
-      prisma.event.count(),
-      prisma.studentCoachConnection.count({ where: { status: 'ACTIVE' } }),
-      prisma.user.findMany({
+    console.log('🔍 Fetching admin dashboard data...');
+
+    // Get basic stats with individual error handling
+    const stats = {};
+
+    try {
+      stats.totalUsers = await prisma.user.count();
+    } catch (error) {
+      console.error('Error counting total users:', error);
+      stats.totalUsers = 0;
+    }
+
+    try {
+      stats.totalStudents = await prisma.user.count({ where: { role: 'STUDENT' } });
+    } catch (error) {
+      console.error('Error counting students:', error);
+      stats.totalStudents = 0;
+    }
+
+    try {
+      stats.totalCoaches = await prisma.user.count({ where: { role: 'COACH' } });
+    } catch (error) {
+      console.error('Error counting coaches:', error);
+      stats.totalCoaches = 0;
+    }
+
+    try {
+      stats.totalInstitutes = await prisma.user.count({ where: { role: 'INSTITUTE' } });
+    } catch (error) {
+      console.error('Error counting institutes:', error);
+      stats.totalInstitutes = 0;
+    }
+
+    try {
+      stats.totalClubs = await prisma.user.count({ where: { role: 'CLUB' } });
+    } catch (error) {
+      console.error('Error counting clubs:', error);
+      stats.totalClubs = 0;
+    }
+
+    // Get pending approvals with error handling
+    try {
+      stats.pendingCoachApprovals = await prisma.user.count({
+        where: { 
+          role: 'COACH',
+          isVerified: true,
+          isActive: false
+        }
+      });
+    } catch (error) {
+      console.error('Error counting pending coach approvals:', error);
+      stats.pendingCoachApprovals = 0;
+    }
+
+    try {
+      stats.pendingInstituteApprovals = await prisma.user.count({
+        where: { 
+          role: 'INSTITUTE',
+          isVerified: true,
+          isActive: false
+        }
+      });
+    } catch (error) {
+      console.error('Error counting pending institute approvals:', error);
+      stats.pendingInstituteApprovals = 0;
+    }
+
+    // Set default values for features not yet implemented
+    stats.totalEvents = 0;
+    stats.totalConnections = 0;
+
+    // Get recent registrations with error handling
+    let recentRegistrations = [];
+    try {
+      recentRegistrations = await prisma.user.findMany({
         select: {
           id: true,
           email: true,
           role: true,
-          status: true,
+          isActive: true,
+          isVerified: true,
           createdAt: true,
           studentProfile: {
-            select: {
-              name: true
-            }
+            select: { name: true }
           },
           coachProfile: {
-            select: {
-              name: true
-            }
+            select: { name: true }
           },
           instituteProfile: {
-            select: {
-              name: true
-            }
+            select: { name: true }
           },
           clubProfile: {
-            select: {
-              name: true
-            }
+            select: { name: true }
+          },
+          adminProfile: {
+            select: { name: true }
           }
         },
         orderBy: { createdAt: 'desc' },
         take: 15
-      })
-    ]);
+      });
+    } catch (error) {
+      console.error('Error fetching recent registrations:', error);
+      recentRegistrations = [];
+    }
 
-    // Get user registrations by month for the last 6 months
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    // Calculate monthly growth with error handling
+    let monthlyGrowth = 0;
+    try {
+      const thisMonth = new Date();
+      thisMonth.setDate(1);
+      thisMonth.setHours(0, 0, 0, 0);
 
-    const monthlyRegistrations = await prisma.user.groupBy({
-      by: ['createdAt'],
-      where: {
-        createdAt: { gte: sixMonthsAgo }
-      },
-      _count: { id: true }
-    });
+      const lastMonth = new Date(thisMonth);
+      lastMonth.setMonth(lastMonth.getMonth() - 1);
 
-    res.json(successResponse({
-      stats: {
-        totalUsers,
-        totalStudents,
-        totalCoaches,
-        totalInstitutes,
-        totalClubs,
-        pendingCoachApprovals,
-        pendingInstituteApprovals,
-        totalEvents,
-        totalConnections
-      },
-      recentRegistrations,
-      monthlyRegistrations
-    }, 'Dashboard data retrieved successfully.'));
+      const thisMonthUsers = await prisma.user.count({
+        where: {
+          createdAt: {
+            gte: thisMonth
+          }
+        }
+      });
+
+      const lastMonthUsers = await prisma.user.count({
+        where: {
+          createdAt: {
+            gte: lastMonth,
+            lt: thisMonth
+          }
+        }
+      });
+
+      if (lastMonthUsers > 0) {
+        monthlyGrowth = ((thisMonthUsers - lastMonthUsers) / lastMonthUsers) * 100;
+      } else {
+        monthlyGrowth = thisMonthUsers > 0 ? 100 : 0;
+      }
+      monthlyGrowth = Math.round(monthlyGrowth * 100) / 100;
+    } catch (error) {
+      console.error('Error calculating monthly growth:', error);
+      monthlyGrowth = 0;
+    }
+
+    stats.monthlyGrowth = monthlyGrowth;
+
+    // Format recent registrations
+    const formattedRecentRegistrations = recentRegistrations.map(user => ({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      isVerified: user.isVerified,
+      createdAt: user.createdAt,
+      name: user.studentProfile?.name || 
+            user.coachProfile?.name || 
+            user.instituteProfile?.name || 
+            user.clubProfile?.name || 
+            user.adminProfile?.name || 
+            'Unknown'
+    }));
+
+    const dashboardData = {
+      stats,
+      recentUsers: formattedRecentRegistrations,
+      monthlyRegistrations: [] // Placeholder for now
+    };
+
+    console.log('✅ Admin dashboard data fetched successfully');
+    res.json(successResponse(dashboardData, 'Dashboard data retrieved successfully.'));
 
   } catch (error) {
-    console.error('Get admin dashboard error:', error);
+    console.error('❌ Get admin dashboard error:', error);
     res.status(500).json(errorResponse('Failed to retrieve dashboard data.', 500));
+  }
+});
+
+// Get admin stats endpoint
+router.get('/stats', authenticate, requireAdmin, async (req, res) => {
+  try {
+    console.log('🔍 Fetching admin stats...');
+
+    // Get basic user counts with error handling
+    const stats = {};
+
+    try {
+      stats.totalUsers = await prisma.user.count();
+    } catch (error) {
+      console.error('Error counting total users:', error);
+      stats.totalUsers = 0;
+    }
+
+    try {
+      stats.totalStudents = await prisma.user.count({ where: { role: 'STUDENT' } });
+    } catch (error) {
+      console.error('Error counting students:', error);
+      stats.totalStudents = 0;
+    }
+
+    try {
+      stats.totalCoaches = await prisma.user.count({ where: { role: 'COACH' } });
+    } catch (error) {
+      console.error('Error counting coaches:', error);
+      stats.totalCoaches = 0;
+    }
+
+    try {
+      stats.totalInstitutes = await prisma.user.count({ where: { role: 'INSTITUTE' } });
+    } catch (error) {
+      console.error('Error counting institutes:', error);
+      stats.totalInstitutes = 0;
+    }
+
+    try {
+      stats.totalClubs = await prisma.user.count({ where: { role: 'CLUB' } });
+    } catch (error) {
+      console.error('Error counting clubs:', error);
+      stats.totalClubs = 0;
+    }
+
+    try {
+      stats.totalAdmins = await prisma.user.count({ where: { role: 'ADMIN' } });
+    } catch (error) {
+      console.error('Error counting admins:', error);
+      stats.totalAdmins = 0;
+    }
+
+    try {
+      stats.activeUsers = await prisma.user.count({ where: { isActive: true } });
+    } catch (error) {
+      console.error('Error counting active users:', error);
+      stats.activeUsers = 0;
+    }
+
+    try {
+      stats.verifiedUsers = await prisma.user.count({ where: { isVerified: true } });
+    } catch (error) {
+      console.error('Error counting verified users:', error);
+      stats.verifiedUsers = 0;
+    }
+
+    // Calculate pending approvals (users who are verified but not active)
+    try {
+      stats.pendingApprovals = await prisma.user.count({
+        where: {
+          isVerified: true,
+          isActive: false,
+          role: { in: ['COACH', 'INSTITUTE'] }
+        }
+      });
+    } catch (error) {
+      console.error('Error counting pending approvals:', error);
+      stats.pendingApprovals = 0;
+    }
+
+    // Calculate monthly growth
+    try {
+      const thisMonth = new Date();
+      thisMonth.setDate(1);
+      thisMonth.setHours(0, 0, 0, 0);
+
+      const lastMonth = new Date(thisMonth);
+      lastMonth.setMonth(lastMonth.getMonth() - 1);
+
+      const thisMonthUsers = await prisma.user.count({
+        where: {
+          createdAt: {
+            gte: thisMonth
+          }
+        }
+      });
+
+      const lastMonthUsers = await prisma.user.count({
+        where: {
+          createdAt: {
+            gte: lastMonth,
+            lt: thisMonth
+          }
+        }
+      });
+
+      if (lastMonthUsers > 0) {
+        stats.monthlyGrowth = ((thisMonthUsers - lastMonthUsers) / lastMonthUsers) * 100;
+      } else {
+        stats.monthlyGrowth = thisMonthUsers > 0 ? 100 : 0;
+      }
+      stats.monthlyGrowth = Math.round(stats.monthlyGrowth * 100) / 100;
+    } catch (error) {
+      console.error('Error calculating monthly growth:', error);
+      stats.monthlyGrowth = 0;
+    }
+
+    console.log('✅ Admin stats fetched successfully:', stats);
+    res.json(successResponse(stats, 'Stats retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get admin stats error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve stats.', 500));
   }
 });
 
@@ -299,6 +442,69 @@ router.get('/users', authenticate, requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json(errorResponse('Failed to retrieve users.', 500));
+  }
+});
+
+// Update user status (activate/deactivate)
+router.patch('/users/:userId/status', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { isActive } = req.body;
+
+    if (typeof isActive !== 'boolean') {
+      return res.status(400).json(errorResponse('isActive must be a boolean value.', 400));
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { isActive },
+      include: {
+        studentProfile: true,
+        coachProfile: true,
+        instituteProfile: true,
+        clubProfile: true
+      }
+    });
+
+    res.json(successResponse({
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        isActive: updatedUser.isActive,
+        name: updatedUser.studentProfile?.name || 
+              updatedUser.coachProfile?.name || 
+              updatedUser.instituteProfile?.name || 
+              updatedUser.clubProfile?.name || 
+              'Unknown'
+      }
+    }, `User ${isActive ? 'activated' : 'deactivated'} successfully.`));
+
+  } catch (error) {
+    console.error('Update user status error:', error);
+    res.status(500).json(errorResponse('Failed to update user status.', 500));
+  }
+});
+
+// Delete user (soft delete)
+router.delete('/users/:userId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Soft delete by deactivating the user
+    const deletedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { 
+        isActive: false,
+        // Note: Add deletedAt field to your schema if needed
+      }
+    });
+
+    res.json(successResponse(null, 'User deleted successfully.'));
+
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json(errorResponse('Failed to delete user.', 500));
   }
 });
 
