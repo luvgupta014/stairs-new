@@ -8,9 +8,79 @@ const {
   getPaginationMeta,
   hashPassword
 } = require('../utils/helpers');
-
+r
 const router = express.Router();
 const prisma = new PrismaClient();
+
+// Admin login
+router.post('/login/admin', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Validation
+    if (!email || !password) {
+      return res.status(400).json(errorResponse('Email and password are required.', 400));
+    }
+
+    // Find admin user
+    const user = await prisma.user.findUnique({
+      where: { 
+        email,
+        role: 'ADMIN',
+        isActive: true
+      },
+      include: {
+        adminProfile: true
+      }
+    });
+
+    if (!user) {
+      return res.status(401).json(errorResponse('Invalid credentials.', 401));
+    }
+
+    // Verify password
+    const bcrypt = require('bcryptjs');
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json(errorResponse('Invalid credentials.', 401));
+    }
+
+    // Generate JWT token
+    const jwt = require('jsonwebtoken');
+    const token = jwt.sign(
+      { 
+        userId: user.id, 
+        role: user.role,
+        adminId: user.adminProfile.id 
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    // Update last login
+    await prisma.admin.update({
+      where: { userId: user.id },
+      data: { lastLoginAt: new Date() }
+    });
+
+    // Return success response
+    res.json(successResponse({
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        isVerified: user.isVerified
+      },
+      admin: user.adminProfile,
+      token
+    }, 'Admin login successful.'));
+
+  } catch (error) {
+    console.error('Admin login error:', error);
+    res.status(500).json(errorResponse('Login failed.', 500));
+  }
+});
 
 // Get admin profile
 router.get('/profile', authenticate, requireAdmin, async (req, res) => {

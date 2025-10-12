@@ -18,6 +18,7 @@ import StudentLogin from "./pages/auth/StudentLogin";
 import CoachLogin from "./pages/auth/CoachLogin";
 import ClubLogin from "./pages/auth/ClubLogin";
 import InstituteLogin from "./pages/auth/InstituteLogin";
+import AdminLogin from "./pages/auth/AdminLogin";
 
 // Forgot / Reset Password Pages
 import ForgotPassword from "./pages/auth/ForgotPassword";
@@ -60,6 +61,8 @@ function App() {
             <Route path="/login/coach" element={<CoachLogin />} />
             <Route path="/login/club" element={<ClubLogin />} />
             <Route path="/login/institute" element={<InstituteLogin />} />
+            <Route path="/login/admin" element={<AdminLogin />} />
+            
             {/* Registration Routes (no header/footer) */}
             <Route path="/register/student" element={<StudentRegister />} />
             <Route
