@@ -105,7 +105,7 @@ const CoachRegister = () => {
       
       if (result.success) {
         localStorage.removeItem('pendingCoachId');
-        setModalMessage('Payment successful! Your coach account is now active. Redirecting to login...');
+        setModalMessage('Payment successful! Your coordinator account is now active. Redirecting to login...');
         setShowModal(true);
         
         setTimeout(() => {
@@ -154,7 +154,7 @@ const CoachRegister = () => {
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-4">Registration Successful!</h3>
             <p className="text-sm text-gray-600 mb-6">
-              Complete your payment to activate your coach account and start connecting with students.
+              Complete your payment to activate your coordinator account and start connecting with Athletes.
             </p>
             <div className="space-y-4">
               <div className="bg-gray-50 p-4 rounded-lg">
@@ -183,10 +183,10 @@ const CoachRegister = () => {
       <div className="max-w-2xl mx-auto">
         <div className="text-center">
           <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            Coach Registration
+            Coordinator Registration
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            Join STAIRS Talent Hub as a Certified Coach
+            Join STAIRS Talent Hub as a Certified Coordinator
           </p>
         </div>
 

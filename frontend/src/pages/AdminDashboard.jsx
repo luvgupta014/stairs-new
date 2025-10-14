@@ -245,6 +245,7 @@ const AdminDashboard = () => {
                           <div className="text-sm text-gray-500">
                             Max: {event.maxParticipants} participants
                           </div>
+                          {/* Removed fee display */}
                         </div>
                       </td>
                       <td className="py-3 px-4">

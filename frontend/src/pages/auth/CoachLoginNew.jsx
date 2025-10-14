@@ -72,10 +72,10 @@ const CoachLogin = () => {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Coach Login
+            Coordinator Login
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Sign in to your coach account
+            Sign in to your Coordinator account
           </p>
         </div>
 
@@ -170,13 +170,13 @@ const CoachLogin = () => {
 
           <div className="text-center space-y-2">
             <p className="text-sm text-gray-600">
-              New coach?{' '}
+              New coordinator?{' '}
               <Link to="/register/coach" className="font-medium text-green-600 hover:text-green-500">
                 Register here
               </Link>
             </p>
             <p className="text-sm text-gray-600">
-              Not a coach?{' '}
+              Not a Coordinator?{' '}
               <span className="text-green-600">
                 Try{' '}
                 <Link to="/login/student" className="font-medium hover:underline">

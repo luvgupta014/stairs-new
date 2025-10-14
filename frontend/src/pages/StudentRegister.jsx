@@ -139,10 +139,10 @@ const StudentRegister = () => {
       <div className="max-w-md mx-auto">
         <div className="text-center">
           <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            Student Registration
+            Athlete Registration
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            Join STAIRS Talent Hub as a Student
+            Join STAIRS Talent Hub as a Athlete
           </p>
         </div>
 

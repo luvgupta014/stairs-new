@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { createEvent, processEventPayment, getCoachDashboard } from '../api';
+import { createEvent, getCoachDashboard } from '../api';
 import Spinner from '../components/Spinner';
 import { useNavigate, Link } from 'react-router-dom';
 import { FaExclamationTriangle, FaCreditCard, FaLocationArrow } from 'react-icons/fa';
@@ -17,14 +17,13 @@ const EventCreate = () => {
     longitude: '',
     startDate: '',
     endDate: '',
-    maxParticipants: '',
-    eventFee: ''
+    maxParticipants: ''
+    // Removed eventFee
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [paymentStep, setPaymentStep] = useState(false);
-  const [createdEvent, setCreatedEvent] = useState(null);
+  // Removed paymentStep, createdEvent, and payment-related states
   const [coachData, setCoachData] = useState(null);
   const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(true);
   const [gettingLocation, setGettingLocation] = useState(false);
@@ -60,28 +59,21 @@ const EventCreate = () => {
     setError('');
 
     try {
-      // Combine date and time for startDate
       const eventData = {
         ...formData,
         startDate: formData.startDate,
         endDate: formData.endDate || null,
-        maxParticipants: formData.maxParticipants ? parseInt(formData.maxParticipants) : null,
-        eventFee: formData.eventFee ? parseFloat(formData.eventFee) : 0
+        maxParticipants: formData.maxParticipants ? parseInt(formData.maxParticipants) : null
+        // Removed eventFee: 0 - no longer needed since backend sets it to 0
       };
 
       const result = await createEvent(eventData);
       
       if (result.success) {
-        setCreatedEvent(result.data.event);
-        
-        if (result.data.requiresPayment && formData.eventFee > 0) {
-          setPaymentStep(true);
-        } else {
-          setSuccess(true);
-          setTimeout(() => {
-            navigate('/dashboard/coach');
-          }, 2000);
-        }
+        setSuccess(true);
+        setTimeout(() => {
+          navigate('/dashboard/coach');
+        }, 2000);
       } else {
         setError(result.message || 'Failed to create event');
       }
@@ -92,34 +84,7 @@ const EventCreate = () => {
     }
   };
 
-  const handlePayment = async () => {
-    if (!createdEvent) return;
-    
-    setLoading(true);
-    try {
-      // TODO: Integrate with Razorpay
-      const paymentData = {
-        amount: formData.eventFee,
-        razorpayOrderId: 'order_' + Date.now(),
-        razorpayPaymentId: 'pay_' + Date.now()
-      };
-
-      const result = await processEventPayment(createdEvent.id, paymentData);
-      
-      if (result.success) {
-        setSuccess(true);
-        setTimeout(() => {
-          navigate('/dashboard/coach');
-        }, 2000);
-      } else {
-        setError(result.message || 'Payment failed');
-      }
-    } catch (error) {
-      setError(error.message || 'Payment failed');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Removed handlePayment function entirely
 
   const handleChange = (e) => {
     setFormData({
@@ -231,41 +196,7 @@ const EventCreate = () => {
     );
   }
 
-  if (paymentStep) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full text-center">
-          <div className="bg-white rounded-lg shadow-md p-8">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-blue-600 text-2xl">💳</span>
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Complete Payment</h2>
-            <p className="text-gray-600 mb-4">
-              Complete the event fee payment to submit your event for admin approval.
-            </p>
-            <div className="bg-gray-50 p-4 rounded-lg mb-6">
-              <p className="text-sm font-medium text-gray-900">Event Fee</p>
-              <p className="text-2xl font-bold text-blue-600">₹{formData.eventFee}</p>
-              <p className="text-xs text-gray-500">One-time event fee</p>
-            </div>
-            <button
-              onClick={handlePayment}
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              {loading ? 'Processing...' : 'Pay with Razorpay'}
-            </button>
-            {error && (
-              <div className="mt-4 text-red-600 text-sm">{error}</div>
-            )}
-            <p className="text-xs text-gray-500 mt-4">
-              Secure payment powered by Razorpay
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Removed paymentStep section entirely
 
   if (success) {
     return (
@@ -575,23 +506,7 @@ const EventCreate = () => {
             </div>
           </div>
 
-          {/* Fee */}
-          <div>
-            <label htmlFor="eventFee" className="block text-sm font-medium text-gray-700 mb-2">
-              Event Fee (₹)
-            </label>
-            <input
-              type="number"
-              id="eventFee"
-              name="eventFee"
-              min="0"
-              step="0.01"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-              placeholder="0.00"
-              value={formData.eventFee}
-              onChange={handleChange}
-            />
-          </div>
+          {/* Removed Fee section entirely */}
 
           {/* Submit Buttons */}
           <div className="flex justify-between pt-6">

@@ -45,7 +45,7 @@ const StudentLogin = () => {
   return (
     <LoginLayout
       role="Student"
-      title="Student Login"
+      title="Athlete Login"
       subtitle="Access your learning dashboard and track your progress"
       icon={<FaUserGraduate />}
       onSubmit={handleLogin}

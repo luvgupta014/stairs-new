@@ -11,7 +11,7 @@ const Landing = () => {
   const roles = [
     {
       id: 'student',
-      title: 'Student',
+      title: 'Athlete',
       description: 'Find and connect with top coaches to enhance your skills',
       icon: '🎯',
       color: 'bg-blue-500',
@@ -22,7 +22,7 @@ const Landing = () => {
     },
     {
       id: 'coach',
-      title: 'Coach',
+      title: 'Coordinator',
       description: 'Build your coaching business and mentor aspiring athletes',
       icon: '🏆',
       color: 'bg-green-500',
@@ -214,7 +214,7 @@ const Landing = () => {
                   transition={{ duration: 0.6, delay: 0.2 }}
                   className="text-xl md:text-2xl text-gray-600 mb-8 max-w-3xl mx-auto"
                 >
-                  Sports Training and Athletic Instruction Registration System
+                  The Society for Transformation, Inclusion and Recognition through Sports (STAIRS)
                 </motion.p>
                 <motion.p 
                   initial={{ opacity: 0, y: 20 }}
@@ -222,7 +222,7 @@ const Landing = () => {
                   transition={{ duration: 0.6, delay: 0.4 }}
                   className="text-lg text-gray-500 mb-12 max-w-2xl mx-auto"
                 >
-                  Connect students with expert coaches, manage institutes, and organize sporting events all in one platform
+                  Connect athletes with coordinators, manage institutes, and organize sporting events all in one platform
                 </motion.p>
               </>
             )}
@@ -392,7 +392,7 @@ const Landing = () => {
                 <span className="ml-2 text-xl font-bold">STAIRS</span>
               </div>
               <p className="text-gray-400 mb-4">
-                Empowering the sports community with innovative technology and connecting talents worldwide.
+                The Society for Transformation, Inclusion and Recognition through Sports
               </p>
               <div className="flex space-x-4">
                 <a href="#" className="text-gray-400 hover:text-white transition-colors">

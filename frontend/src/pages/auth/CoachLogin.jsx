@@ -40,8 +40,8 @@ const CoachLogin = () => {
   return (
     <LoginLayout
       role="Coach"
-      title="Coach Login"
-      subtitle="Manage your students and track their progress"
+      title="Coordinator Login"
+      subtitle="Manage your Athlete and track their progress"
       icon={<FaUserTie />}
       onSubmit={handleLogin}
       loading={loading}

@@ -157,14 +157,14 @@ export const createEvent = async (data) => {
   }
 };
 
-export const processEventPayment = async (eventId, paymentData) => {
-  try {
-    const response = await api.post(`/api/coach/events/${eventId}/payment`, paymentData);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data || error.message;
-  }
-};
+// export const processEventPayment = async (eventId, paymentData) => {
+//   try {
+//     const response = await api.post(`/api/coach/events/${eventId}/payment`, paymentData);
+//     return response.data;
+//   } catch (error) {
+//     throw error.response?.data || error.message;
+//   }
+// };
 
 // Institute Registration and Management APIs
 export const registerInstitute = async (data) => {

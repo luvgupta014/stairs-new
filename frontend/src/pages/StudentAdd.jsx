@@ -72,9 +72,9 @@ const StudentAdd = () => {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="text-green-600 text-2xl">✓</span>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Student Added Successfully!</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Athlete Added Successfully!</h2>
             <p className="text-gray-600 mb-4">
-              The student has been added and connected to your account.
+              The athlete has been added and connected to your account.
             </p>
             <p className="text-sm text-gray-500">Redirecting to dashboard...</p>
           </div>
@@ -87,9 +87,9 @@ const StudentAdd = () => {
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="bg-white rounded-lg shadow-md p-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Add Student Manually</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Add Athlete Manually</h1>
           <p className="text-gray-600">
-            Add a new student to your coaching program. They will be automatically connected to your account.
+            Add a new Athlete to your coaching program. They will be automatically connected to your account.
           </p>
         </div>
 

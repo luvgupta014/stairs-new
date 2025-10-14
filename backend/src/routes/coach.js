@@ -966,8 +966,8 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
       longitude,
       startDate,
       endDate,
-      maxParticipants,
-      eventFee
+      maxParticipants
+      // Removed eventFee parameter
     } = req.body;
 
     // Check if coach is active (payment completed)
@@ -1007,15 +1007,15 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
         maxParticipants: maxParticipants ? parseInt(maxParticipants) : 50,
-        eventFee: eventFee ? parseFloat(eventFee) : 0,
+        eventFee: 0, // Set to 0 since we're not collecting fees anymore
         status: 'PENDING'
       }
     });
 
     res.status(201).json(successResponse({
       event,
-      message: 'Event created successfully. It will be reviewed by admin before activation.',
-      requiresPayment: eventFee && eventFee > 0
+      message: 'Event created successfully. It will be reviewed by admin before activation.'
+      // Removed requiresPayment field
     }, 'Event created successfully.', 201));
 
   } catch (error) {
@@ -1024,57 +1024,8 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
   }
 });
 
-// Process event payment
-router.post('/events/:eventId/payment', authenticate, requireCoach, async (req, res) => {
-  try {
-    const { eventId } = req.params;
-    const { amount, razorpayOrderId, razorpayPaymentId } = req.body;
-
-    // Find the event
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
-      include: { coach: true }
-    });
-
-    if (!event) {
-      return res.status(404).json(errorResponse('Event not found.', 404));
-    }
-
-    if (event.coachId !== req.coach.id) {
-      return res.status(403).json(errorResponse('Unauthorized access.', 403));
-    }
-
-    // Create event payment record
-    const payment = await prisma.eventPayment.create({
-      data: {
-        eventId,
-        amount: parseFloat(amount),
-        razorpayOrderId,
-        razorpayPaymentId,
-        status: 'SUCCESS',
-        description: `Event fee payment for ${event.name}`
-      }
-    });
-
-    // Update event status to submit for admin approval
-    const updatedEvent = await prisma.event.update({
-      where: { id: eventId },
-      data: {
-        status: 'PENDING'
-      }
-    });
-
-    res.json(successResponse({
-      payment,
-      event: updatedEvent,
-      message: 'Payment successful! Event has been submitted for admin approval.'
-    }, 'Event payment processed successfully.'));
-
-  } catch (error) {
-    console.error('Event payment error:', error);
-    res.status(500).json(errorResponse('Event payment failed.', 500));
-  }
-});
+// Remove the event payment processing endpoint entirely
+// router.post('/events/:eventId/payment', ...) - DELETE THIS ENTIRE ROUTE
 
 // Get coach events
 router.get('/events', authenticate, requireCoach, async (req, res) => {
