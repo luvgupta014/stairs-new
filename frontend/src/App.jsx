@@ -9,6 +9,8 @@ import Header from "./components/Header";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
 import StudentProfile from "./pages/StudentProfile";
+import EventParticipants from "./pages/EventParticipants";
+import EventEdit from "./pages/EventEdit";
 
 // Landing Page
 import Landing from "./pages/Landing";
@@ -257,6 +259,22 @@ function App() {
                   </main>
                   <Footer />
                 </>
+              }
+            />
+            <Route
+              path="/coach/event/:eventId/participants"
+              element={
+                <ProtectedRoute allowedRoles={["COACH"]}>
+                  <EventParticipants />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/coach/event/edit/:eventId"
+              element={
+                <ProtectedRoute allowedRoles={["COACH"]}>
+                  <EventEdit />
+                </ProtectedRoute>
               }
             />
             {/* Catch-all route */}

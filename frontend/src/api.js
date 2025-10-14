@@ -446,6 +446,59 @@ export const approveInstitute = async (instituteId, action, remarks) => {
   }
 };
 
+// Coach Event Management APIs
+export const getCoachEvents = async (params = {}) => {
+  try {
+    const response = await api.get('/api/coach/events', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Get coach events error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const updateEvent = async (eventId, eventData) => {
+  try {
+    const response = await api.put(`/api/coach/events/${eventId}`, eventData);
+    return response.data;
+  } catch (error) {
+    console.error('Update event error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const deleteEvent = async (eventId) => {
+  try {
+    const response = await api.delete(`/api/coach/events/${eventId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Delete event error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+// Cancel event
+export const cancelEventAPI = async (eventId, reason) => {
+  try {
+    const response = await api.put(`/api/coach/events/${eventId}/cancel`, { reason });
+    return response.data;
+  } catch (error) {
+    console.error('Cancel event error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+// Get event registrations with enhanced data
+export const getEventRegistrations = async (eventId, params = {}) => {
+  try {
+    const response = await api.get(`/api/coach/events/${eventId}/registrations`, { params });
+    return response.data;
+  } catch (error) {
+    console.error('Get event registrations error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 // Utility functions
 export const setAuthToken = (token) => {
   localStorage.setItem('authToken', token);

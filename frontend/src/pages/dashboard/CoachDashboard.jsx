@@ -1,16 +1,30 @@
 import { useState, useEffect } from 'react';
-import { getCoachDashboard } from '../../api';
+import { getCoachDashboard, getCoachEvents, updateEvent, deleteEvent } from '../../api';
 import StudentCard from '../../components/StudentCard';
 import Spinner from '../../components/Spinner';
-import { Link, useLocation } from 'react-router-dom';
-import { FaExclamationTriangle, FaCreditCard, FaCheckCircle } from 'react-icons/fa';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { FaExclamationTriangle, FaCreditCard, FaCheckCircle, FaEdit, FaTrash, FaEye, FaUsers, FaCalendar, FaMapMarkerAlt } from 'react-icons/fa';
 
 const CoachDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [coachEvents, setCoachEvents] = useState([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventFilters, setEventFilters] = useState({
+    status: '',
+    sport: '',
+    search: ''
+  });
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [eventToDelete, setEventToDelete] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadDashboardData();
@@ -21,6 +35,12 @@ const CoachDashboard = () => {
       setTimeout(() => setPaymentSuccess(false), 5000);
     }
   }, [location]);
+
+  useEffect(() => {
+    if (activeTab === 'events') {
+      loadCoachEvents();
+    }
+  }, [activeTab, eventFilters]);
 
   const loadDashboardData = async () => {
     try {
@@ -90,6 +110,140 @@ const CoachDashboard = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCoachEvents = async () => {
+    try {
+      setEventsLoading(true);
+      const response = await getCoachEvents({
+        page: 1,
+        limit: 50,
+        ...eventFilters
+      });
+      
+      if (response.success) {
+        setCoachEvents(response.data.events || []);
+      } else {
+        throw new Error(response.message || 'Failed to load events');
+      }
+    } catch (error) {
+      console.error('Failed to load coach events:', error);
+      setCoachEvents([]);
+    } finally {
+      setEventsLoading(false);
+    }
+  };
+
+  const handleFilterChange = (key, value) => {
+    setEventFilters(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const getStatusColor = (status) => {
+    const colors = {
+      PENDING: 'bg-yellow-100 text-yellow-800',
+      APPROVED: 'bg-green-100 text-green-800',
+      REJECTED: 'bg-red-100 text-red-800',
+      ACTIVE: 'bg-blue-100 text-blue-800',
+      CANCELLED: 'bg-gray-100 text-gray-800',
+      COMPLETED: 'bg-purple-100 text-purple-800'
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getStatusIcon = (status) => {
+    const icons = {
+      PENDING: '⏳',
+      APPROVED: '✅',
+      REJECTED: '❌',
+      ACTIVE: '🔵',
+      CANCELLED: '⚫',
+      COMPLETED: '🎉'
+    };
+    return icons[status] || '❓';
+  };
+
+  const handleViewEvent = (event) => {
+    setSelectedEvent(event);
+    setShowEventModal(true);
+  };
+
+  const handleEditEvent = (event) => {
+    navigate(`/coach/event/edit/${event.id}`, { state: { event } });
+  };
+
+  const handleDeleteEvent = async (eventId) => {
+    try {
+      setActionLoading(true);
+      const response = await deleteEvent(eventId);
+      
+      if (response.success) {
+        setCoachEvents(prev => prev.filter(event => event.id !== eventId));
+        setShowDeleteModal(false);
+        setEventToDelete(null);
+        alert('Event deleted successfully!');
+      } else {
+        throw new Error(response.message || 'Failed to delete event');
+      }
+    } catch (error) {
+      console.error('Failed to delete event:', error);
+      alert(`Failed to delete event: ${error.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const confirmDeleteEvent = (event) => {
+    setEventToDelete(event);
+    setShowDeleteModal(true);
+  };
+
+  const exportEvents = () => {
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + "Event Name,Sport,Status,Start Date,Venue,City,Participants,Max Participants\n"
+      + coachEvents.map(event => 
+          `"${event.name}","${event.sport}","${event.status}","${new Date(event.startDate).toLocaleDateString()}","${event.venue}","${event.city}","${event.currentParticipants || 0}","${event.maxParticipants || 'Unlimited'}"`
+        ).join("\n");
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `my_events_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const viewRegistrations = (event) => {
+    navigate(`/coach/event/${event.id}/participants`, { 
+      state: { event } 
+    });
+  };
+
+  const cancelEvent = async (event) => {
+    const reason = prompt('Please provide a reason for cancelling this event:');
+    if (reason === null) return; // User cancelled
+    
+    try {
+      setActionLoading(true);
+      const response = await cancelEventAPI(event.id, reason);
+      
+      if (response.success) {
+        setCoachEvents(prev => prev.map(e => 
+          e.id === event.id ? { ...e, status: 'CANCELLED' } : e
+        ));
+        alert('Event cancelled successfully!');
+      } else {
+        throw new Error(response.message || 'Failed to cancel event');
+      }
+    } catch (error) {
+      console.error('Failed to cancel event:', error);
+      alert(`Failed to cancel event: ${error.message}`);
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -255,7 +409,7 @@ const CoachDashboard = () => {
               {[
                 { id: 'overview', name: 'Overview', icon: '📊' },
                 { id: 'students', name: 'Students', icon: '👥' },
-                { id: 'events', name: 'Events', icon: '📅' },
+                { id: 'events', name: 'My Events', icon: '📅' },
                 { id: 'analytics', name: 'Analytics', icon: '📈' }
               ].map((tab) => (
                 <button
@@ -313,10 +467,10 @@ const CoachDashboard = () => {
                     >
                       📥 Add Students (Bulk)
                     </Link>
-                    <button className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors">
+                    <button className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 rounded-lg text-sm font-medium text-center block transition-colors">
                       💬 Send Message to All
                     </button>
-                    <button className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors">
+                    <button className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-lg text-sm font-medium text-center block transition-colors">
                       📋 Schedule Training
                     </button>
                   </div>
@@ -399,48 +553,366 @@ const CoachDashboard = () => {
               </div>
             )}
 
+            {/* Enhanced Events Tab */}
             {activeTab === 'events' && (
               <div>
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900">My Events</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">My Events ({coachEvents.length})</h3>
                   <Link
                     to="/coach/event/create"
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium"
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium inline-flex items-center"
                   >
-                    Create Event
+                    <FaCalendar className="mr-2" />
+                    Create New Event
                   </Link>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {dashboardData?.recentEvents?.map(event => (
-                    <div key={event.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-                      <div className="flex justify-between items-start mb-4">
-                        <h4 className="font-semibold text-gray-900">{event.name}</h4>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          event.status === 'upcoming' ? 'bg-blue-100 text-blue-800' :
-                          event.status === 'ongoing' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-green-100 text-green-800'
-                        }`}>
-                          {event.status}
-                        </span>
+                {/* Event Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                        <span className="text-blue-600 font-semibold">📅</span>
                       </div>
-                      
-                      <div className="space-y-2 mb-4">
-                        <p className="text-sm text-gray-600">📅 {new Date(event.date).toLocaleDateString()}</p>
-                        <p className="text-sm text-gray-600">👥 {event.participants} participants</p>
-                      </div>
-
-                      <div className="flex space-x-2">
-                        <button className="flex-1 bg-green-600 text-white px-3 py-2 rounded text-sm hover:bg-green-700 transition-colors">
-                          Manage
-                        </button>
-                        <button className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
-                          View
-                        </button>
+                      <div>
+                        <p className="text-sm font-medium text-blue-600">Total Events</p>
+                        <p className="text-xl font-bold text-blue-900">{coachEvents.length}</p>
                       </div>
                     </div>
-                  ))}
+                  </div>
+                  
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center mr-3">
+                        <span className="text-yellow-600 font-semibold">⏳</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-yellow-600">Pending</p>
+                        <p className="text-xl font-bold text-yellow-900">
+                          {coachEvents.filter(e => e.status === 'PENDING').length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                        <span className="text-green-600 font-semibold">✅</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-green-600">Approved</p>
+                        <p className="text-xl font-bold text-green-900">
+                          {coachEvents.filter(e => ['APPROVED', 'ACTIVE'].includes(e.status)).length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                        <span className="text-purple-600 font-semibold">👥</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-purple-600">Total Participants</p>
+                        <p className="text-xl font-bold text-purple-900">
+                          {coachEvents.reduce((sum, e) => sum + (e.currentParticipants || 0), 0)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+
+                {/* Event Filters */}
+                <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select
+                      value={eventFilters.status}
+                      onChange={(e) => handleFilterChange('status', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="">All Statuses</option>
+                      <option value="PENDING">Pending Approval</option>
+                      <option value="APPROVED">Approved</option>
+                      <option value="REJECTED">Rejected</option>
+                      <option value="ACTIVE">Active</option>
+                      <option value="CANCELLED">Cancelled</option>
+                      <option value="COMPLETED">Completed</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Sport</label>
+                    <select
+                      value={eventFilters.sport}
+                      onChange={(e) => handleFilterChange('sport', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="">All Sports</option>
+                      <option value="Football">Football</option>
+                      <option value="Basketball">Basketball</option>
+                      <option value="Tennis">Tennis</option>
+                      <option value="Cricket">Cricket</option>
+                      <option value="Athletics">Athletics</option>
+                      <option value="Swimming">Swimming</option>
+                      <option value="Badminton">Badminton</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
+                    <select
+                      value={eventFilters.dateRange || ''}
+                      onChange={(e) => handleFilterChange('dateRange', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="">All Dates</option>
+                      <option value="upcoming">Upcoming</option>
+                      <option value="past">Past Events</option>
+                      <option value="this_month">This Month</option>
+                      <option value="next_month">Next Month</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                    <input
+                      type="text"
+                      placeholder="Search events..."
+                      value={eventFilters.search}
+                      onChange={(e) => handleFilterChange('search', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => loadCoachEvents()}
+                      disabled={eventsLoading}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium inline-flex items-center disabled:opacity-50"
+                    >
+                      {eventsLoading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Loading...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          Refresh
+                        </>
+                      )}
+                    </button>
+                    
+                    <button
+                      onClick={() => exportEvents()}
+                      className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium inline-flex items-center"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Export
+                    </button>
+                  </div>
+                  
+                  <div className="text-sm text-gray-500">
+                    Showing {coachEvents.length} events
+                  </div>
+                </div>
+
+                {/* Events List */}
+                {eventsLoading ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+                    <p className="mt-4 text-gray-600">Loading your events...</p>
+                  </div>
+                ) : coachEvents.length > 0 ? (
+                  <div className="space-y-4">
+                    {coachEvents.map(event => (
+                      <div key={event.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h4 className="text-xl font-semibold text-gray-900">{event.name}</h4>
+                              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(event.status)}`}>
+                                {getStatusIcon(event.status)} {event.status}
+                              </span>
+                              
+                              {/* Event Type Badge */}
+                              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-lg text-xs font-medium">
+                                {event.sport}
+                              </span>
+                            </div>
+                            
+                            <p className="text-gray-600 mb-3 line-clamp-2">{event.description}</p>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                              <div className="flex items-center text-gray-600">
+                                <FaCalendar className="mr-2 text-gray-400" />
+                                <div>
+                                  <div className="font-medium">
+                                    {new Date(event.startDate).toLocaleDateString('en-US', {
+                                      weekday: 'short',
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric'
+                                    })}
+                                  </div>
+                                  <div className="text-xs">
+                                    {new Date(event.startDate).toLocaleTimeString('en-US', {
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                    {event.endDate && (
+                                      ` - ${new Date(event.endDate).toLocaleTimeString('en-US', {
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}`
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center text-gray-600">
+                                <FaMapMarkerAlt className="mr-2 text-gray-400" />
+                                <div>
+                                  <div className="font-medium">{event.venue}</div>
+                                  <div className="text-xs">{event.city}, {event.state}</div>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center text-gray-600">
+                                <FaUsers className="mr-2 text-gray-400" />
+                                <div>
+                                  <div className="font-medium">
+                                    {event.currentParticipants || 0} / {event.maxParticipants || 'Unlimited'}
+                                  </div>
+                                  <div className="text-xs">Participants</div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Progress Bar for Participants */}
+                            {event.maxParticipants && (
+                              <div className="mt-3">
+                                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                  <span>Registration Progress</span>
+                                  <span>{Math.round(((event.currentParticipants || 0) / event.maxParticipants) * 100)}%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div 
+                                    className="bg-green-500 h-2 rounded-full transition-all" 
+                                    style={{ 
+                                      width: `${Math.min(((event.currentParticipants || 0) / event.maxParticipants) * 100, 100)}%` 
+                                    }}
+                                  ></div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Admin Notes */}
+                            {event.adminNotes && (
+                              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <div className="flex items-start">
+                                  <svg className="w-4 h-4 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                  </svg>
+                                  <div>
+                                    <p className="text-sm font-medium text-yellow-800">Admin Note:</p>
+                                    <p className="text-sm text-yellow-700">{event.adminNotes}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleViewEvent(event)}
+                              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors inline-flex items-center"
+                            >
+                              <FaEye className="mr-2" />
+                              View Details
+                            </button>
+                            
+                            {['PENDING', 'APPROVED', 'ACTIVE'].includes(event.status) && (
+                              <button
+                                onClick={() => handleEditEvent(event)}
+                                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition-colors inline-flex items-center"
+                              >
+                                <FaEdit className="mr-2" />
+                                Edit
+                              </button>
+                            )}
+                            
+                            {['APPROVED', 'ACTIVE'].includes(event.status) && (
+                              <button
+                                onClick={() => viewRegistrations(event)}
+                                className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 transition-colors inline-flex items-center"
+                              >
+                                <FaUsers className="mr-2" />
+                                Participants ({event.currentParticipants || 0})
+                              </button>
+                            )}
+                          </div>
+                          
+                          <div className="flex space-x-2">
+                            {event.status === 'PENDING' && (
+                              <button
+                                onClick={() => confirmDeleteEvent(event)}
+                                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 transition-colors inline-flex items-center"
+                              >
+                                <FaTrash className="mr-2" />
+                                Delete
+                              </button>
+                            )}
+                            
+                            {['APPROVED', 'ACTIVE'].includes(event.status) && new Date(event.startDate) > new Date() && (
+                              <button
+                                onClick={() => cancelEvent(event)}
+                                className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-700 transition-colors"
+                              >
+                                Cancel Event
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <FaCalendar className="text-gray-400 text-3xl" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Events Found</h3>
+                    <p className="text-gray-600 mb-6">
+                      {Object.values(eventFilters).some(filter => filter) 
+                        ? 'No events match your current filters.' 
+                        : 'Create your first event to start managing student activities.'}
+                    </p>
+                    {!Object.values(eventFilters).some(filter => filter) && (
+                      <Link
+                        to="/coach/event/create"
+                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium inline-flex items-center"
+                      >
+                        <FaCalendar className="mr-2" />
+                        Create Your First Event
+                      </Link>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -464,6 +936,170 @@ const CoachDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Event Details Modal */}
+      {showEventModal && selectedEvent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-screen overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-gray-900">Event Details</h3>
+                <button
+                  onClick={() => setShowEventModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              <div className="mb-4">
+                <h4 className="text-xl font-bold text-gray-900 mb-2">{selectedEvent.name}</h4>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(selectedEvent.status)}`}>
+                  {getStatusIcon(selectedEvent.status)} {selectedEvent.status}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Sport</label>
+                    <p className="mt-1 text-sm text-gray-900">{selectedEvent.sport}</p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Start Date</label>
+                    <p className="mt-1 text-sm text-gray-900">
+                      {new Date(selectedEvent.startDate).toLocaleString()}
+                    </p>
+                  </div>
+                  
+                  {selectedEvent.endDate && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">End Date</label>
+                      <p className="mt-1 text-sm text-gray-900">
+                        {new Date(selectedEvent.endDate).toLocaleString()}
+                      </p>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Participants</label>
+                    <p className="mt-1 text-sm text-gray-900">
+                      {selectedEvent.currentParticipants || 0} / {selectedEvent.maxParticipants || 'Unlimited'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Venue</label>
+                    <p className="mt-1 text-sm text-gray-900">{selectedEvent.venue}</p>
+                  </div>
+                  
+                  {selectedEvent.address && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Address</label>
+                      <p className="mt-1 text-sm text-gray-900">{selectedEvent.address}</p>
+                    </div>
+                  )}
+                  
+                  {selectedEvent.city && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">City</label>
+                      <p className="mt-1 text-sm text-gray-900">{selectedEvent.city}, {selectedEvent.state}</p>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Created</label>
+                    <p className="mt-1 text-sm text-gray-900">
+                      {new Date(selectedEvent.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {selectedEvent.description && (
+                <div className="mt-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                  <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded">{selectedEvent.description}</p>
+                </div>
+              )}
+
+              {selectedEvent.adminNotes && (
+                <div className="mt-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Admin Notes</label>
+                  <p className="text-sm text-gray-900 bg-yellow-50 p-3 rounded border border-yellow-200">{selectedEvent.adminNotes}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t border-gray-200">
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowEventModal(false)}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                >
+                  Close
+                </button>
+                {['PENDING', 'APPROVED', 'ACTIVE'].includes(selectedEvent.status) && (
+                  <button
+                    onClick={() => {
+                      setShowEventModal(false);
+                      handleEditEvent(selectedEvent);
+                    }}
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                  >
+                    Edit Event
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && eventToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center mb-4">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                  <FaTrash className="text-red-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">Delete Event</h3>
+              </div>
+              
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to delete "<strong>{eventToDelete.name}</strong>"? This action cannot be undone.
+              </p>
+              
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setEventToDelete(null);
+                  }}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                  disabled={actionLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteEvent(eventToDelete.id)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Deleting...' : 'Delete Event'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

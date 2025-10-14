@@ -1027,16 +1027,36 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
 // Remove the event payment processing endpoint entirely
 // router.post('/events/:eventId/payment', ...) - DELETE THIS ENTIRE ROUTE
 
-// Get coach events
+// Get coach events - FIXED
 router.get('/events', authenticate, requireCoach, async (req, res) => {
   try {
-    const { status, page = 1, limit = 10 } = req.query;
+    const { status, sport, search, page = 1, limit = 10 } = req.query;
     const { skip, take } = getPaginationParams(page, limit);
 
+    // Get coach ID
+    const coach = await prisma.coach.findUnique({
+      where: { userId: req.user.id }
+    });
+
+    if (!coach) {
+      return res.status(404).json(errorResponse('Coach profile not found.', 404));
+    }
+
     const where = {
-      organizerId: req.coach.id,
-      ...(status && { status: status.toUpperCase() })
+      coachId: coach.id,
+      ...(status && { status: status.toUpperCase() }),
+      ...(sport && { sport: { contains: sport, mode: 'insensitive' } })
     };
+
+    // Add search functionality
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { venue: { contains: search, mode: 'insensitive' } },
+        { city: { contains: search, mode: 'insensitive' } }
+      ];
+    }
 
     const [events, total] = await Promise.all([
       prisma.event.findMany({
@@ -1046,8 +1066,8 @@ router.get('/events', authenticate, requireCoach, async (req, res) => {
             include: {
               student: {
                 select: {
-                  firstName: true,
-                  lastName: true
+                  id: true,
+                  name: true
                 }
               }
             }
@@ -1060,17 +1080,45 @@ router.get('/events', authenticate, requireCoach, async (req, res) => {
         },
         skip,
         take,
-        orderBy: {
-          createdAt: 'desc'
-        }
+        orderBy: { createdAt: 'desc' }
       }),
       prisma.event.count({ where })
     ]);
 
     const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
 
+    // Format events with registration count
+    const formattedEvents = events.map(event => ({
+      id: event.id,
+      name: event.name,
+      description: event.description,
+      sport: event.sport,
+      venue: event.venue,
+      address: event.address,
+      city: event.city,
+      state: event.state,
+      latitude: event.latitude,
+      longitude: event.longitude,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      maxParticipants: event.maxParticipants,
+      currentParticipants: event._count.registrations,
+      eventFee: event.eventFee,
+      status: event.status,
+      adminNotes: event.adminNotes,
+      createdAt: event.createdAt,
+      updatedAt: event.updatedAt,
+      registrations: event.registrations.map(reg => ({
+        id: reg.id,
+        studentId: reg.studentId,
+        studentName: reg.student.name,
+        registrationDate: reg.createdAt,
+        status: reg.status
+      }))
+    }));
+
     res.json(successResponse({
-      events,
+      events: formattedEvents,
       pagination
     }, 'Events retrieved successfully.'));
 
@@ -1080,23 +1128,33 @@ router.get('/events', authenticate, requireCoach, async (req, res) => {
   }
 });
 
-// Update event
-router.put('/events/:eventId', authenticate, requireCoach, requireApproved, async (req, res) => {
+// Update event - ENHANCED
+router.put('/events/:eventId', authenticate, requireCoach, async (req, res) => {
   try {
     const { eventId } = req.params;
     const {
-      title,
+      name,
       description,
       sport,
+      venue,
+      address,
+      city,
+      state,
+      latitude,
+      longitude,
       startDate,
       endDate,
-      location,
-      fees,
-      maxParticipants,
-      registrationDeadline,
-      requirements,
-      status
+      maxParticipants
     } = req.body;
+
+    // Get coach
+    const coach = await prisma.coach.findUnique({
+      where: { userId: req.user.id }
+    });
+
+    if (!coach) {
+      return res.status(404).json(errorResponse('Coach profile not found.', 404));
+    }
 
     // Check if event exists and belongs to coach
     const existingEvent = await prisma.event.findUnique({
@@ -1107,8 +1165,13 @@ router.put('/events/:eventId', authenticate, requireCoach, requireApproved, asyn
       return res.status(404).json(errorResponse('Event not found.', 404));
     }
 
-    if (existingEvent.organizerId !== req.coach.id) {
+    if (existingEvent.coachId !== coach.id) {
       return res.status(403).json(errorResponse('Access denied.', 403));
+    }
+
+    // Check if event can be modified (only PENDING, APPROVED, ACTIVE events can be modified)
+    if (!['PENDING', 'APPROVED', 'ACTIVE'].includes(existingEvent.status)) {
+      return res.status(400).json(errorResponse('This event cannot be modified.', 400));
     }
 
     // Validate dates if provided
@@ -1123,33 +1186,34 @@ router.put('/events/:eventId', authenticate, requireCoach, requireApproved, asyn
     const updatedEvent = await prisma.event.update({
       where: { id: eventId },
       data: {
-        title,
-        description,
-        sport,
+        name: name || undefined,
+        description: description || undefined,
+        sport: sport || undefined,
+        venue: venue || undefined,
+        address: address || undefined,
+        city: city || undefined,
+        state: state || undefined,
+        latitude: latitude ? parseFloat(latitude) : undefined,
+        longitude: longitude ? parseFloat(longitude) : undefined,
         startDate: startDate ? new Date(startDate) : undefined,
         endDate: endDate ? new Date(endDate) : undefined,
-        location,
-        fees: fees !== undefined ? parseFloat(fees) : undefined,
         maxParticipants: maxParticipants ? parseInt(maxParticipants) : undefined,
-        registrationDeadline: registrationDeadline ? new Date(registrationDeadline) : undefined,
-        requirements: requirements || undefined,
-        status: status || undefined
+        // Reset to PENDING if it was APPROVED/ACTIVE and significant changes were made
+        status: existingEvent.status === 'APPROVED' || existingEvent.status === 'ACTIVE' ? 'PENDING' : undefined
       },
       include: {
-        registrations: {
-          include: {
-            student: {
-              select: {
-                firstName: true,
-                lastName: true
-              }
-            }
+        _count: {
+          select: {
+            registrations: true
           }
         }
       }
     });
 
-    res.json(successResponse(updatedEvent, 'Event updated successfully.'));
+    res.json(successResponse({
+      ...updatedEvent,
+      currentParticipants: updatedEvent._count.registrations
+    }, 'Event updated successfully.'));
 
   } catch (error) {
     console.error('Update event error:', error);
@@ -1157,10 +1221,19 @@ router.put('/events/:eventId', authenticate, requireCoach, requireApproved, asyn
   }
 });
 
-// Delete event
+// Delete event - ENHANCED
 router.delete('/events/:eventId', authenticate, requireCoach, async (req, res) => {
   try {
     const { eventId } = req.params;
+
+    // Get coach
+    const coach = await prisma.coach.findUnique({
+      where: { userId: req.user.id }
+    });
+
+    if (!coach) {
+      return res.status(404).json(errorResponse('Coach profile not found.', 404));
+    }
 
     // Check if event exists and belongs to coach
     const existingEvent = await prisma.event.findUnique({
@@ -1178,12 +1251,13 @@ router.delete('/events/:eventId', authenticate, requireCoach, async (req, res) =
       return res.status(404).json(errorResponse('Event not found.', 404));
     }
 
-    if (existingEvent.organizerId !== req.coach.id) {
+    if (existingEvent.coachId !== coach.id) {
       return res.status(403).json(errorResponse('Access denied.', 403));
     }
 
-    if (existingEvent._count.registrations > 0) {
-      return res.status(400).json(errorResponse('Cannot delete event with registrations.', 400));
+    // Only allow deletion of PENDING events or events with no registrations
+    if (existingEvent.status !== 'PENDING' && existingEvent._count.registrations > 0) {
+      return res.status(400).json(errorResponse('Cannot delete event with registrations. You can cancel it instead.', 400));
     }
 
     await prisma.event.delete({
@@ -1195,6 +1269,57 @@ router.delete('/events/:eventId', authenticate, requireCoach, async (req, res) =
   } catch (error) {
     console.error('Delete event error:', error);
     res.status(500).json(errorResponse('Failed to delete event.', 500));
+  }
+});
+
+// Cancel event (alternative to delete)
+router.put('/events/:eventId/cancel', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { reason } = req.body;
+
+    // Get coach
+    const coach = await prisma.coach.findUnique({
+      where: { userId: req.user.id }
+    });
+
+    if (!coach) {
+      return res.status(404).json(errorResponse('Coach profile not found.', 404));
+    }
+
+    // Check if event exists and belongs to coach
+    const existingEvent = await prisma.event.findUnique({
+      where: { id: eventId }
+    });
+
+    if (!existingEvent) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    if (existingEvent.coachId !== coach.id) {
+      return res.status(403).json(errorResponse('Access denied.', 403));
+    }
+
+    // Only allow cancellation of future events
+    if (new Date(existingEvent.startDate) <= new Date()) {
+      return res.status(400).json(errorResponse('Cannot cancel past events.', 400));
+    }
+
+    const updatedEvent = await prisma.event.update({
+      where: { id: eventId },
+      data: {
+        status: 'CANCELLED',
+        adminNotes: reason || 'Cancelled by coach'
+      }
+    });
+
+    // TODO: Notify registered students about cancellation
+
+    res.json(successResponse(updatedEvent, 'Event cancelled successfully.'));
+
+  } catch (error) {
+    console.error('Cancel event error:', error);
+    res.status(500).json(errorResponse('Failed to cancel event.', 500));
   }
 });
 

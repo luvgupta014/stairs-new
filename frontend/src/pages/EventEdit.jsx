@@ -1,0 +1,445 @@
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { updateEvent } from '../api';
+import Spinner from '../components/Spinner';
+import { FaLocationArrow, FaSave, FaTimes } from 'react-icons/fa';
+
+const EventEdit = () => {
+  const { eventId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    sport: '',
+    venue: '',
+    address: '',
+    city: '',
+    state: '',
+    latitude: '',
+    longitude: '',
+    startDate: '',
+    endDate: '',
+    maxParticipants: ''
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [gettingLocation, setGettingLocation] = useState(false);
+
+  useEffect(() => {
+    // Pre-fill form with event data from location state
+    if (location.state?.event) {
+      const event = location.state.event;
+      setFormData({
+        name: event.name || '',
+        description: event.description || '',
+        sport: event.sport || '',
+        venue: event.venue || '',
+        address: event.address || '',
+        city: event.city || '',
+        state: event.state || '',
+        latitude: event.latitude?.toString() || '',
+        longitude: event.longitude?.toString() || '',
+        startDate: event.startDate ? new Date(event.startDate).toISOString().slice(0, 16) : '',
+        endDate: event.endDate ? new Date(event.endDate).toISOString().slice(0, 16) : '',
+        maxParticipants: event.maxParticipants?.toString() || ''
+      });
+    }
+  }, [location.state]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const eventData = {
+        ...formData,
+        maxParticipants: formData.maxParticipants ? parseInt(formData.maxParticipants) : null
+      };
+
+      const result = await updateEvent(eventId, eventData);
+      
+      if (result.success) {
+        navigate('/dashboard/coach', { 
+          state: { 
+            message: 'Event updated successfully!',
+            activeTab: 'events'
+          }
+        });
+      } else {
+        setError(result.message || 'Failed to update event');
+      }
+    } catch (error) {
+      setError(error.message || 'Failed to update event');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const getCurrentLocation = async () => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by this browser.');
+      return;
+    }
+
+    setGettingLocation(true);
+    setError('');
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        
+        try {
+          const nominatimResponse = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`
+          );
+          
+          if (nominatimResponse.ok) {
+            const data = await nominatimResponse.json();
+            
+            setFormData(prev => ({
+              ...prev,
+              latitude: latitude.toString(),
+              longitude: longitude.toString(),
+              address: data.display_name || '',
+              city: data.address?.city || data.address?.town || data.address?.village || '',
+              state: data.address?.state || ''
+            }));
+          } else {
+            setFormData(prev => ({
+              ...prev,
+              latitude: latitude.toString(),
+              longitude: longitude.toString()
+            }));
+          }
+        } catch (error) {
+          console.error('Reverse geocoding failed:', error);
+          setFormData(prev => ({
+            ...prev,
+            latitude: latitude.toString(),
+            longitude: longitude.toString()
+          }));
+        } finally {
+          setGettingLocation(false);
+        }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        setGettingLocation(false);
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setError('Location access denied by user. Please enable location permissions and try again.');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setError('Location information is unavailable.');
+            break;
+          case error.TIMEOUT:
+            setError('Location request timed out.');
+            break;
+          default:
+            setError('An unknown error occurred while retrieving location.');
+            break;
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000
+      }
+    );
+  };
+
+  const clearLocation = () => {
+    setFormData(prev => ({
+      ...prev,
+      latitude: '',
+      longitude: '',
+      address: '',
+      city: '',
+      state: ''
+    }));
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="bg-white rounded-lg shadow-md p-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Edit Event</h1>
+          <p className="text-gray-600">
+            Update your event details below.
+          </p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Basic Information */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+                Event Name *
+              </label>
+              <input
+                type="text"
+                id="name"
+                name="name"
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                placeholder="Enter event name"
+                value={formData.name}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="sport" className="block text-sm font-medium text-gray-700 mb-2">
+                Sport *
+              </label>
+              <select
+                id="sport"
+                name="sport"
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                value={formData.sport}
+                onChange={handleChange}
+              >
+                <option value="">Select a sport</option>
+                <option value="Football">Football</option>
+                <option value="Basketball">Basketball</option>
+                <option value="Tennis">Tennis</option>
+                <option value="Cricket">Cricket</option>
+                <option value="Athletics">Athletics</option>
+                <option value="Swimming">Swimming</option>
+                <option value="Badminton">Badminton</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+              Event Description *
+            </label>
+            <textarea
+              id="description"
+              name="description"
+              required
+              rows={4}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              placeholder="Describe your event..."
+              value={formData.description}
+              onChange={handleChange}
+            />
+          </div>
+
+          {/* Venue Information */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="venue" className="block text-sm font-medium text-gray-700 mb-2">
+                Venue Name *
+              </label>
+              <input
+                type="text"
+                id="venue"
+                name="venue"
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                placeholder="Enter venue name"
+                value={formData.venue}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="maxParticipants" className="block text-sm font-medium text-gray-700 mb-2">
+                Max Participants
+              </label>
+              <input
+                type="number"
+                id="maxParticipants"
+                name="maxParticipants"
+                min="1"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                placeholder="Enter maximum participants"
+                value={formData.maxParticipants}
+                onChange={handleChange}
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="address" className="block text-sm font-medium text-gray-700">
+                Address
+              </label>
+              <button
+                type="button"
+                onClick={getCurrentLocation}
+                disabled={gettingLocation}
+                className="inline-flex items-center px-3 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded-full hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {gettingLocation ? (
+                  <>
+                    <Spinner size="xs" color="blue" />
+                    <span className="ml-1">Getting location...</span>
+                  </>
+                ) : (
+                  <>
+                    <FaLocationArrow className="mr-1" />
+                    Use Current Location
+                  </>
+                )}
+              </button>
+            </div>
+            <input
+              type="text"
+              id="address"
+              name="address"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              placeholder="Enter venue address or use current location"
+              value={formData.address}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-2">
+                City
+              </label>
+              <input
+                type="text"
+                id="city"
+                name="city"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                placeholder="Enter city"
+                value={formData.city}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-2">
+                State
+              </label>
+              <input
+                type="text"
+                id="state"
+                name="state"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                placeholder="Enter state"
+                value={formData.state}
+                onChange={handleChange}
+              />
+            </div>
+          </div>
+
+          {/* Coordinates Display */}
+          {(formData.latitude && formData.longitude) && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center">
+                  <FaLocationArrow className="text-green-600 mr-2" />
+                  <span className="text-sm font-medium text-green-800">Location Coordinates</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearLocation}
+                  className="text-xs text-red-600 hover:text-red-800 underline"
+                >
+                  Clear Location
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-green-700 font-medium">Latitude:</span>
+                  <span className="ml-2 text-green-600">{parseFloat(formData.latitude).toFixed(6)}</span>
+                </div>
+                <div>
+                  <span className="text-green-700 font-medium">Longitude:</span>
+                  <span className="ml-2 text-green-600">{parseFloat(formData.longitude).toFixed(6)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Date and Time */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-2">
+                Start Date & Time *
+              </label>
+              <input
+                type="datetime-local"
+                id="startDate"
+                name="startDate"
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                value={formData.startDate}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-2">
+                End Date & Time
+              </label>
+              <input
+                type="datetime-local"
+                id="endDate"
+                name="endDate"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                value={formData.endDate}
+                onChange={handleChange}
+              />
+            </div>
+          </div>
+
+          {/* Submit Buttons */}
+          <div className="flex justify-between pt-6">
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard/coach', { state: { activeTab: 'events' } })}
+              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-500 inline-flex items-center"
+            >
+              <FaTimes className="mr-2" />
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 flex items-center"
+            >
+              {loading ? (
+                <>
+                  <Spinner size="sm" color="white" />
+                  <span className="ml-2">Updating...</span>
+                </>
+              ) : (
+                <>
+                  <FaSave className="mr-2" />
+                  Update Event
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default EventEdit;
