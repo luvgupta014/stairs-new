@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getAdminDashboard, moderateEvent } from '../api';
+import { getAdminDashboard, moderateEvent, getAdminEvents } from '../api';
 
 const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
@@ -18,12 +18,26 @@ const AdminDashboard = () => {
   
   const [recentUsers, setRecentUsers] = useState([]);
   const [pendingEvents, setPendingEvents] = useState([]);
+  const [allEvents, setAllEvents] = useState([]);
   const [error, setError] = useState('');
   const [moderatingEventId, setModeratingEventId] = useState(null);
+  const [activeTab, setActiveTab] = useState('pending'); // 'pending' or 'all'
+  const [eventFilters, setEventFilters] = useState({
+    status: '',
+    sport: '',
+    search: ''
+  });
+  const [eventLoading, setEventLoading] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'all') {
+      fetchAllEvents();
+    }
+  }, [activeTab, eventFilters]);
 
   const fetchDashboardData = async () => {
     try {
@@ -83,6 +97,31 @@ const AdminDashboard = () => {
     }
   };
 
+  const fetchAllEvents = async () => {
+    try {
+      setEventLoading(true);
+      console.log('🔄 Fetching all events...');
+      
+      const response = await getAdminEvents({
+        page: 1,
+        limit: 50,
+        ...eventFilters
+      });
+      
+      if (response.success) {
+        setAllEvents(response.data.events || []);
+        console.log('✅ All events loaded successfully:', response.data.events?.length || 0);
+      } else {
+        throw new Error(response.message || 'Failed to fetch events');
+      }
+    } catch (err) {
+      console.error('❌ Failed to fetch all events:', err);
+      setAllEvents([]);
+    } finally {
+      setEventLoading(false);
+    }
+  };
+
   const handleModerateEvent = async (eventId, action, remarks = '') => {
     try {
       setModeratingEventId(eventId);
@@ -95,6 +134,15 @@ const AdminDashboard = () => {
         
         // Remove the event from pending list
         setPendingEvents(prev => prev.filter(event => event.id !== eventId));
+        
+        // Update the event in all events list if it's loaded
+        if (activeTab === 'all') {
+          setAllEvents(prev => prev.map(event => 
+            event.id === eventId 
+              ? { ...event, status: action === 'APPROVE' ? 'APPROVED' : 'REJECTED' }
+              : event
+          ));
+        }
         
         // Update stats
         setStats(prev => ({
@@ -113,6 +161,25 @@ const AdminDashboard = () => {
     } finally {
       setModeratingEventId(null);
     }
+  };
+
+  const handleFilterChange = (key, value) => {
+    setEventFilters(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const getStatusColor = (status) => {
+    const colors = {
+      PENDING: 'bg-yellow-100 text-yellow-800',
+      APPROVED: 'bg-green-100 text-green-800',
+      REJECTED: 'bg-red-100 text-red-800',
+      ACTIVE: 'bg-blue-100 text-blue-800',
+      CANCELLED: 'bg-gray-100 text-gray-800',
+      COMPLETED: 'bg-purple-100 text-purple-800'
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
   if (loading) {
@@ -212,90 +279,320 @@ const AdminDashboard = () => {
           />
         </div>
 
-        {/* ADDED: Pending Events for Approval */}
-        {pendingEvents.length > 0 && (
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-gray-900">
-                Events Pending Approval ({pendingEvents.length})
-              </h3>
-              <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
-                Requires Action
-              </span>
-            </div>
+        {/* Events Management Section */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-semibold text-gray-900">Event Management</h3>
             
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-medium text-gray-900">Event</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-900">Sport</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-900">Coach</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-900">Date</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-900">Location</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-900">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pendingEvents.map((event) => (
-                    <tr key={event.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4">
-                        <div>
-                          <div className="font-medium text-gray-900">{event.name}</div>
-                          <div className="text-sm text-gray-500">
-                            Max: {event.maxParticipants} participants
-                          </div>
-                          {/* Removed fee display */}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                          {event.sport}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div>
-                          <div className="font-medium text-gray-900">{event.coach?.name}</div>
-                          <div className="text-sm text-gray-500">{event.coach?.email}</div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-gray-600">
-                        {new Date(event.startDate).toLocaleDateString()}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="text-gray-900">{event.venue}</div>
-                        <div className="text-sm text-gray-500">{event.city}</div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => handleModerateEvent(event.id, 'APPROVE')}
-                            disabled={moderatingEventId === event.id}
-                            className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors disabled:opacity-50"
-                          >
-                            {moderatingEventId === event.id ? 'Processing...' : 'Approve'}
-                          </button>
-                          <button
-                            onClick={() => {
-                              const remarks = prompt('Enter rejection reason (optional):');
-                              if (remarks !== null) {
-                                handleModerateEvent(event.id, 'REJECT', remarks);
-                              }
-                            }}
-                            disabled={moderatingEventId === event.id}
-                            className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors disabled:opacity-50"
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Tab Navigation */}
+            <div className="flex space-x-1 bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setActiveTab('pending')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === 'pending'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Pending ({pendingEvents.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('all')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === 'all'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                All Events ({stats.totalEvents})
+              </button>
             </div>
           </div>
-        )}
+
+          {/* Filters for All Events */}
+          {activeTab === 'all' && (
+            <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={eventFilters.status}
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="CANCELLED">Cancelled</option>
+                  <option value="COMPLETED">Completed</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Sport</label>
+                <select
+                  value={eventFilters.sport}
+                  onChange={(e) => handleFilterChange('sport', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">All Sports</option>
+                  <option value="Football">Football</option>
+                  <option value="Basketball">Basketball</option>
+                  <option value="Tennis">Tennis</option>
+                  <option value="Cricket">Cricket</option>
+                  <option value="Athletics">Athletics</option>
+                  <option value="Swimming">Swimming</option>
+                  <option value="Badminton">Badminton</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                <input
+                  type="text"
+                  placeholder="Search events..."
+                  value={eventFilters.search}
+                  onChange={(e) => handleFilterChange('search', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Events Table */}
+          {activeTab === 'pending' && pendingEvents.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-lg font-medium text-gray-900">
+                  Events Pending Approval ({pendingEvents.length})
+                </h4>
+                <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
+                  Requires Action
+                </span>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-3 px-4 font-medium text-gray-900">Event</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-900">Sport</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-900">Coach</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-900">Date</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-900">Location</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-900">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingEvents.map((event) => (
+                      <tr key={event.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-3 px-4">
+                          <div>
+                            <div className="font-medium text-gray-900">{event.name}</div>
+                            <div className="text-sm text-gray-500">
+                              Max: {event.maxParticipants} participants
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                            {event.sport}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div>
+                            <div className="font-medium text-gray-900">{event.coach?.name}</div>
+                            <div className="text-sm text-gray-500">{event.coach?.email}</div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-gray-600">
+                          {new Date(event.startDate).toLocaleDateString()}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-gray-900">{event.venue}</div>
+                          <div className="text-sm text-gray-500">{event.city}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleModerateEvent(event.id, 'APPROVE')}
+                              disabled={moderatingEventId === event.id}
+                              className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors disabled:opacity-50"
+                            >
+                              {moderatingEventId === event.id ? 'Processing...' : 'Approve'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                const remarks = prompt('Enter rejection reason (optional):');
+                                if (remarks !== null) {
+                                  handleModerateEvent(event.id, 'REJECT', remarks);
+                                }
+                              }}
+                              disabled={moderatingEventId === event.id}
+                              className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors disabled:opacity-50"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* All Events Tab */}
+          {activeTab === 'all' && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-lg font-medium text-gray-900">
+                  All Events ({allEvents.length})
+                </h4>
+                <button
+                  onClick={fetchAllEvents}
+                  disabled={eventLoading}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {eventLoading ? 'Loading...' : 'Refresh'}
+                </button>
+              </div>
+
+              {eventLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="mt-2 text-gray-600">Loading events...</p>
+                </div>
+              ) : allEvents.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-3 px-4 font-medium text-gray-900">Event</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-900">Sport</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-900">Coach</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-900">Date</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-900">Location</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-900">Status</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-900">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allEvents.map((event) => (
+                        <tr key={event.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-3 px-4">
+                            <div>
+                              <div className="font-medium text-gray-900">{event.name || event.title}</div>
+                              <div className="text-sm text-gray-500">
+                                Max: {event.maxParticipants} participants
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                Created: {new Date(event.createdAt).toLocaleDateString()}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                              {event.sport}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div>
+                              <div className="font-medium text-gray-900">{event.organizer?.name || event.coach?.name}</div>
+                              <div className="text-sm text-gray-500">{event.organizer?.email || event.coach?.email}</div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-gray-600">
+                            {new Date(event.startDate).toLocaleDateString()}
+                            {event.endDate && (
+                              <div className="text-sm text-gray-500">
+                                to {new Date(event.endDate).toLocaleDateString()}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="text-gray-900">{event.location || event.venue}</div>
+                            <div className="text-sm text-gray-500">{event.city}</div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(event.status)}`}>
+                              {event.status}
+                            </span>
+                            {event.adminNotes && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                Notes: {event.adminNotes}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex space-x-2">
+                              {event.status === 'PENDING' && (
+                                <>
+                                  <button
+                                    onClick={() => handleModerateEvent(event.id, 'APPROVE')}
+                                    disabled={moderatingEventId === event.id}
+                                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors disabled:opacity-50"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const remarks = prompt('Enter rejection reason (optional):');
+                                      if (remarks !== null) {
+                                        handleModerateEvent(event.id, 'REJECT', remarks);
+                                      }
+                                    }}
+                                    disabled={moderatingEventId === event.id}
+                                    className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors disabled:opacity-50"
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              )}
+                              {event.status === 'APPROVED' && (
+                                <button
+                                  onClick={() => handleModerateEvent(event.id, 'SUSPEND', 'Event suspended by admin')}
+                                  disabled={moderatingEventId === event.id}
+                                  className="bg-orange-600 text-white px-3 py-1 rounded text-sm hover:bg-orange-700 transition-colors disabled:opacity-50"
+                                >
+                                  Suspend
+                                </button>
+                              )}
+                              <button
+                                onClick={() => {
+                                  alert(`Event Details:\n\nName: ${event.name || event.title}\nDescription: ${event.description}\nSport: ${event.sport}\nVenue: ${event.location || event.venue}\nDate: ${new Date(event.startDate).toLocaleString()}\nMax Participants: ${event.maxParticipants}\nStatus: ${event.status}`);
+                                }}
+                                className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors"
+                              >
+                                View
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  No events found
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Empty States */}
+          {activeTab === 'pending' && pendingEvents.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              <div className="text-4xl mb-4">🎉</div>
+              <h4 className="text-lg font-medium text-gray-900 mb-2">No Pending Events</h4>
+              <p>All events have been reviewed. Great job!</p>
+            </div>
+          )}
+        </div>
 
         {/* Recent Users */}
         <div className="bg-white rounded-xl shadow-lg p-6">
