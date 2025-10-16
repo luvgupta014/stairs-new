@@ -83,7 +83,7 @@ export const login = async (data, role) => {
 // Add forgot password API
 export const forgotPassword = async (email) => {
   try {
-    const response = await api.post('/auth/forgot-password', { email });
+    const response = await api.post('/api/auth/forgot-password', { email });
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;
