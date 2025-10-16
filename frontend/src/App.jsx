@@ -49,6 +49,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import EventCreate from "./pages/EventCreate";
 import BulkUpload from "./pages/BulkUpload";
 import CoachPayment from "./pages/CoachPayment";
+import CoachRegisterPremiumNew from "./pages/CoachRegisterPremium";
 
 function App() {
   return (
@@ -85,7 +86,7 @@ function App() {
             {/* Premium Registration Routes (no header/footer) */}
             <Route
               path="/register/coach-premium"
-              element={<CoachRegisterPremium />}
+              element={<CoachRegisterPremiumNew />}
             />
             <Route
               path="/register/institute-premium"
