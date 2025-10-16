@@ -1,6 +1,7 @@
 # STAIRS Talent Hub
 
 A comprehensive sports talent management platform connecting students, coaches, institutes, and clubs.
+Hosted link - http://160.187.22.41:3008/
 
 ## Project Structure
 
