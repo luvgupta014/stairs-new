@@ -29,6 +29,18 @@ const AdminDashboard = () => {
   });
   const [eventLoading, setEventLoading] = useState(false);
 
+  // New state variables for filters
+  const [recentUsersFilters, setRecentUsersFilters] = useState({
+    role: '',
+    status: '',
+    search: ''
+  });
+  const [pendingEventsFilters, setPendingEventsFilters] = useState({
+    sport: '',
+    search: '',
+    dateRange: ''
+  });
+
   useEffect(() => {
     fetchDashboardData();
   }, []);
@@ -122,6 +134,7 @@ const AdminDashboard = () => {
     }
   };
 
+  // Update the handleModerateEvent function to include RESTART action
   const handleModerateEvent = async (eventId, action, remarks = '') => {
     try {
       setModeratingEventId(eventId);
@@ -132,26 +145,43 @@ const AdminDashboard = () => {
       if (response.success) {
         console.log(`✅ Event ${action.toLowerCase()}d successfully`);
         
-        // Remove the event from pending list
-        setPendingEvents(prev => prev.filter(event => event.id !== eventId));
+        // Remove the event from pending list if it was pending
+        if (action === 'APPROVE' || action === 'REJECT') {
+          setPendingEvents(prev => prev.filter(event => event.id !== eventId));
+        }
         
         // Update the event in all events list if it's loaded
         if (activeTab === 'all') {
           setAllEvents(prev => prev.map(event => 
             event.id === eventId 
-              ? { ...event, status: action === 'APPROVE' ? 'APPROVED' : 'REJECTED' }
+              ? { 
+                  ...event, 
+                  status: action === 'APPROVE' ? 'APPROVED' : 
+                         action === 'REJECT' ? 'REJECTED' :
+                         action === 'SUSPEND' ? 'SUSPENDED' :
+                         action === 'RESTART' ? 'APPROVED' : event.status
+                }
               : event
           ));
         }
         
-        // Update stats
-        setStats(prev => ({
-          ...prev,
-          pendingEvents: Math.max(0, prev.pendingEvents - 1)
-        }));
+        // Update stats only for pending events
+        if (action === 'APPROVE' || action === 'REJECT') {
+          setStats(prev => ({
+            ...prev,
+            pendingEvents: Math.max(0, prev.pendingEvents - 1)
+          }));
+        }
         
-        // Show success message (you can use a toast library here)
-        alert(`Event ${action.toLowerCase()}d successfully!`);
+        // Show success message
+        const actionMessages = {
+          APPROVE: 'approved',
+          REJECT: 'rejected',
+          SUSPEND: 'suspended',
+          RESTART: 'restarted and reactivated'
+        };
+        
+        alert(`Event ${actionMessages[action]} successfully!`);
       } else {
         throw new Error(response.message || `Failed to ${action.toLowerCase()} event`);
       }
@@ -170,6 +200,78 @@ const AdminDashboard = () => {
     }));
   };
 
+  // New filter change handlers
+  const handleRecentUsersFilterChange = (key, value) => {
+    setRecentUsersFilters(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const handlePendingEventsFilterChange = (key, value) => {
+    setPendingEventsFilters(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  // Filtered data functions
+  const getFilteredRecentUsers = () => {
+    return recentUsers.filter(user => {
+      const matchesRole = !recentUsersFilters.role || user.role === recentUsersFilters.role;
+      const matchesStatus = !recentUsersFilters.status || 
+        (recentUsersFilters.status === 'active' && user.isActive && user.isVerified) ||
+        (recentUsersFilters.status === 'pending' && (!user.isActive || !user.isVerified));
+      const matchesSearch = !recentUsersFilters.search || 
+        user.name.toLowerCase().includes(recentUsersFilters.search.toLowerCase()) ||
+        user.email.toLowerCase().includes(recentUsersFilters.search.toLowerCase());
+      
+      return matchesRole && matchesStatus && matchesSearch;
+    });
+  };
+
+  const getFilteredPendingEvents = () => {
+    return pendingEvents.filter(event => {
+      const matchesSport = !pendingEventsFilters.sport || event.sport === pendingEventsFilters.sport;
+      const matchesSearch = !pendingEventsFilters.search || 
+        event.name.toLowerCase().includes(pendingEventsFilters.search.toLowerCase()) ||
+        event.venue?.toLowerCase().includes(pendingEventsFilters.search.toLowerCase()) ||
+        event.city?.toLowerCase().includes(pendingEventsFilters.search.toLowerCase());
+      
+      let matchesDateRange = true;
+      if (pendingEventsFilters.dateRange) {
+        const eventDate = new Date(event.startDate);
+        const now = new Date();
+        
+        switch (pendingEventsFilters.dateRange) {
+          case 'today':
+            matchesDateRange = eventDate.toDateString() === now.toDateString();
+            break;
+          case 'this_week':
+            const weekStart = new Date(now);
+            weekStart.setDate(now.getDate() - now.getDay());
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 7);
+            matchesDateRange = eventDate >= weekStart && eventDate < weekEnd;
+            break;
+          case 'next_week':
+            const nextWeekStart = new Date(now);
+            nextWeekStart.setDate(now.getDate() + (7 - now.getDay()));
+            const nextWeekEnd = new Date(nextWeekStart);
+            nextWeekEnd.setDate(nextWeekStart.getDate() + 7);
+            matchesDateRange = eventDate >= nextWeekStart && eventDate < nextWeekEnd;
+            break;
+          case 'this_month':
+            matchesDateRange = eventDate.getMonth() === now.getMonth() && 
+                             eventDate.getFullYear() === now.getFullYear();
+            break;
+        }
+      }
+      
+      return matchesSport && matchesSearch && matchesDateRange;
+    });
+  };
+
   const getStatusColor = (status) => {
     const colors = {
       PENDING: 'bg-yellow-100 text-yellow-800',
@@ -177,7 +279,8 @@ const AdminDashboard = () => {
       REJECTED: 'bg-red-100 text-red-800',
       ACTIVE: 'bg-blue-100 text-blue-800',
       CANCELLED: 'bg-gray-100 text-gray-800',
-      COMPLETED: 'bg-purple-100 text-purple-800'
+      COMPLETED: 'bg-purple-100 text-purple-800',
+      SUSPENDED: 'bg-orange-100 text-orange-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
@@ -323,6 +426,7 @@ const AdminDashboard = () => {
                   <option value="PENDING">Pending</option>
                   <option value="APPROVED">Approved</option>
                   <option value="REJECTED">Rejected</option>
+                  <option value="SUSPENDED">Suspended</option>
                   <option value="ACTIVE">Active</option>
                   <option value="CANCELLED">Cancelled</option>
                   <option value="COMPLETED">Completed</option>
@@ -366,82 +470,165 @@ const AdminDashboard = () => {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h4 className="text-lg font-medium text-gray-900">
-                  Events Pending Approval ({pendingEvents.length})
+                  Events Pending Approval ({getFilteredPendingEvents().length})
                 </h4>
                 <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
                   Requires Action
                 </span>
               </div>
               
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-4 font-medium text-gray-900">Event</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-900">Sport</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-900">Coach</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-900">Date</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-900">Location</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-900">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pendingEvents.map((event) => (
-                      <tr key={event.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4">
-                          <div>
-                            <div className="font-medium text-gray-900">{event.name}</div>
-                            <div className="text-sm text-gray-500">
-                              Max: {event.maxParticipants} participants
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                            {event.sport}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div>
-                            <div className="font-medium text-gray-900">{event.coach?.name}</div>
-                            <div className="text-sm text-gray-500">{event.coach?.email}</div>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-gray-600">
-                          {new Date(event.startDate).toLocaleDateString()}
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="text-gray-900">{event.venue}</div>
-                          <div className="text-sm text-gray-500">{event.city}</div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => handleModerateEvent(event.id, 'APPROVE')}
-                              disabled={moderatingEventId === event.id}
-                              className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors disabled:opacity-50"
-                            >
-                              {moderatingEventId === event.id ? 'Processing...' : 'Approve'}
-                            </button>
-                            <button
-                              onClick={() => {
-                                const remarks = prompt('Enter rejection reason (optional):');
-                                if (remarks !== null) {
-                                  handleModerateEvent(event.id, 'REJECT', remarks);
-                                }
-                              }}
-                              disabled={moderatingEventId === event.id}
-                              className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors disabled:opacity-50"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {/* ADDED: Pending Events Filter Bar */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Sport</label>
+                    <select
+                      value={pendingEventsFilters.sport}
+                      onChange={(e) => handlePendingEventsFilterChange('sport', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      <option value="">All Sports</option>
+                      <option value="Football">Football</option>
+                      <option value="Basketball">Basketball</option>
+                      <option value="Tennis">Tennis</option>
+                      <option value="Cricket">Cricket</option>
+                      <option value="Athletics">Athletics</option>
+                      <option value="Swimming">Swimming</option>
+                      <option value="Badminton">Badminton</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
+                    <select
+                      value={pendingEventsFilters.dateRange}
+                      onChange={(e) => handlePendingEventsFilterChange('dateRange', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      <option value="">All Dates</option>
+                      <option value="today">Today</option>
+                      <option value="this_week">This Week</option>
+                      <option value="next_week">Next Week</option>
+                      <option value="this_month">This Month</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                    <input
+                      type="text"
+                      placeholder="Search events..."
+                      value={pendingEventsFilters.search}
+                      onChange={(e) => handlePendingEventsFilterChange('search', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                  </div>
+                  
+                  <div className="flex items-end">
+                    <button
+                      onClick={() => setPendingEventsFilters({ sport: '', search: '', dateRange: '' })}
+                      className="w-full px-3 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors text-sm"
+                    >
+                      Clear Filters
+                    </button>
+                  </div>
+                </div>
               </div>
+              
+              {getFilteredPendingEvents().length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-3 px-4 font-medium text-gray-900">Event</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-900">Sport</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-900">Coach</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-900">Date</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-900">Location</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-900">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {getFilteredPendingEvents().map((event) => (
+                        <tr key={event.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-3 px-4">
+                            <div>
+                              <div className="font-medium text-gray-900">{event.name}</div>
+                              <div className="text-sm text-gray-500">
+                                Max: {event.maxParticipants} participants
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                              {event.sport}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div>
+                              <div className="font-medium text-gray-900">{event.coach?.name}</div>
+                              <div className="text-sm text-gray-500">{event.coach?.email}</div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-gray-600">
+                            {new Date(event.startDate).toLocaleDateString()}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="text-gray-900">{event.venue}</div>
+                            <div className="text-sm text-gray-500">{event.city}</div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex space-x-1 items-center">
+                              <button
+                                onClick={() => handleModerateEvent(event.id, 'APPROVE')}
+                                disabled={moderatingEventId === event.id}
+                                className="bg-green-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-green-700 transition-colors disabled:opacity-50 h-6"
+                              >
+                                {moderatingEventId === event.id ? 'Processing...' : 'Approve'}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const remarks = prompt('Enter rejection reason (optional):');
+                                  if (remarks !== null) {
+                                    handleModerateEvent(event.id, 'REJECT', remarks);
+                                  }
+                                }}
+                                disabled={moderatingEventId === event.id}
+                                className="bg-red-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-red-700 transition-colors disabled:opacity-50 h-6"
+                              >
+                                {moderatingEventId === event.id ? 'Processing...' : 'Reject'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  {Object.values(pendingEventsFilters).some(filter => filter) ? (
+                    <div>
+                      <div className="text-4xl mb-4">🔍</div>
+                      <h4 className="text-lg font-medium text-gray-900 mb-2">No Events Found</h4>
+                      <p>No pending events match your current filters.</p>
+                      <button
+                        onClick={() => setPendingEventsFilters({ sport: '', search: '', dateRange: '' })}
+                        className="mt-3 text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Clear filters to see all pending events
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="text-4xl mb-4">🎉</div>
+                      <h4 className="text-lg font-medium text-gray-900 mb-2">No Pending Events</h4>
+                      <p>All events have been reviewed. Great job!</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -528,13 +715,13 @@ const AdminDashboard = () => {
                             )}
                           </td>
                           <td className="py-3 px-4">
-                            <div className="flex space-x-2">
+                            <div className="flex space-x-1 items-center flex-wrap gap-1">
                               {event.status === 'PENDING' && (
                                 <>
                                   <button
                                     onClick={() => handleModerateEvent(event.id, 'APPROVE')}
                                     disabled={moderatingEventId === event.id}
-                                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors disabled:opacity-50"
+                                    className="bg-green-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-green-700 transition-colors disabled:opacity-50 h-6"
                                   >
                                     Approve
                                   </button>
@@ -546,28 +733,57 @@ const AdminDashboard = () => {
                                       }
                                     }}
                                     disabled={moderatingEventId === event.id}
-                                    className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors disabled:opacity-50"
+                                    className="bg-red-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-red-700 transition-colors disabled:opacity-50 h-6"
                                   >
                                     Reject
                                   </button>
                                 </>
                               )}
+                              
                               {event.status === 'APPROVED' && (
                                 <button
-                                  onClick={() => handleModerateEvent(event.id, 'SUSPEND', 'Event suspended by admin')}
+                                  onClick={() => {
+                                    if (confirm(`Are you sure you want to suspend "${event.name || event.title}"? This will temporarily disable the event.`)) {
+                                      const remarks = prompt('Enter suspension reason (optional):') || 'Event suspended by admin';
+                                      handleModerateEvent(event.id, 'SUSPEND', remarks);
+                                    }
+                                  }}
                                   disabled={moderatingEventId === event.id}
-                                  className="bg-orange-600 text-white px-3 py-1 rounded text-sm hover:bg-orange-700 transition-colors disabled:opacity-50"
+                                  className="bg-orange-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-orange-700 transition-colors disabled:opacity-50 h-6"
                                 >
-                                  Suspend
+                                  {moderatingEventId === event.id ? 'Processing...' : 'Suspend'}
                                 </button>
                               )}
+                              
+                              {(event.status === 'SUSPENDED' || event.status === 'REJECTED') && (
+                                <button
+                                  onClick={() => {
+                                    if (confirm(`Are you sure you want to restart "${event.name || event.title}"? This will reactivate the event and make it available again.`)) {
+                                      const remarks = prompt('Enter restart reason (optional):') || 'Event restarted by admin';
+                                      handleModerateEvent(event.id, 'RESTART', remarks);
+                                    }
+                                  }}
+                                  disabled={moderatingEventId === event.id}
+                                  className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 h-6"
+                                >
+                                  {moderatingEventId === event.id ? 'Processing...' : 'Restart'}
+                                </button>
+                              )}
+                              
                               <button
                                 onClick={() => {
-                                  alert(`Event Details:\n\nName: ${event.name || event.title}\nDescription: ${event.description}\nSport: ${event.sport}\nVenue: ${event.location || event.venue}\nDate: ${new Date(event.startDate).toLocaleString()}\nMax Participants: ${event.maxParticipants}\nStatus: ${event.status}`);
+                                  alert(`Event Details:\n\nName: ${event.name || event.title}\nDescription: ${event.description}\nSport: ${event.sport}\nVenue: ${event.location || event.venue}\nDate: ${new Date(event.startDate).toLocaleString()}\nMax Participants: ${event.maxParticipants}\nStatus: ${event.status}\nCurrent Participants: ${event.currentParticipants || 0}${event.adminNotes ? `\nAdmin Notes: ${event.adminNotes}` : ''}`);
                                 }}
-                                className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors"
+                                className="bg-gray-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-gray-700 transition-colors h-6"
                               >
                                 View
+                              </button>
+                              
+                              <button
+                                onClick={() => handleViewEventRegistrations(event)}
+                                className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-purple-700 transition-colors h-6"
+                              >
+                                Participants ({event.currentParticipants || 0})
                               </button>
                             </div>
                           </td>
@@ -596,9 +812,70 @@ const AdminDashboard = () => {
 
         {/* Recent Users */}
         <div className="bg-white rounded-xl shadow-lg p-6">
-          <h3 className="text-xl font-semibold text-gray-900 mb-4">Recent Registrations</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-semibold text-gray-900">Recent Registrations ({getFilteredRecentUsers().length})</h3>
+            <button
+              onClick={fetchDashboardData}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors"
+            >
+              Refresh
+            </button>
+          </div>
+
+          {/* ADDED: Recent Users Filter Bar */}
+          <div className="bg-gray-50 rounded-lg p-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                <select
+                  value={recentUsersFilters.role}
+                  onChange={(e) => handleRecentUsersFilterChange('role', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  <option value="">All Roles</option>
+                  <option value="STUDENT">Students</option>
+                  <option value="COACH">Coaches</option>
+                  <option value="INSTITUTE">Institutes</option>
+                  <option value="CLUB">Clubs</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={recentUsersFilters.status}
+                  onChange={(e) => handleRecentUsersFilterChange('status', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="active">Active</option>
+                  <option value="pending">Pending</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                <input
+                  type="text"
+                  placeholder="Search users..."
+                  value={recentUsersFilters.search}
+                  onChange={(e) => handleRecentUsersFilterChange('search', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              
+              <div className="flex items-end">
+                <button
+                  onClick={() => setRecentUsersFilters({ role: '', status: '', search: '' })}
+                  className="w-full px-3 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors text-sm"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            </div>
+          </div>
           
-          {recentUsers.length > 0 ? (
+          {getFilteredRecentUsers().length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead>
@@ -608,10 +885,11 @@ const AdminDashboard = () => {
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Role</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Status</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Joined</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-900">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recentUsers.map((user) => (
+                  {getFilteredRecentUsers().map((user) => (
                     <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-3 px-4 text-gray-900">{user.name}</td>
                       <td className="py-3 px-4 text-gray-600">{user.email}</td>
@@ -632,6 +910,31 @@ const AdminDashboard = () => {
                       <td className="py-3 px-4 text-gray-600">
                         {new Date(user.createdAt).toLocaleDateString()}
                       </td>
+                      <td className="py-3 px-4">
+                        <div className="flex space-x-1 items-center">
+                          <button
+                            onClick={() => {
+                              alert(`User Details:\n\nName: ${user.name}\nEmail: ${user.email}\nRole: ${user.role}\nStatus: ${user.isActive && user.isVerified ? 'Active' : 'Pending'}\nJoined: ${new Date(user.createdAt).toLocaleDateString()}`);
+                            }}
+                            className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors h-6"
+                          >
+                            View
+                          </button>
+                          {!user.isActive && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`Are you sure you want to activate ${user.name}?`)) {
+                                  // TODO: Implement user activation
+                                  alert('User activation functionality will be implemented');
+                                }
+                              }}
+                              className="bg-green-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-green-700 transition-colors h-6"
+                            >
+                              Activate
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -639,7 +942,25 @@ const AdminDashboard = () => {
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
-              No recent users found
+              {Object.values(recentUsersFilters).some(filter => filter) ? (
+                <div>
+                  <div className="text-4xl mb-4">🔍</div>
+                  <h4 className="text-lg font-medium text-gray-900 mb-2">No Users Found</h4>
+                  <p>No users match your current filters.</p>
+                  <button
+                    onClick={() => setRecentUsersFilters({ role: '', status: '', search: '' })}
+                    className="mt-3 text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Clear filters to see all users
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div className="text-4xl mb-4">👥</div>
+                  <h4 className="text-lg font-medium text-gray-900 mb-2">No Recent Users</h4>
+                  <p>No recent user registrations found.</p>
+                </div>
+              )}
             </div>
           )}
         </div>

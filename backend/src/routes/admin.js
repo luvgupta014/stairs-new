@@ -904,25 +904,25 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
 router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, res) => {
   try {
     const { eventId } = req.params;
-    const { action, remarks } = req.body; // action: 'APPROVE', 'REJECT', 'SUSPEND'
+    const { action, adminNotes } = req.body;
 
-    if (!['APPROVE', 'REJECT', 'SUSPEND', 'ACTIVE', 'CANCELLED'].includes(action)) {
-      return res.status(400).json(errorResponse('Action must be APPROVE, REJECT, SUSPEND, ACTIVE, or CANCELLED.', 400));
+    console.log(`🔄 Admin moderating event ${eventId} with action: ${action}`);
+
+    // Validate action
+    const validActions = ['APPROVE', 'REJECT', 'SUSPEND', 'RESTART'];
+    if (!validActions.includes(action)) {
+      return res.status(400).json(errorResponse('Invalid action. Must be APPROVE, REJECT, SUSPEND, or RESTART.', 400));
     }
 
-    console.log(`🔍 Moderating event ${eventId} with action: ${action}`);
-
+    // Check if event exists
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       include: {
         coach: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true
-              }
-            }
+          select: {
+            id: true,
+            name: true,
+            user: { select: { email: true } }
           }
         }
       }
@@ -932,6 +932,7 @@ router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, 
       return res.status(404).json(errorResponse('Event not found.', 404));
     }
 
+    // Determine the new status based on action
     let newStatus;
     switch (action) {
       case 'APPROVE':
@@ -941,30 +942,29 @@ router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, 
         newStatus = 'REJECTED';
         break;
       case 'SUSPEND':
-      case 'CANCELLED':
-        newStatus = 'CANCELLED';
+        newStatus = 'SUSPENDED';
         break;
-      case 'ACTIVE':
-        newStatus = 'ACTIVE';
+      case 'RESTART':
+        newStatus = 'APPROVED'; // Restart reactivates the event
         break;
+      default:
+        return res.status(400).json(errorResponse('Invalid action.', 400));
     }
 
+    // Update event status
     const updatedEvent = await prisma.event.update({
       where: { id: eventId },
       data: {
         status: newStatus,
-        adminNotes: remarks,                                        // FIXED: Use adminNotes instead of moderationRemarks
+        adminNotes: adminNotes || null,
         updatedAt: new Date()
       },
       include: {
         coach: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true
-              }
-            }
+          select: {
+            id: true,
+            name: true,
+            user: { select: { email: true } }
           }
         }
       }
@@ -972,15 +972,31 @@ router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, 
 
     console.log(`✅ Event ${eventId} ${action.toLowerCase()}d successfully`);
 
+    // Create notification for coach
+    try {
+      await prisma.notification.create({
+        data: {
+          userId: event.coach.user.id || event.coachId,
+          type: 'EVENT_MODERATED',
+          title: `Event ${action.charAt(0) + action.slice(1).toLowerCase()}d`,
+          message: `Your event "${event.name}" has been ${action.toLowerCase()}d by an administrator.${adminNotes ? ` Reason: ${adminNotes}` : ''}`,
+          data: {
+            eventId: event.id,
+            eventName: event.name,
+            action: action,
+            adminNotes: adminNotes
+          }
+        }
+      });
+    } catch (notificationError) {
+      console.error('⚠️ Failed to create notification:', notificationError);
+      // Don't fail the request if notification creation fails
+    }
+
     res.json(successResponse({
-      id: updatedEvent.id,
-      name: updatedEvent.name,
-      status: updatedEvent.status,
-      adminNotes: updatedEvent.adminNotes,
-      coach: {
-        name: updatedEvent.coach?.name,
-        email: updatedEvent.coach?.user?.email
-      }
+      event: updatedEvent,
+      action: action,
+      newStatus: newStatus
     }, `Event ${action.toLowerCase()}d successfully.`));
 
   } catch (error) {

@@ -128,7 +128,7 @@ const Landing = () => {
                     to="/login/admin"
                     className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
                   >
-                    Login
+                    Admin Login
                   </Link>
                   <Link
                     to="/register/student"
