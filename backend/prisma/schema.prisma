@@ -256,33 +256,32 @@ model ClubMember {
 
 // Event Management
 model Event {
-  id          String      @id @default(cuid())
-  coachId     String
-  name        String
-  description String?
-  sport       String
-  venue       String
-  address     String?
-  city        String?
-  state       String?
-  latitude    Float?
-  longitude   Float?
-  startDate   DateTime
-  endDate     DateTime?
-  maxParticipants Int?
-  currentParticipants Int @default(0)
-  eventFee    Float?
-  status      EventStatus @default(PENDING)
-  adminNotes  String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  coach Coach @relation(fields: [coachId], references: [id], onDelete: Cascade)
-
-  // Relationships
-  registrations EventRegistration[]
-  payments      EventPayment[]
-
+  id                  String      @id @default(cuid())
+  name                String
+  description         String?
+  sport               String
+  venue               String
+  address             String?
+  city                String
+  state               String
+  latitude            Float?
+  longitude           Float?
+  startDate           DateTime
+  endDate             DateTime?
+  maxParticipants     Int      @default(50)
+  currentParticipants Int      @default(0)
+  eventFee            Float    @default(0)
+  status              EventStatus @default(PENDING)
+  adminNotes          String?  // Make sure this field exists
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  coachId             String
+  coach               Coach    @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  
+  registrations       EventRegistration[]
+  payments            EventPayment[]
+  
   @@map("events")
 }
 
@@ -391,9 +390,10 @@ enum EventStatus {
   PENDING
   APPROVED
   REJECTED
+  SUSPENDED
   ACTIVE
-  COMPLETED
   CANCELLED
+  COMPLETED
 }
 
 enum RegistrationStatus {

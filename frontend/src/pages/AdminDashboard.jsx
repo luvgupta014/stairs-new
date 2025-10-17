@@ -134,13 +134,14 @@ const AdminDashboard = () => {
     }
   };
 
-  // Update the handleModerateEvent function to include RESTART action
+  // Update the handleModerateEvent function with better error handling
   const handleModerateEvent = async (eventId, action, remarks = '') => {
     try {
       setModeratingEventId(eventId);
-      console.log(`🔄 ${action}ing event ${eventId}...`);
+      console.log(`🔄 ${action}ing event ${eventId} with remarks:`, remarks);
       
       const response = await moderateEvent(eventId, action, remarks);
+      console.log('✅ Moderation response:', response);
       
       if (response.success) {
         console.log(`✅ Event ${action.toLowerCase()}d successfully`);
@@ -159,7 +160,8 @@ const AdminDashboard = () => {
                   status: action === 'APPROVE' ? 'APPROVED' : 
                          action === 'REJECT' ? 'REJECTED' :
                          action === 'SUSPEND' ? 'SUSPENDED' :
-                         action === 'RESTART' ? 'APPROVED' : event.status
+                         action === 'RESTART' ? 'APPROVED' : event.status,
+                  adminNotes: remarks || event.adminNotes
                 }
               : event
           ));
@@ -187,7 +189,20 @@ const AdminDashboard = () => {
       }
     } catch (err) {
       console.error(`❌ Failed to ${action.toLowerCase()} event:`, err);
-      alert(`Failed to ${action.toLowerCase()} event: ${err.message}`);
+      console.error('Full error object:', err);
+      
+      // More user-friendly error message
+      let errorMessage = err.message || `Failed to ${action.toLowerCase()} event`;
+      
+      if (errorMessage.includes('not found')) {
+        errorMessage = 'Event not found. It may have been deleted.';
+      } else if (errorMessage.includes('Invalid action')) {
+        errorMessage = 'Invalid action. Please try again.';
+      } else if (errorMessage.includes('Network Error')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      }
+      
+      alert(`Failed to ${action.toLowerCase()} event: ${errorMessage}`);
     } finally {
       setModeratingEventId(null);
     }
@@ -772,7 +787,7 @@ const AdminDashboard = () => {
                               
                               <button
                                 onClick={() => {
-                                  alert(`Event Details:\n\nName: ${event.name || event.title}\nDescription: ${event.description}\nSport: ${event.sport}\nVenue: ${event.location || event.venue}\nDate: ${new Date(event.startDate).toLocaleString()}\nMax Participants: ${event.maxParticipants}\nStatus: ${event.status}\nCurrent Participants: ${event.currentParticipants || 0}${event.adminNotes ? `\nAdmin Notes: ${event.adminNotes}` : ''}`);
+                                  alert(`Event Details:\n\nName: ${event.name || event.title}\nDescription: ${event.description}\nSport: ${event.sport}\nVenue: ${event.location || event.venue}\nDate: ${new Date(event.startDate).toLocaleString()}\nMax Participants: {event.maxParticipants}\nStatus: ${event.status}\nCurrent Participants: ${event.currentParticipants || 0}${event.adminNotes ? `\nAdmin Notes: ${event.adminNotes}` : ''}`);
                                 }}
                                 className="bg-gray-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-gray-700 transition-colors h-6"
                               >

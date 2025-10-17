@@ -904,7 +904,7 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
 router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, res) => {
   try {
     const { eventId } = req.params;
-    const { action, adminNotes } = req.body;
+    const { action, adminNotes, remarks } = req.body; // Accept both adminNotes and remarks
 
     console.log(`🔄 Admin moderating event ${eventId} with action: ${action}`);
 
@@ -922,7 +922,7 @@ router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, 
           select: {
             id: true,
             name: true,
-            user: { select: { email: true } }
+            user: { select: { id: true, email: true } }
           }
         }
       }
@@ -956,7 +956,7 @@ router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, 
       where: { id: eventId },
       data: {
         status: newStatus,
-        adminNotes: adminNotes || null,
+        adminNotes: adminNotes || remarks || null, // Accept either field name
         updatedAt: new Date()
       },
       include: {
@@ -964,7 +964,7 @@ router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, 
           select: {
             id: true,
             name: true,
-            user: { select: { email: true } }
+            user: { select: { id: true, email: true } }
           }
         }
       }
@@ -974,20 +974,22 @@ router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, 
 
     // Create notification for coach
     try {
-      await prisma.notification.create({
-        data: {
-          userId: event.coach.user.id || event.coachId,
-          type: 'EVENT_MODERATED',
-          title: `Event ${action.charAt(0) + action.slice(1).toLowerCase()}d`,
-          message: `Your event "${event.name}" has been ${action.toLowerCase()}d by an administrator.${adminNotes ? ` Reason: ${adminNotes}` : ''}`,
+      if (event.coach?.user?.id) {
+        await prisma.notification.create({
           data: {
-            eventId: event.id,
-            eventName: event.name,
-            action: action,
-            adminNotes: adminNotes
+            userId: event.coach.user.id,
+            type: 'EVENT_MODERATED',
+            title: `Event ${action.charAt(0) + action.slice(1).toLowerCase()}d`,
+            message: `Your event "${event.name}" has been ${action.toLowerCase()}d by an administrator.${adminNotes || remarks ? ` Reason: ${adminNotes || remarks}` : ''}`,
+            data: {
+              eventId: event.id,
+              eventName: event.name,
+              action: action,
+              adminNotes: adminNotes || remarks
+            }
           }
-        }
-      });
+        });
+      }
     } catch (notificationError) {
       console.error('⚠️ Failed to create notification:', notificationError);
       // Don't fail the request if notification creation fails
@@ -1001,7 +1003,16 @@ router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, 
 
   } catch (error) {
     console.error('❌ Event moderation error:', error);
-    res.status(500).json(errorResponse('Failed to moderate event.', 500));
+    
+    // More detailed error logging
+    if (error.code) {
+      console.error('Database error code:', error.code);
+    }
+    if (error.meta) {
+      console.error('Database error meta:', error.meta);
+    }
+    
+    res.status(500).json(errorResponse(`Failed to moderate event: ${error.message}`, 500));
   }
 });
 

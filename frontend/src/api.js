@@ -374,14 +374,28 @@ export const getPendingEvents = async (params = {}) => {
 
 export const moderateEvent = async (eventId, action, remarks) => {
   try {
+    console.log(`🔄 Sending moderation request: ${action} for event ${eventId}`);
+    
     const response = await api.put(`/api/admin/events/${eventId}/moderate`, {
-      action,
-      remarks
+      action: action.toUpperCase(),
+      adminNotes: remarks,
+      remarks: remarks // Send both field names for compatibility
     });
+    
+    console.log('✅ Moderation response:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Moderate event error:', error);
-    throw error.response?.data || error.message;
+    console.error('❌ Moderate event API error:', error);
+    console.error('Error response:', error.response?.data);
+    console.error('Error status:', error.response?.status);
+    
+    // Throw more specific error
+    const errorMessage = error.response?.data?.message || 
+                        error.response?.data?.error || 
+                        error.message || 
+                        'Unknown error occurred';
+    
+    throw new Error(errorMessage);
   }
 };
 
