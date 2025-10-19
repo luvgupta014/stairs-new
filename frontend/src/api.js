@@ -471,12 +471,11 @@ export const getCoachEvents = async (params = {}) => {
   }
 };
 
-export const updateEvent = async (eventId, eventData) => {
+export const updateEvent = async (eventId, data) => {
   try {
-    const response = await api.put(`/api/coach/events/${eventId}`, eventData);
+    const response = await api.put(`/api/coach/events/${eventId}`, data);
     return response.data;
   } catch (error) {
-    console.error('Update event error:', error);
     throw error.response?.data || error.message;
   }
 };

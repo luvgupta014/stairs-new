@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { updateEvent } from '../api';
 import Spinner from '../components/Spinner';
-import { FaLocationArrow, FaSave, FaTimes } from 'react-icons/fa';
+import GoogleMapsPlacesAutocomplete from '../components/GoogleMapsPlacesAutocomplete';
+import { FaMapMarkerAlt, FaSave, FaTimes } from 'react-icons/fa';
 
 const EventEdit = () => {
   const { eventId } = useParams();
@@ -24,7 +25,6 @@ const EventEdit = () => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [gettingLocation, setGettingLocation] = useState(false);
 
   useEffect(() => {
     // Pre-fill form with event data from location state
@@ -77,85 +77,26 @@ const EventEdit = () => {
     }
   };
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+  const handlePlaceSelect = (placeData) => {
+    console.log('Place selected:', placeData);
+    
+    setFormData(prev => ({
+      ...prev,
+      venue: placeData.name || placeData.address || '',
+      address: placeData.address || '',
+      city: placeData.city || '',
+      state: placeData.state || '',
+      latitude: placeData.latitude ? placeData.latitude.toString() : '',
+      longitude: placeData.longitude ? placeData.longitude.toString() : ''
+    }));
   };
 
-  const getCurrentLocation = async () => {
-    if (!navigator.geolocation) {
-      setError('Geolocation is not supported by this browser.');
-      return;
-    }
-
-    setGettingLocation(true);
-    setError('');
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        
-        try {
-          const nominatimResponse = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`
-          );
-          
-          if (nominatimResponse.ok) {
-            const data = await nominatimResponse.json();
-            
-            setFormData(prev => ({
-              ...prev,
-              latitude: latitude.toString(),
-              longitude: longitude.toString(),
-              address: data.display_name || '',
-              city: data.address?.city || data.address?.town || data.address?.village || '',
-              state: data.address?.state || ''
-            }));
-          } else {
-            setFormData(prev => ({
-              ...prev,
-              latitude: latitude.toString(),
-              longitude: longitude.toString()
-            }));
-          }
-        } catch (error) {
-          console.error('Reverse geocoding failed:', error);
-          setFormData(prev => ({
-            ...prev,
-            latitude: latitude.toString(),
-            longitude: longitude.toString()
-          }));
-        } finally {
-          setGettingLocation(false);
-        }
-      },
-      (error) => {
-        console.error('Geolocation error:', error);
-        setGettingLocation(false);
-        
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            setError('Location access denied by user. Please enable location permissions and try again.');
-            break;
-          case error.POSITION_UNAVAILABLE:
-            setError('Location information is unavailable.');
-            break;
-          case error.TIMEOUT:
-            setError('Location request timed out.');
-            break;
-          default:
-            setError('An unknown error occurred while retrieving location.');
-            break;
-        }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000
-      }
-    );
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   const clearLocation = () => {
@@ -185,7 +126,32 @@ const EventEdit = () => {
           </div>
         )}
 
+        {/* Location Info */}
+        {!formData.latitude && !formData.longitude && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="flex items-start">
+              <FaMapMarkerAlt className="text-blue-500 mt-1 mr-3 flex-shrink-0" />
+              <div>
+                <h4 className="text-sm font-medium text-blue-900 mb-1">
+                  Smart Venue Search with Google Maps
+                </h4>
+                <p className="text-sm text-blue-700">
+                  Start typing in the venue field to search for sports facilities, stadiums, complexes, and venues. 
+                  Select from the dropdown suggestions to automatically fill address, city, state, and coordinates.
+                </p>
+                <p className="text-xs text-blue-600 mt-2">
+                  Examples: "M. A. Chidambaram Stadium", "Jawaharlal Nehru Stadium", "Sports Complex"
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Hidden fields for coordinates */}
+          <input type="hidden" name="latitude" value={formData.latitude} />
+          <input type="hidden" name="longitude" value={formData.longitude} />
+
           {/* Basic Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -251,16 +217,23 @@ const EventEdit = () => {
               <label htmlFor="venue" className="block text-sm font-medium text-gray-700 mb-2">
                 Venue Name *
               </label>
-              <input
-                type="text"
-                id="venue"
-                name="venue"
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                placeholder="Enter venue name"
+              <GoogleMapsPlacesAutocomplete
+                onPlaceSelect={handlePlaceSelect}
+                placeholder="Search for venue (e.g., stadium, sports complex)"
                 value={formData.venue}
                 onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
               />
+              {formData.venue && !formData.latitude && (
+                <p className="mt-1 text-xs text-amber-600">
+                  💡 Select from dropdown suggestions for automatic address filling
+                </p>
+              )}
+              {formData.venue && formData.latitude && (
+                <p className="mt-1 text-xs text-green-600">
+                  ✓ Venue location confirmed with coordinates
+                </p>
+              )}
             </div>
 
             <div>
@@ -281,38 +254,23 @@ const EventEdit = () => {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label htmlFor="address" className="block text-sm font-medium text-gray-700">
-                Address
-              </label>
-              <button
-                type="button"
-                onClick={getCurrentLocation}
-                disabled={gettingLocation}
-                className="inline-flex items-center px-3 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded-full hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {gettingLocation ? (
-                  <>
-                    <Spinner size="xs" color="blue" />
-                    <span className="ml-1">Getting location...</span>
-                  </>
-                ) : (
-                  <>
-                    <FaLocationArrow className="mr-1" />
-                    Use Current Location
-                  </>
-                )}
-              </button>
-            </div>
+            <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
+              Address
+            </label>
             <input
               type="text"
               id="address"
               name="address"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-              placeholder="Enter venue address or use current location"
+              placeholder="Address will be auto-filled when you select a venue from Google Maps"
               value={formData.address}
               onChange={handleChange}
             />
+            {!formData.address && (
+              <p className="mt-1 text-xs text-gray-500">
+                💡 Use the venue search above to automatically fill this field
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -325,7 +283,7 @@ const EventEdit = () => {
                 id="city"
                 name="city"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                placeholder="Enter city"
+                placeholder="City will be auto-filled"
                 value={formData.city}
                 onChange={handleChange}
               />
@@ -340,7 +298,7 @@ const EventEdit = () => {
                 id="state"
                 name="state"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                placeholder="Enter state"
+                placeholder="State will be auto-filled"
                 value={formData.state}
                 onChange={handleChange}
               />
@@ -352,8 +310,8 @@ const EventEdit = () => {
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center">
-                  <FaLocationArrow className="text-green-600 mr-2" />
-                  <span className="text-sm font-medium text-green-800">Location Coordinates</span>
+                  <FaMapMarkerAlt className="text-green-600 mr-2" />
+                  <span className="text-sm font-medium text-green-800">Venue Location Confirmed</span>
                 </div>
                 <button
                   type="button"
@@ -373,6 +331,9 @@ const EventEdit = () => {
                   <span className="ml-2 text-green-600">{parseFloat(formData.longitude).toFixed(6)}</span>
                 </div>
               </div>
+              <p className="text-xs text-green-600 mt-2">
+                These coordinates will help students find your event location easily on maps.
+              </p>
             </div>
           )}
 
