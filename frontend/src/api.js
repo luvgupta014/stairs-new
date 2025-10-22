@@ -534,47 +534,133 @@ export const getUserRole = () => {
   return localStorage.getItem('userRole');
 };
 
-// Tournament Results API
-export const uploadTournamentResults = async (formData) => {
+// Event Result Files API
+export const uploadEventResults = async (eventId, formData) => {
   try {
-    const response = await api.post('/api/tournament-results/upload', formData, {
+    const response = await api.post(`/api/event/${eventId}/results`, formData, {
       headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+        'Content-Type': 'multipart/form-data',
+      },
     });
     return response.data;
   } catch (error) {
-    console.error('Upload tournament results error:', error);
+    console.error('Upload event results error:', error);
     throw error.response?.data || error.message;
   }
 };
 
-export const getTournamentResults = async (params = {}) => {
+export const getEventResultFiles = async (eventId, params = {}) => {
   try {
-    const response = await api.get('/api/tournament-results', { params });
+    const response = await api.get(`/api/event/${eventId}/results`, { params });
     return response.data;
   } catch (error) {
-    console.error('Get tournament results error:', error);
+    console.error('Get event result files error:', error);
     throw error.response?.data || error.message;
   }
 };
 
-export const deleteTournamentResult = async (fileId) => {
+export const deleteEventResultFile = async (fileId) => {
   try {
-    const response = await api.delete(`/api/tournament-results/${fileId}`);
+    const response = await api.delete(`/api/event/results/${fileId}`);
     return response.data;
   } catch (error) {
-    console.error('Delete tournament result error:', error);
+    console.error('Delete event result file error:', error);
     throw error.response?.data || error.message;
   }
 };
 
-export const getAllTournamentResultsForAdmin = async (params = {}) => {
+export const getAllEventResultFilesForAdmin = async (params = {}) => {
   try {
-    const response = await api.get('/api/tournament-results/admin/all', { params });
+    const response = await api.get('/api/event/results/admin/all', { params });
     return response.data;
   } catch (error) {
-    console.error('Get all tournament results error:', error);
+    console.error('Get all event result files error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+// Event Orders API
+export const createEventOrder = async (eventId, orderData) => {
+  try {
+    const response = await api.post(`/api/event/${eventId}/orders`, orderData);
+    return response.data;
+  } catch (error) {
+    console.error('Create event order error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getEventOrders = async (eventId, params = {}) => {
+  try {
+    const response = await api.get(`/api/event/${eventId}/orders`, { params });
+    return response.data;
+  } catch (error) {
+    console.error('Get event orders error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const updateEventOrder = async (orderId, orderData) => {
+  try {
+    const response = await api.put(`/api/event/orders/${orderId}`, orderData);
+    return response.data;
+  } catch (error) {
+    console.error('Update event order error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const deleteEventOrder = async (orderId) => {
+  try {
+    const response = await api.delete(`/api/event/orders/${orderId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Delete event order error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+// Admin Order Management API
+export const getAllOrdersForAdmin = async (params = {}) => {
+  try {
+    const response = await api.get('/api/admin/orders', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Get all orders for admin error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const updateOrderByAdmin = async (orderId, updateData) => {
+  try {
+    const response = await api.put(`/api/admin/orders/${orderId}`, updateData);
+    return response.data;
+  } catch (error) {
+    console.error('Update order by admin error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getOrderStats = async () => {
+  try {
+    const response = await api.get('/api/admin/orders/stats');
+    return response.data;
+  } catch (error) {
+    console.error('Get order stats error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const bulkUpdateOrders = async (orderIds, status, adminRemarks) => {
+  try {
+    const response = await api.put('/api/admin/orders/bulk-update', {
+      orderIds,
+      status,
+      adminRemarks
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Bulk update orders error:', error);
     throw error.response?.data || error.message;
   }
 };

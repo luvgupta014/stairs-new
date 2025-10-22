@@ -126,7 +126,8 @@ model Coach {
   events             Event[]
   payments           Payment[]
   instituteCoaches   InstituteCoach[]
-  tournamentResultFiles TournamentResultFile[]
+  eventResultFiles   EventResultFile[]
+  eventOrders        EventOrder[]
 
   @@map("coaches")
 }
@@ -192,6 +193,8 @@ model Admin {
   updatedAt   DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  processedOrders EventOrder[]
 
   @@map("admins")
 }
@@ -282,6 +285,8 @@ model Event {
   
   registrations       EventRegistration[]
   payments            EventPayment[]
+  resultFiles         EventResultFile[]
+  orders              EventOrder[]
   
   @@map("events")
 }
@@ -416,24 +421,69 @@ enum MemberStatus {
   SUSPENDED
 }
 
-// Tournament Result File Management
-model TournamentResultFile {
-  id             String    @id @default(cuid())
-  coachId        String
-  originalName   String    // Original filename when uploaded
-  filename       String    // Stored filename (unique)
-  filepath       String    // Full file path on server
-  fileSize       Int       // File size in bytes
-  mimeType       String    // File MIME type
-  description    String?   // Optional description
-  tournamentName String?   // Tournament name
-  tournamentDate DateTime? // Tournament date
-  uploadDate     DateTime  @default(now())
-  isPublic       Boolean   @default(true)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+// Event Result File Management
+model EventResultFile {
+  id           String   @id @default(cuid())
+  filename     String   // Server filename
+  originalName String   // Original uploaded filename
+  mimeType     String   // File type
+  size         Int      // File size in bytes
+  uploadedAt   DateTime @default(now())
+  
+  // Relations
+  eventId      String
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  coachId      String
+  coach        Coach    @relation(fields: [coachId], references: [id], onDelete: Cascade)
 
-  coach Coach @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  @@map("event_result_files")
+}
 
-  @@map("tournament_result_files")
+// Event Order Management
+model EventOrder {
+  id            String      @id @default(cuid())
+  orderNumber   String      @unique // Auto-generated order number
+  
+  // Order Items
+  certificates  Int         @default(0) // Number of certificates
+  medals        Int         @default(0) // Number of medals
+  trophies      Int         @default(0) // Number of trophies
+  
+  // Order Details
+  specialInstructions String? // Additional instructions for the order
+  urgentDelivery      Boolean @default(false) // Rush order flag
+  
+  // Pricing (can be calculated or set by admin)
+  certificatePrice  Float?  // Price per certificate
+  medalPrice        Float?  // Price per medal
+  trophyPrice       Float?  // Price per trophy
+  totalAmount       Float?  // Total order amount
+  
+  // Order Status
+  status        OrderStatus @default(PENDING)
+  adminRemarks  String?     // Admin comments/notes
+  
+  // Timestamps
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  processedAt   DateTime?   // When admin processed the order
+  completedAt   DateTime?   // When order was completed
+  
+  // Relations
+  eventId       String
+  event         Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  coachId       String
+  coach         Coach       @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  processedBy   String?     // Admin who processed the order
+  admin         Admin?      @relation(fields: [processedBy], references: [id])
+
+  @@map("event_orders")
+}
+
+enum OrderStatus {
+  PENDING     // Order placed, waiting for admin review
+  CONFIRMED   // Admin confirmed the order
+  IN_PROGRESS // Order is being prepared
+  COMPLETED   // Order is ready/delivered
+  CANCELLED   // Order was cancelled
 }

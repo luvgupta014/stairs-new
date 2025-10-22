@@ -50,6 +50,10 @@ import EventCreate from "./pages/EventCreate";
 import BulkUpload from "./pages/BulkUpload";
 import CoachPayment from "./pages/CoachPayment";
 import CoachRegisterPremiumNew from "./pages/CoachRegisterPremium";
+import AdminEventResults from "./components/AdminEventResults";
+import EventResultUpload from "./pages/EventResultUpload";
+import EventOrders from "./pages/EventOrders";
+import AdminOrders from "./components/AdminOrders";
 
 function App() {
   return (
@@ -168,6 +172,20 @@ function App() {
                 </>
               }
             />
+            <Route
+              path="/admin/event-results"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute role="ADMIN">
+                      <AdminEventResults />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
             {/* Other Protected Routes with Header and Footer */}
             <Route
               path="/student/profile"
@@ -276,6 +294,48 @@ function App() {
                 <ProtectedRoute allowedRoles={["COACH"]}>
                   <EventEdit />
                 </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/coach/event/:eventId/results"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute role="COACH">
+                      <EventResultUpload />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/coach/event/:eventId/orders"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute role="COACH">
+                      <EventOrders />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/admin/orders"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute role="ADMIN">
+                      <AdminOrders />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
               }
             />
             {/* Catch-all route */}

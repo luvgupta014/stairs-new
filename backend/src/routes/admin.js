@@ -1357,4 +1357,281 @@ router.put('/users/:userId/block', authenticate, requireAdmin, async (req, res) 
   }
 });
 
+// Event Orders Management
+
+// Get all event orders for admin
+router.get('/orders', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      status, 
+      eventId, 
+      coachId, 
+      search,
+      urgentOnly 
+    } = req.query;
+    const { skip, take } = getPaginationParams(page, limit);
+
+    console.log('🔍 Fetching event orders for admin...');
+
+    const where = {
+      ...(status && { status: status.toUpperCase() }),
+      ...(eventId && { eventId }),
+      ...(coachId && { coachId }),
+      ...(urgentOnly === 'true' && { urgentDelivery: true }),
+      ...(search && {
+        OR: [
+          { orderNumber: { contains: search, mode: 'insensitive' } },
+          { event: { name: { contains: search, mode: 'insensitive' } } },
+          { coach: { name: { contains: search, mode: 'insensitive' } } },
+          { specialInstructions: { contains: search, mode: 'insensitive' } }
+        ]
+      })
+    };
+
+    const [orders, total] = await Promise.all([
+      prisma.eventOrder.findMany({
+        where,
+        include: {
+          event: {
+            select: { 
+              id: true, 
+              name: true, 
+              sport: true, 
+              startDate: true,
+              venue: true,
+              city: true
+            }
+          },
+          coach: {
+            select: { 
+              id: true, 
+              name: true,
+              specialization: true
+            }
+          },
+          admin: {
+            select: { name: true }
+          }
+        },
+        skip,
+        take,
+        orderBy: [
+          { urgentDelivery: 'desc' }, // Urgent orders first
+          { createdAt: 'desc' }
+        ]
+      }),
+      prisma.eventOrder.count({ where })
+    ]);
+
+    const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
+
+    // Calculate summary statistics
+    const summary = {
+      total,
+      pending: await prisma.eventOrder.count({ where: { status: 'PENDING' } }),
+      confirmed: await prisma.eventOrder.count({ where: { status: 'CONFIRMED' } }),
+      inProgress: await prisma.eventOrder.count({ where: { status: 'IN_PROGRESS' } }),
+      completed: await prisma.eventOrder.count({ where: { status: 'COMPLETED' } }),
+      urgent: await prisma.eventOrder.count({ where: { urgentDelivery: true, status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] } } })
+    };
+
+    console.log(`✅ Found ${orders.length} orders (${summary.urgent} urgent)`);
+
+    res.json(successResponse({
+      orders,
+      pagination,
+      summary
+    }, 'Event orders retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get admin orders error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve orders.', 500));
+  }
+});
+
+// Update order status and pricing (Admin only)
+router.put('/orders/:orderId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { 
+      status, 
+      adminRemarks,
+      certificatePrice,
+      medalPrice,
+      trophyPrice,
+      totalAmount
+    } = req.body;
+
+    console.log(`📦 Admin updating order ${orderId}`);
+    console.log(`📦 Update data:`, { status, adminRemarks, certificatePrice, medalPrice, trophyPrice, totalAmount });
+
+    const order = await prisma.eventOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        event: { select: { name: true } },
+        coach: { select: { name: true } }
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json(errorResponse('Order not found.', 404));
+    }
+
+    // Automatically calculate total amount whenever any price is provided
+    let calculatedTotal = null;
+    
+    // If any price field is provided, calculate the total using current or updated prices
+    if (certificatePrice !== undefined || medalPrice !== undefined || trophyPrice !== undefined) {
+      const certPrice = certificatePrice !== undefined ? parseFloat(certificatePrice) : (order.certificatePrice || 0);
+      const medPrice = medalPrice !== undefined ? parseFloat(medalPrice) : (order.medalPrice || 0);
+      const tropPrice = trophyPrice !== undefined ? parseFloat(trophyPrice) : (order.trophyPrice || 0);
+      
+      calculatedTotal = 
+        (order.certificates * certPrice) + 
+        (order.medals * medPrice) + 
+        (order.trophies * tropPrice);
+        
+      console.log(`💰 Calculated total: ${order.certificates} × ₹${certPrice} + ${order.medals} × ₹${medPrice} + ${order.trophies} × ₹${tropPrice} = ₹${calculatedTotal}`);
+    } else if (totalAmount !== undefined) {
+      // If only totalAmount is provided explicitly (without individual prices)
+      calculatedTotal = parseFloat(totalAmount);
+    }
+
+    const updateData = {
+      ...(status && { status: status.toUpperCase() }),
+      ...(adminRemarks !== undefined && { adminRemarks }),
+      ...(certificatePrice !== undefined && { certificatePrice: parseFloat(certificatePrice) }),
+      ...(medalPrice !== undefined && { medalPrice: parseFloat(medalPrice) }),
+      ...(trophyPrice !== undefined && { trophyPrice: parseFloat(trophyPrice) }),
+      ...(calculatedTotal !== undefined && { totalAmount: parseFloat(calculatedTotal) }),
+      processedBy: req.admin.id,
+      processedAt: new Date()
+    };
+
+    // Set completion timestamp if status is COMPLETED
+    if (status && status.toUpperCase() === 'COMPLETED') {
+      updateData.completedAt = new Date();
+    }
+
+    const updatedOrder = await prisma.eventOrder.update({
+      where: { id: orderId },
+      data: updateData,
+      include: {
+        event: { select: { id: true, name: true, sport: true } },
+        coach: { select: { id: true, name: true } },
+        admin: { select: { name: true } }
+      }
+    });
+
+    console.log(`✅ Order ${order.orderNumber} updated to ${updatedOrder.status}`);
+
+    res.json(successResponse(updatedOrder, 'Order updated successfully.'));
+
+  } catch (error) {
+    console.error('❌ Update order error:', error);
+    res.status(500).json(errorResponse('Failed to update order.', 500));
+  }
+});
+
+// Get order statistics for admin dashboard
+router.get('/orders/stats', authenticate, requireAdmin, async (req, res) => {
+  try {
+    console.log('📊 Fetching order statistics...');
+
+    const stats = {
+      totalOrders: await prisma.eventOrder.count(),
+      pendingOrders: await prisma.eventOrder.count({ where: { status: 'PENDING' } }),
+      confirmedOrders: await prisma.eventOrder.count({ where: { status: 'CONFIRMED' } }),
+      inProgressOrders: await prisma.eventOrder.count({ where: { status: 'IN_PROGRESS' } }),
+      completedOrders: await prisma.eventOrder.count({ where: { status: 'COMPLETED' } }),
+      urgentOrders: await prisma.eventOrder.count({ 
+        where: { 
+          urgentDelivery: true,
+          status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] }
+        }
+      }),
+      totalCertificates: await prisma.eventOrder.aggregate({
+        _sum: { certificates: true }
+      }).then(result => result._sum.certificates || 0),
+      totalMedals: await prisma.eventOrder.aggregate({
+        _sum: { medals: true }
+      }).then(result => result._sum.medals || 0),
+      totalTrophies: await prisma.eventOrder.aggregate({
+        _sum: { trophies: true }
+      }).then(result => result._sum.trophies || 0),
+      totalRevenue: await prisma.eventOrder.aggregate({
+        _sum: { totalAmount: true }
+      }).then(result => result._sum.totalAmount || 0)
+    };
+
+    // Recent orders
+    const recentOrders = await prisma.eventOrder.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        event: { select: { name: true } },
+        coach: { select: { name: true } }
+      }
+    });
+
+    console.log(`📊 Order stats: ${stats.totalOrders} total, ${stats.pendingOrders} pending, ${stats.urgentOrders} urgent`);
+
+    res.json(successResponse({
+      stats,
+      recentOrders
+    }, 'Order statistics retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get order stats error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve order statistics.', 500));
+  }
+});
+
+// Bulk update order status
+router.put('/orders/bulk-update', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { orderIds, status, adminRemarks } = req.body;
+
+    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json(errorResponse('Order IDs are required.', 400));
+    }
+
+    if (!status) {
+      return res.status(400).json(errorResponse('Status is required.', 400));
+    }
+
+    console.log(`📦 Bulk updating ${orderIds.length} orders to ${status}`);
+
+    const updateData = {
+      status: status.toUpperCase(),
+      processedBy: req.admin.id,
+      processedAt: new Date(),
+      ...(adminRemarks && { adminRemarks })
+    };
+
+    if (status.toUpperCase() === 'COMPLETED') {
+      updateData.completedAt = new Date();
+    }
+
+    const result = await prisma.eventOrder.updateMany({
+      where: {
+        id: { in: orderIds }
+      },
+      data: updateData
+    });
+
+    console.log(`✅ Bulk updated ${result.count} orders`);
+
+    res.json(successResponse({
+      updatedCount: result.count
+    }, `Successfully updated ${result.count} orders.`));
+
+  } catch (error) {
+    console.error('❌ Bulk update orders error:', error);
+    res.status(500).json(errorResponse('Failed to bulk update orders.', 500));
+  }
+});
+
 module.exports = router;

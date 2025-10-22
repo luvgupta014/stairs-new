@@ -15,7 +15,7 @@ const instituteRoutes = require('./routes/institute');
 const clubRoutes = require('./routes/club');
 const adminRoutes = require('./routes/admin');
 const exampleRoutes = require('./routes/example');
-const tournamentResultsRoutes = require('./routes/tournament-results');
+const eventRoutes = require('./routes/event');
 
 // Import middleware
 const { errorResponse } = require('./utils/helpers');
@@ -103,7 +103,7 @@ app.use('/api/institute', instituteRoutes);
 app.use('/api/club', clubRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/example', exampleRoutes);
-app.use('/api/tournament-results', tournamentResultsRoutes);
+app.use('/api/event', eventRoutes);
 
 // Static file serving (for uploaded files)
 app.use('/uploads', express.static('uploads'));
