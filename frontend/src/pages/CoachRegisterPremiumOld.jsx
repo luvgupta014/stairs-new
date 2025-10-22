@@ -48,8 +48,15 @@ const CoachRegisterPremium = () => {
           !formData.mobileNumber || !formData.password || !formData.aadhaar ||
           !formData.gender || !formData.dateOfBirth || !formData.state ||
           !formData.district || !formData.address || !formData.pinCode ||
-          !formData.panNumber || !formData.utrNumber || !formData.primarySports) {
+          !formData.panNumber || !formData.primarySports) {
         setError('Please fill in all required fields');
+        setLoading(false);
+        return;
+      }
+
+      // Only require UTR if not paying later
+      if (!formData.payLater && !formData.utrNumber) {
+        setError('Please provide UTR number or select pay later option');
         setLoading(false);
         return;
       }
@@ -440,18 +447,24 @@ const CoachRegisterPremium = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  UTR Number (Mentioned on the Transaction message) *
-                </label>
-                <input
-                  type="text"
-                  value={formData.utrNumber}
-                  onChange={(e) => handleInputChange('utrNumber', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  placeholder="Enter UTR Number"
-                />
-              </div>
+              {!formData.payLater && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    UTR Number (Mentioned on the Transaction message) *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.utrNumber}
+                    onChange={(e) => handleInputChange('utrNumber', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Enter UTR Number"
+                    required={!formData.payLater}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter the UTR number from your payment transaction
+                  </p>
+                </div>
+              )}
 
               {/* Password Fields */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

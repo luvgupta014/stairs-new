@@ -622,7 +622,6 @@ router.post('/coach/register', async (req, res) => {
 
     // Validation
     console.log('🔍 === COACH VALIDATION PHASE ===');
-    const requiredFields = [name, fatherName, aadhaar, gender, dateOfBirth, state, district, address, pincode, email, phone, panNumber, utrNumber, primarySport, password];
     const missingFields = [];
     
     if (!name) missingFields.push('name');
@@ -637,7 +636,10 @@ router.post('/coach/register', async (req, res) => {
     if (!email) missingFields.push('email');
     if (!phone) missingFields.push('phone');
     if (!panNumber) missingFields.push('panNumber');
-    if (!utrNumber) missingFields.push('utrNumber');
+    
+    // Only require UTR number if not paying later
+    if (!payLater && !utrNumber) missingFields.push('utrNumber');
+    
     if (!primarySport) missingFields.push('primarySport');
     if (!password) missingFields.push('password');
 
