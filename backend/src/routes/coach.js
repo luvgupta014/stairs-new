@@ -1339,7 +1339,7 @@ router.get('/events/:eventId/registrations', authenticate, requireCoach, async (
       return res.status(404).json(errorResponse('Event not found.', 404));
     }
 
-    if (event.organizerId !== req.coach.id) {
+    if (event.coachId !== req.coach.id) {
       return res.status(403).json(errorResponse('Access denied.', 403));
     }
 
@@ -1352,9 +1352,18 @@ router.get('/events/:eventId/registrations', authenticate, requireCoach, async (
               id: true,
               firstName: true,
               lastName: true,
+              name: true,
               sport: true,
               level: true,
               institute: true,
+              dateOfBirth: true,
+              address: true,
+              city: true,
+              state: true,
+              pincode: true,
+              fatherName: true,
+              achievements: true,
+              bio: true,
               user: {
                 select: {
                   email: true,
@@ -1367,7 +1376,7 @@ router.get('/events/:eventId/registrations', authenticate, requireCoach, async (
         skip,
         take,
         orderBy: {
-          registrationDate: 'asc'
+          createdAt: 'asc'
         }
       }),
       prisma.eventRegistration.count({ where: { eventId } })
@@ -1378,10 +1387,10 @@ router.get('/events/:eventId/registrations', authenticate, requireCoach, async (
     res.json(successResponse({
       event: {
         id: event.id,
-        title: event.title,
+        name: event.name,
         startDate: event.startDate,
         maxParticipants: event.maxParticipants,
-        currentParticipants: event.currentParticipants
+        currentParticipants: total
       },
       registrations,
       pagination

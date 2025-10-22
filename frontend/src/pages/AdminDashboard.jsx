@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { getAdminDashboard, moderateEvent, getAdminEvents } from '../api';
+import { getAdminDashboard, moderateEvent, getAdminEvents, getEventRegistrations } from '../api';
+import InfoModal from '../components/InfoModal';
+import DetailModal from '../components/DetailModal';
+import ActionModal from '../components/ActionModal';
+import ParticipantsModal from '../components/ParticipantsModal';
 
 const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
@@ -29,6 +33,37 @@ const AdminDashboard = () => {
   });
   const [eventLoading, setEventLoading] = useState(false);
 
+  // Modal states
+  const [infoModal, setInfoModal] = useState({
+    isOpen: false,
+    title: '',
+    content: '',
+    type: 'info',
+    data: null
+  });
+  
+  const [detailModal, setDetailModal] = useState({
+    isOpen: false,
+    type: '', // 'event' or 'user'
+    data: null,
+    title: ''
+  });
+
+  const [actionModal, setActionModal] = useState({
+    isOpen: false,
+    type: '', // 'approve', 'reject', 'suspend', 'restart'
+    eventId: null,
+    eventName: '',
+    loading: false
+  });
+
+  const [participantsModal, setParticipantsModal] = useState({
+    isOpen: false,
+    eventData: null,
+    participants: [],
+    loading: false
+  });
+
   // New state variables for filters
   const [recentUsersFilters, setRecentUsersFilters] = useState({
     role: '',
@@ -40,6 +75,91 @@ const AdminDashboard = () => {
     search: '',
     dateRange: ''
   });
+
+  // Modal helper functions
+  const showInfoModal = (title, content, type = 'info', data = null) => {
+    setInfoModal({
+      isOpen: true,
+      title,
+      content,
+      type,
+      data
+    });
+  };
+
+  const showDetailModal = (type, data, title) => {
+    setDetailModal({
+      isOpen: true,
+      type,
+      data,
+      title
+    });
+  };
+
+  const closeInfoModal = () => {
+    setInfoModal(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const closeDetailModal = () => {
+    setDetailModal(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const showActionModal = (type, eventId, eventName) => {
+    setActionModal({
+      isOpen: true,
+      type,
+      eventId,
+      eventName,
+      loading: false
+    });
+  };
+
+  const closeActionModal = () => {
+    setActionModal(prev => ({ ...prev, isOpen: false, loading: false }));
+  };
+
+  const handleViewEventRegistrations = async (event) => {
+    try {
+      setParticipantsModal(prev => ({
+        ...prev,
+        isOpen: true,
+        eventData: event,
+        loading: true,
+        participants: []
+      }));
+
+      console.log('📋 Fetching participants for event:', event.id);
+      
+      const response = await getEventRegistrations(event.id);
+      
+      if (response.success) {
+        console.log('✅ Participants loaded:', response.data.registrations?.length || 0);
+        setParticipantsModal(prev => ({
+          ...prev,
+          participants: response.data.registrations || [],
+          loading: false
+        }));
+      } else {
+        throw new Error(response.message || 'Failed to fetch participants');
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch participants:', error);
+      setParticipantsModal(prev => ({
+        ...prev,
+        participants: [],
+        loading: false
+      }));
+      showInfoModal(
+        'Error',
+        `Failed to load participants: ${error.message}`,
+        'error'
+      );
+    }
+  };
+
+  const closeParticipantsModal = () => {
+    setParticipantsModal(prev => ({ ...prev, isOpen: false }));
+  };
 
   useEffect(() => {
     fetchDashboardData();
@@ -137,6 +257,7 @@ const AdminDashboard = () => {
   // Update the handleModerateEvent function with better error handling
   const handleModerateEvent = async (eventId, action, remarks = '') => {
     try {
+      setActionModal(prev => ({ ...prev, loading: true }));
       setModeratingEventId(eventId);
       console.log(`🔄 ${action}ing event ${eventId} with remarks:`, remarks);
       
@@ -175,7 +296,9 @@ const AdminDashboard = () => {
           }));
         }
         
-        // Show success message
+        // Close action modal and show success message
+        closeActionModal();
+        
         const actionMessages = {
           APPROVE: 'approved',
           REJECT: 'rejected',
@@ -183,7 +306,11 @@ const AdminDashboard = () => {
           RESTART: 'restarted and reactivated'
         };
         
-        alert(`Event ${actionMessages[action]} successfully!`);
+        showInfoModal(
+          'Success',
+          `Event ${actionMessages[action]} successfully!`,
+          'success'
+        );
       } else {
         throw new Error(response.message || `Failed to ${action.toLowerCase()} event`);
       }
@@ -202,7 +329,12 @@ const AdminDashboard = () => {
         errorMessage = 'Network error. Please check your connection and try again.';
       }
       
-      alert(`Failed to ${action.toLowerCase()} event: ${errorMessage}`);
+      closeActionModal();
+      showInfoModal(
+        'Error',
+        `Failed to ${action.toLowerCase()} event: ${errorMessage}`,
+        'error'
+      );
     } finally {
       setModeratingEventId(null);
     }
@@ -596,19 +728,14 @@ const AdminDashboard = () => {
                           <td className="py-3 px-4">
                             <div className="flex space-x-1 items-center">
                               <button
-                                onClick={() => handleModerateEvent(event.id, 'APPROVE')}
+                                onClick={() => showActionModal('approve', event.id, event.name)}
                                 disabled={moderatingEventId === event.id}
                                 className="bg-green-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-green-700 transition-colors disabled:opacity-50 h-6"
                               >
                                 {moderatingEventId === event.id ? 'Processing...' : 'Approve'}
                               </button>
                               <button
-                                onClick={() => {
-                                  const remarks = prompt('Enter rejection reason (optional):');
-                                  if (remarks !== null) {
-                                    handleModerateEvent(event.id, 'REJECT', remarks);
-                                  }
-                                }}
+                                onClick={() => showActionModal('reject', event.id, event.name)}
                                 disabled={moderatingEventId === event.id}
                                 className="bg-red-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-red-700 transition-colors disabled:opacity-50 h-6"
                               >
@@ -734,19 +861,14 @@ const AdminDashboard = () => {
                               {event.status === 'PENDING' && (
                                 <>
                                   <button
-                                    onClick={() => handleModerateEvent(event.id, 'APPROVE')}
+                                    onClick={() => showActionModal('approve', event.id, event.name || event.title)}
                                     disabled={moderatingEventId === event.id}
                                     className="bg-green-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-green-700 transition-colors disabled:opacity-50 h-6"
                                   >
                                     Approve
                                   </button>
                                   <button
-                                    onClick={() => {
-                                      const remarks = prompt('Enter rejection reason (optional):');
-                                      if (remarks !== null) {
-                                        handleModerateEvent(event.id, 'REJECT', remarks);
-                                      }
-                                    }}
+                                    onClick={() => showActionModal('reject', event.id, event.name || event.title)}
                                     disabled={moderatingEventId === event.id}
                                     className="bg-red-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-red-700 transition-colors disabled:opacity-50 h-6"
                                   >
@@ -757,12 +879,7 @@ const AdminDashboard = () => {
                               
                               {event.status === 'APPROVED' && (
                                 <button
-                                  onClick={() => {
-                                    if (confirm(`Are you sure you want to suspend "${event.name || event.title}"? This will temporarily disable the event.`)) {
-                                      const remarks = prompt('Enter suspension reason (optional):') || 'Event suspended by admin';
-                                      handleModerateEvent(event.id, 'SUSPEND', remarks);
-                                    }
-                                  }}
+                                  onClick={() => showActionModal('suspend', event.id, event.name || event.title)}
                                   disabled={moderatingEventId === event.id}
                                   className="bg-orange-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-orange-700 transition-colors disabled:opacity-50 h-6"
                                 >
@@ -772,12 +889,7 @@ const AdminDashboard = () => {
                               
                               {(event.status === 'SUSPENDED' || event.status === 'REJECTED') && (
                                 <button
-                                  onClick={() => {
-                                    if (confirm(`Are you sure you want to restart "${event.name || event.title}"? This will reactivate the event and make it available again.`)) {
-                                      const remarks = prompt('Enter restart reason (optional):') || 'Event restarted by admin';
-                                      handleModerateEvent(event.id, 'RESTART', remarks);
-                                    }
-                                  }}
+                                  onClick={() => showActionModal('restart', event.id, event.name || event.title)}
                                   disabled={moderatingEventId === event.id}
                                   className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 h-6"
                                 >
@@ -787,7 +899,7 @@ const AdminDashboard = () => {
                               
                               <button
                                 onClick={() => {
-                                  alert(`Event Details:\n\nName: ${event.name || event.title}\nDescription: ${event.description}\nSport: ${event.sport}\nVenue: ${event.location || event.venue}\nDate: ${new Date(event.startDate).toLocaleString()}\nMax Participants: {event.maxParticipants}\nStatus: ${event.status}\nCurrent Participants: ${event.currentParticipants || 0}${event.adminNotes ? `\nAdmin Notes: ${event.adminNotes}` : ''}`);
+                                  showDetailModal('event', event, `Event Details: ${event.name || event.title}`);
                                 }}
                                 className="bg-gray-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-gray-700 transition-colors h-6"
                               >
@@ -929,7 +1041,7 @@ const AdminDashboard = () => {
                         <div className="flex space-x-1 items-center">
                           <button
                             onClick={() => {
-                              alert(`User Details:\n\nName: ${user.name}\nEmail: ${user.email}\nRole: ${user.role}\nStatus: ${user.isActive && user.isVerified ? 'Active' : 'Pending'}\nJoined: ${new Date(user.createdAt).toLocaleDateString()}`);
+                              showDetailModal('user', user, `User Details: ${user.name}`);
                             }}
                             className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors h-6"
                           >
@@ -940,7 +1052,11 @@ const AdminDashboard = () => {
                               onClick={() => {
                                 if (confirm(`Are you sure you want to activate ${user.name}?`)) {
                                   // TODO: Implement user activation
-                                  alert('User activation functionality will be implemented');
+                                  showInfoModal(
+                                    'Coming Soon', 
+                                    'User activation functionality will be implemented in a future update.',
+                                    'info'
+                                  );
                                 }
                               }}
                               className="bg-green-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-green-700 transition-colors h-6"
@@ -980,6 +1096,41 @@ const AdminDashboard = () => {
           )}
         </div>
       </div>
+
+      {/* Modals */}
+      <InfoModal
+        isOpen={infoModal.isOpen}
+        onClose={closeInfoModal}
+        title={infoModal.title}
+        content={infoModal.content}
+        type={infoModal.type}
+        data={infoModal.data}
+      />
+
+      <DetailModal
+        isOpen={detailModal.isOpen}
+        onClose={closeDetailModal}
+        type={detailModal.type}
+        data={detailModal.data}
+        title={detailModal.title}
+      />
+
+      <ActionModal
+        isOpen={actionModal.isOpen}
+        onClose={closeActionModal}
+        onConfirm={(remarks) => handleModerateEvent(actionModal.eventId, actionModal.type.toUpperCase(), remarks)}
+        type={actionModal.type}
+        eventName={actionModal.eventName}
+        loading={actionModal.loading}
+      />
+
+      <ParticipantsModal
+        isOpen={participantsModal.isOpen}
+        onClose={closeParticipantsModal}
+        eventData={participantsModal.eventData}
+        participants={participantsModal.participants}
+        loading={participantsModal.loading}
+      />
     </div>
   );
 };

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { getCoachDashboard, getCoachEvents, updateEvent, deleteEvent } from '../../api';
+import { getCoachDashboard, getCoachEvents, updateEvent, deleteEvent, getEventRegistrations } from '../../api';
 import StudentCard from '../../components/StudentCard';
 import Spinner from '../../components/Spinner';
+import CoachParticipantsModal from '../../components/CoachParticipantsModal';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FaExclamationTriangle, FaCreditCard, FaCheckCircle, FaEdit, FaTrash, FaEye, FaUsers, FaCalendar, FaMapMarkerAlt } from 'react-icons/fa';
 
@@ -22,6 +23,14 @@ const CoachDashboard = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [eventToDelete, setEventToDelete] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  
+  // Participants modal state
+  const [participantsModal, setParticipantsModal] = useState({
+    isOpen: false,
+    eventData: null,
+    participants: [],
+    loading: false
+  });
   
   const location = useLocation();
   const navigate = useNavigate();
@@ -217,9 +226,42 @@ const CoachDashboard = () => {
     document.body.removeChild(link);
   };
 
-  const viewRegistrations = (event) => {
-    navigate(`/coach/event/${event.id}/participants`, { 
-      state: { event } 
+  const viewRegistrations = async (event) => {
+    try {
+      setParticipantsModal({
+        isOpen: true,
+        eventData: event,
+        participants: [],
+        loading: true
+      });
+
+      const response = await getEventRegistrations(event.id);
+      
+      if (response.success) {
+        setParticipantsModal(prev => ({
+          ...prev,
+          participants: response.data.registrations || [],
+          loading: false
+        }));
+      } else {
+        throw new Error(response.message || 'Failed to fetch participants');
+      }
+    } catch (error) {
+      console.error('Failed to fetch participants:', error);
+      setParticipantsModal(prev => ({
+        ...prev,
+        loading: false
+      }));
+      alert(`Failed to load participants: ${error.message}`);
+    }
+  };
+
+  const closeParticipantsModal = () => {
+    setParticipantsModal({
+      isOpen: false,
+      eventData: null,
+      participants: [],
+      loading: false
     });
   };
 
@@ -1100,6 +1142,15 @@ const CoachDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Participants Modal */}
+      <CoachParticipantsModal
+        isOpen={participantsModal.isOpen}
+        onClose={closeParticipantsModal}
+        eventData={participantsModal.eventData}
+        participants={participantsModal.participants}
+        loading={participantsModal.loading}
+      />
     </div>
   );
 };
