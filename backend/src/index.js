@@ -3,6 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const fileUpload = require('express-fileupload');
+const path = require('path');
 const { PrismaClient } = require('@prisma/client');
 require('dotenv').config();
 
@@ -14,6 +15,7 @@ const instituteRoutes = require('./routes/institute');
 const clubRoutes = require('./routes/club');
 const adminRoutes = require('./routes/admin');
 const exampleRoutes = require('./routes/example');
+const tournamentResultsRoutes = require('./routes/tournament-results');
 
 // Import middleware
 const { errorResponse } = require('./utils/helpers');
@@ -61,6 +63,9 @@ app.use(fileUpload({
   tempFileDir: '/tmp/'
 }));
 
+// Serve uploaded tournament result files publicly
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 // Request logging middleware
 app.use((req, res, next) => {
   // console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
@@ -98,6 +103,7 @@ app.use('/api/institute', instituteRoutes);
 app.use('/api/club', clubRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/example', exampleRoutes);
+app.use('/api/tournament-results', tournamentResultsRoutes);
 
 // Static file serving (for uploaded files)
 app.use('/uploads', express.static('uploads'));

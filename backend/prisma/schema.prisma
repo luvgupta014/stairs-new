@@ -126,6 +126,7 @@ model Coach {
   events             Event[]
   payments           Payment[]
   instituteCoaches   InstituteCoach[]
+  tournamentResultFiles TournamentResultFile[]
 
   @@map("coaches")
 }
@@ -413,4 +414,26 @@ enum MemberStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+}
+
+// Tournament Result File Management
+model TournamentResultFile {
+  id             String    @id @default(cuid())
+  coachId        String
+  originalName   String    // Original filename when uploaded
+  filename       String    // Stored filename (unique)
+  filepath       String    // Full file path on server
+  fileSize       Int       // File size in bytes
+  mimeType       String    // File MIME type
+  description    String?   // Optional description
+  tournamentName String?   // Tournament name
+  tournamentDate DateTime? // Tournament date
+  uploadDate     DateTime  @default(now())
+  isPublic       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  coach Coach @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@map("tournament_result_files")
 }

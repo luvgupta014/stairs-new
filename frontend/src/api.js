@@ -534,4 +534,49 @@ export const getUserRole = () => {
   return localStorage.getItem('userRole');
 };
 
+// Tournament Results API
+export const uploadTournamentResults = async (formData) => {
+  try {
+    const response = await api.post('/api/tournament-results/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Upload tournament results error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getTournamentResults = async (params = {}) => {
+  try {
+    const response = await api.get('/api/tournament-results', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Get tournament results error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const deleteTournamentResult = async (fileId) => {
+  try {
+    const response = await api.delete(`/api/tournament-results/${fileId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Delete tournament result error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getAllTournamentResultsForAdmin = async (params = {}) => {
+  try {
+    const response = await api.get('/api/tournament-results/admin/all', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Get all tournament results error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 export default api;
