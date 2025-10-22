@@ -1350,20 +1350,20 @@ router.get('/events/:eventId/registrations', authenticate, requireCoach, async (
           student: {
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
               name: true,
               sport: true,
               level: true,
-              institute: true,
+              school: true,
+              club: true,
               dateOfBirth: true,
               address: true,
-              city: true,
               state: true,
+              district: true,
               pincode: true,
               fatherName: true,
               achievements: true,
-              bio: true,
+              coachName: true,
+              coachMobile: true,
               user: {
                 select: {
                   email: true,
@@ -1731,6 +1731,203 @@ router.post('/verify-payment', authenticate, requireCoach, async (req, res) => {
 
   } catch (error) {
     console.error('Verify payment error:', error);
+    res.status(500).json(errorResponse('Payment verification failed.', 500));
+  }
+});
+
+// Create payment order for event order
+router.post('/orders/:orderId/create-payment', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    console.log(`💳 Creating payment order for event order ${orderId}`);
+    console.log(`👤 Coach ID: ${req.coach?.id}`);
+    console.log(`👤 User ID: ${req.user?.id}`);
+
+    // Get the order details
+    const order = await prisma.eventOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        event: { select: { name: true } },
+        coach: { select: { name: true } }
+      }
+    });
+
+    console.log(`📋 Order found:`, order ? 'Yes' : 'No');
+
+    if (!order) {
+      console.log(`❌ Order not found: ${orderId}`);
+      return res.status(404).json(errorResponse('Order not found.', 404));
+    }
+
+    if (order.coachId !== req.coach.id) {
+      console.log(`❌ Access denied. Order coachId: ${order.coachId}, Request coachId: ${req.coach.id}`);
+      return res.status(403).json(errorResponse('Access denied.', 403));
+    }
+
+    if (order.status !== 'CONFIRMED') {
+      console.log(`❌ Order status is ${order.status}, expected CONFIRMED`);
+      return res.status(400).json(errorResponse('Order must be confirmed by admin before payment.', 400));
+    }
+
+    if (!order.totalAmount || order.totalAmount <= 0) {
+      console.log(`❌ Invalid total amount: ${order.totalAmount}`);
+      return res.status(400).json(errorResponse('Order total amount is required.', 400));
+    }
+
+    if (order.paymentStatus === 'SUCCESS') {
+      console.log(`❌ Payment already completed for order: ${orderId}`);
+      return res.status(400).json(errorResponse('Order payment already completed.', 400));
+    }
+
+    console.log(`✅ Order validation passed. Creating Razorpay order...`);
+
+    // Create Razorpay order
+    const options = {
+      amount: Math.round(order.totalAmount * 100), // Amount in paise
+      currency: 'INR',
+      receipt: `order_${orderId}_${Date.now()}`.slice(0, 40),
+      payment_capture: 1,
+      notes: {
+        orderId: orderId,
+        eventName: order.event.name,
+        coachName: order.coach.name,
+        type: 'EVENT_ORDER'
+      }
+    };
+
+    console.log(`📋 Razorpay options:`, options);
+
+    let razorpayOrder;
+    try {
+      razorpayOrder = await razorpay.orders.create(options);
+      console.log(`✅ Razorpay order created:`, razorpayOrder.id);
+    } catch (razorpayError) {
+      console.error(`❌ Razorpay order creation failed:`, razorpayError);
+      throw new Error(`Razorpay order creation failed: ${razorpayError.message}`);
+    }
+
+    // Update the event order with payment details
+    const updatedOrder = await prisma.eventOrder.update({
+      where: { id: orderId },
+      data: {
+        razorpayOrderId: razorpayOrder.id,
+        paymentStatus: 'PENDING',
+        status: 'PAYMENT_PENDING'
+      }
+    });
+
+    console.log(`✅ Payment order created: ${razorpayOrder.id} for ₹${order.totalAmount}`);
+
+    res.json(successResponse({
+      orderId: razorpayOrder.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      orderDetails: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        eventName: order.event.name,
+        totalAmount: order.totalAmount,
+        certificates: order.certificates,
+        medals: order.medals,
+        trophies: order.trophies
+      }
+    }, 'Payment order created successfully.'));
+
+  } catch (error) {
+    console.error('❌ Create order payment error:', error);
+    console.error('❌ Error stack:', error.stack);
+    console.error('❌ Error details:', {
+      name: error.name,
+      message: error.message,
+      code: error.code
+    });
+    res.status(500).json(errorResponse('Failed to create payment order.', 500));
+  }
+});
+
+// Verify order payment
+router.post('/orders/:orderId/verify-payment', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature
+    } = req.body;
+
+    console.log(`💳 Verifying payment for order ${orderId}`);
+
+    // Get the order
+    const order = await prisma.eventOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        event: { select: { name: true } },
+        coach: { select: { name: true } }
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json(errorResponse('Order not found.', 404));
+    }
+
+    if (order.coachId !== req.coach.id) {
+      return res.status(403).json(errorResponse('Access denied.', 403));
+    }
+
+    if (order.razorpayOrderId !== razorpay_order_id) {
+      return res.status(400).json(errorResponse('Invalid order ID.', 400));
+    }
+
+    // Verify signature
+    const body = razorpay_order_id + '|' + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      console.log('❌ Payment signature verification failed');
+      return res.status(400).json(errorResponse('Invalid payment signature.', 400));
+    }
+
+    // Update order with payment details
+    const updatedOrder = await prisma.eventOrder.update({
+      where: { id: orderId },
+      data: {
+        razorpayPaymentId: razorpay_payment_id,
+        paymentStatus: 'SUCCESS',
+        status: 'PAID',
+        paymentDate: new Date(),
+        paymentMethod: 'razorpay'
+      },
+      include: {
+        event: { select: { name: true } },
+        coach: { select: { name: true } }
+      }
+    });
+
+    console.log(`✅ Payment verified for order ${order.orderNumber}: ${razorpay_payment_id}`);
+
+    // TODO: Send notification to admin about completed payment
+    // For now, we'll just log it
+    console.log(`📧 NOTIFICATION: Order ${order.orderNumber} payment completed - Admin should be notified`);
+
+    res.json(successResponse({
+      paymentId: razorpay_payment_id,
+      status: 'COMPLETED',
+      order: {
+        id: updatedOrder.id,
+        orderNumber: updatedOrder.orderNumber,
+        eventName: updatedOrder.event.name,
+        totalAmount: updatedOrder.totalAmount,
+        paymentDate: updatedOrder.paymentDate,
+        status: updatedOrder.status
+      }
+    }, 'Payment verified successfully. Admin has been notified to process your order.'));
+
+  } catch (error) {
+    console.error('❌ Verify order payment error:', error);
     res.status(500).json(errorResponse('Payment verification failed.', 500));
   }
 });

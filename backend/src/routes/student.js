@@ -648,7 +648,7 @@ router.post('/events/:eventId/register', authenticate, requireStudent, async (re
         data: {
           studentId: student.id,
           eventId: eventId,
-          status: 'PENDING'                // FIXED: Use correct status
+          status: 'REGISTERED'             // Changed: Set status to REGISTERED upon successful registration
         },
         include: {
           event: {

@@ -24,10 +24,12 @@ const ParticipantsModal = ({
   const getStatusBadge = (participant) => {
     const status = participant.status || 'REGISTERED';
     const statusColors = {
+      'PENDING': 'bg-yellow-100 text-yellow-800',
       'REGISTERED': 'bg-green-100 text-green-800',
+      'APPROVED': 'bg-green-100 text-green-800',
       'CONFIRMED': 'bg-blue-100 text-blue-800',
       'CANCELLED': 'bg-red-100 text-red-800',
-      'PENDING': 'bg-yellow-100 text-yellow-800'
+      'REJECTED': 'bg-red-100 text-red-800'
     };
     
     return (
@@ -130,8 +132,9 @@ const ParticipantsModal = ({
                         </div>
                         <div>
                           <h5 className="font-medium text-gray-900">
-                            {participant.student?.firstName} {participant.student?.lastName} 
-                            {participant.student?.name && ` (${participant.student.name})`}
+                            {participant.student?.name || 
+                             `${participant.student?.firstName || ''} ${participant.student?.lastName || ''}`.trim() || 
+                             'Student'}
                           </h5>
                           <p className="text-sm text-gray-600">
                             Registered on {formatDate(participant.registeredAt || participant.createdAt)}

@@ -665,4 +665,33 @@ export const bulkUpdateOrders = async (orderIds, status, adminRemarks) => {
   }
 };
 
+// Order Payment APIs
+export const createOrderPayment = async (orderId) => {
+  try {
+    const response = await api.post(`/api/coach/orders/${orderId}/create-payment`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const verifyOrderPayment = async (orderId, paymentData) => {
+  try {
+    const response = await api.post(`/api/coach/orders/${orderId}/verify-payment`, paymentData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Admin Event Participants API
+export const getEventParticipants = async (eventId, params = {}) => {
+  try {
+    const response = await api.get(`/api/admin/events/${eventId}/participants`, { params });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 export default api;

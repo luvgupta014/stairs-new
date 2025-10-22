@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getAdminDashboard, moderateEvent, getAdminEvents, getEventRegistrations } from '../api';
+import { getAdminDashboard, moderateEvent, getAdminEvents, getEventRegistrations, getEventParticipants } from '../api';
 import InfoModal from '../components/InfoModal';
 import DetailModal from '../components/DetailModal';
 import ActionModal from '../components/ActionModal';
@@ -131,7 +131,8 @@ const AdminDashboard = () => {
 
       console.log('📋 Fetching participants for event:', event.id);
       
-      const response = await getEventRegistrations(event.id);
+      // Use the admin-specific endpoint for event participants
+      const response = await getEventParticipants(event.id);
       
       if (response.success) {
         console.log('✅ Participants loaded:', response.data.registrations?.length || 0);

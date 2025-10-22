@@ -4,7 +4,9 @@ import {
   createEventOrder, 
   getEventOrders, 
   updateEventOrder, 
-  deleteEventOrder 
+  deleteEventOrder,
+  createOrderPayment,
+  verifyOrderPayment
 } from '../api';
 import { 
   FaPlus, 
@@ -18,7 +20,9 @@ import {
   FaExclamationTriangle,
   FaClock,
   FaCheck,
-  FaSpinner
+  FaSpinner,
+  FaCreditCard,
+  FaMoneyBillWave
 } from 'react-icons/fa';
 import Spinner from '../components/Spinner';
 
@@ -32,6 +36,7 @@ const EventOrders = () => {
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [paymentLoading, setPaymentLoading] = useState(false);
   
   // Order form state
   const [orderForm, setOrderForm] = useState({
@@ -141,10 +146,99 @@ const EventOrders = () => {
     }
   };
 
+  const handlePayment = async (order) => {
+    if (!order.totalAmount || order.totalAmount <= 0) {
+      showMessage('error', 'Order total amount is required for payment');
+      return;
+    }
+
+    try {
+      setPaymentLoading(true);
+      
+      // Create payment order using the API function
+      const result = await createOrderPayment(order.id);
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to create payment order');
+      }
+
+      const paymentData = result.data;
+
+      // Load Razorpay script if not already loaded
+      if (!window.Razorpay) {
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.async = true;
+        document.body.appendChild(script);
+        
+        await new Promise((resolve) => {
+          script.onload = resolve;
+        });
+      }
+
+      // Configure Razorpay options
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount: paymentData.amount,
+        currency: paymentData.currency,
+        name: 'Event Order Payment',
+        description: `Payment for Order: ${paymentData.orderDetails.orderNumber}`,
+        order_id: paymentData.orderId,
+        prefill: {
+          name: 'Coach', // You can get this from auth context
+          email: '', // You can get this from auth context
+        },
+        theme: {
+          color: '#2563eb'
+        },
+        handler: async function (response) {
+          try {
+            setPaymentLoading(true);
+            
+            // Verify payment using API function
+            const verifyResult = await verifyOrderPayment(order.id, {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature
+            });
+            
+            if (verifyResult.success) {
+              showMessage('success', 'Payment completed successfully! Admin has been notified.');
+              loadOrders(); // Refresh orders to show updated payment status
+            } else {
+              throw new Error(verifyResult.message || 'Payment verification failed');
+            }
+          } catch (error) {
+            console.error('Payment verification failed:', error);
+            showMessage('error', error.message || 'Payment verification failed');
+          } finally {
+            setPaymentLoading(false);
+          }
+        },
+        modal: {
+          ondismiss: function() {
+            setPaymentLoading(false);
+            showMessage('info', 'Payment cancelled');
+          }
+        }
+      };
+
+      const razorpay = new window.Razorpay(options);
+      razorpay.open();
+
+    } catch (error) {
+      console.error('Payment initiation failed:', error);
+      showMessage('error', error.message || 'Failed to initiate payment');
+      setPaymentLoading(false);
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'PENDING': return 'bg-yellow-100 text-yellow-800';
       case 'CONFIRMED': return 'bg-blue-100 text-blue-800';
+      case 'PAYMENT_PENDING': return 'bg-orange-100 text-orange-800';
+      case 'PAID': return 'bg-green-100 text-green-800';
       case 'IN_PROGRESS': return 'bg-purple-100 text-purple-800';
       case 'COMPLETED': return 'bg-green-100 text-green-800';
       case 'CANCELLED': return 'bg-red-100 text-red-800';
@@ -156,6 +250,8 @@ const EventOrders = () => {
     switch (status) {
       case 'PENDING': return <FaClock className="w-4 h-4" />;
       case 'CONFIRMED': return <FaCheck className="w-4 h-4" />;
+      case 'PAYMENT_PENDING': return <FaCreditCard className="w-4 h-4" />;
+      case 'PAID': return <FaMoneyBillWave className="w-4 h-4" />;
       case 'IN_PROGRESS': return <FaSpinner className="w-4 h-4 animate-spin" />;
       case 'COMPLETED': return <FaCheck className="w-4 h-4" />;
       case 'CANCELLED': return <FaExclamationTriangle className="w-4 h-4" />;
@@ -298,6 +394,15 @@ const EventOrders = () => {
                       {order.totalAmount && (
                         <div className="text-sm font-medium text-green-600 mb-2">
                           Total: ₹{order.totalAmount.toLocaleString()}
+                          {order.paymentStatus && (
+                            <span className={`ml-2 px-2 py-1 rounded-full text-xs ${
+                              order.paymentStatus === 'SUCCESS' ? 'bg-green-100 text-green-800' :
+                              order.paymentStatus === 'PENDING' ? 'bg-orange-100 text-orange-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              Payment: {order.paymentStatus}
+                            </span>
+                          )}
                         </div>
                       )}
 
@@ -320,10 +425,35 @@ const EventOrders = () => {
                             Processed: {new Date(order.processedAt).toLocaleDateString()}
                           </span>
                         )}
+                        {order.paymentDate && (
+                          <span className="ml-4 text-green-600">
+                            Paid: {new Date(order.paymentDate).toLocaleDateString()}
+                          </span>
+                        )}
                       </div>
                     </div>
                     
                     <div className="flex items-center space-x-2">
+                      {order.status === 'CONFIRMED' && order.totalAmount > 0 && order.paymentStatus !== 'SUCCESS' && (
+                        <button
+                          onClick={() => handlePayment(order)}
+                          disabled={paymentLoading}
+                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors inline-flex items-center disabled:opacity-50"
+                        >
+                          {paymentLoading ? (
+                            <>
+                              <FaSpinner className="animate-spin mr-1" />
+                              Processing...
+                            </>
+                          ) : (
+                            <>
+                              <FaCreditCard className="mr-1" />
+                              Pay Now
+                            </>
+                          )}
+                        </button>
+                      )}
+                      
                       {order.status === 'PENDING' && (
                         <>
                           <button

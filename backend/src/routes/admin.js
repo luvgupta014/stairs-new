@@ -1158,6 +1158,93 @@ router.put('/events/bulk-moderate', authenticate, requireAdmin, async (req, res)
   }
 });
 
+// Get event participants (Admin access)
+router.get('/events/:eventId/participants', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+    const { skip, take } = getPaginationParams(page, limit);
+
+    console.log(`👥 Admin viewing participants for event ${eventId}`);
+
+    // Check if event exists
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        coach: {
+          select: { id: true, name: true }
+        }
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    const [registrations, total] = await Promise.all([
+      prisma.eventRegistration.findMany({
+        where: { eventId },
+        include: {
+          student: {
+            select: {
+              id: true,
+              name: true,
+              sport: true,
+              level: true,
+              school: true,
+              club: true,
+              dateOfBirth: true,
+              address: true,
+              state: true,
+              district: true,
+              pincode: true,
+              fatherName: true,
+              achievements: true,
+              coachName: true,
+              coachMobile: true,
+              user: {
+                select: {
+                  email: true,
+                  phone: true
+                }
+              }
+            }
+          }
+        },
+        skip,
+        take,
+        orderBy: {
+          createdAt: 'asc'
+        }
+      }),
+      prisma.eventRegistration.count({ where: { eventId } })
+    ]);
+
+    console.log(`👥 Found ${total} participants for event ${event.name}`);
+
+    const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
+
+    res.json(successResponse({
+      event: {
+        id: event.id,
+        name: event.name,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        venue: event.venue,
+        maxParticipants: event.maxParticipants,
+        currentParticipants: total,
+        coach: event.coach
+      },
+      registrations,
+      pagination
+    }, 'Event participants retrieved successfully.'));
+
+  } catch (error) {
+    console.error('Get event participants error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve event participants.', 500));
+  }
+});
+
 // Create admin user
 router.post('/create-admin', authenticate, requireAdmin, async (req, res) => {
   try {
@@ -1289,13 +1376,13 @@ router.get('/users/:userId/activity', authenticate, requireAdmin, async (req, re
       activities = [
         ...studentActivities.map(conn => ({
           type: 'CONNECTION',
-          action: `Connected with coach ${conn.coach.firstName} ${conn.coach.lastName}`,
+          action: `Connected with coach ${conn.coach.name}`,
           date: conn.createdAt,
           status: conn.status
         })),
         ...eventRegistrations.map(reg => ({
           type: 'EVENT_REGISTRATION',
-          action: `Registered for event ${reg.event.title}`,
+          action: `Registered for event ${reg.event.name || reg.event.title}`,
           date: reg.registrationDate,
           status: reg.status
         }))

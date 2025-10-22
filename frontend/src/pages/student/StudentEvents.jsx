@@ -226,9 +226,9 @@ const StudentEvents = () => {
                         <div className="flex justify-between items-start mb-4">
                           <h3 className="font-semibold text-gray-900 text-lg">{registration.event.title || registration.event.name}</h3>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            registration.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
+                            registration.status === 'REGISTERED' || registration.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
                             registration.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-gray-100 text-gray-800'
+                            'bg-red-100 text-red-800'
                           }`}>
                             {registration.status}
                           </span>

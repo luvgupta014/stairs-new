@@ -38,8 +38,11 @@ const CoachParticipantsModal = ({ isOpen, onClose, eventData, participants, load
   const getStatusBadge = (status) => {
     const statusStyles = {
       PENDING: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      CONFIRMED: 'bg-green-100 text-green-800 border-green-200',
+      REGISTERED: 'bg-green-100 text-green-800 border-green-200',
+      APPROVED: 'bg-green-100 text-green-800 border-green-200',
+      CONFIRMED: 'bg-blue-100 text-blue-800 border-blue-200',
       CANCELLED: 'bg-red-100 text-red-800 border-red-200',
+      REJECTED: 'bg-red-100 text-red-800 border-red-200',
       COMPLETED: 'bg-blue-100 text-blue-800 border-blue-200'
     };
     

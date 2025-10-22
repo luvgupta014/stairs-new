@@ -404,6 +404,7 @@ enum EventStatus {
 
 enum RegistrationStatus {
   PENDING
+  REGISTERED
   APPROVED
   REJECTED
 }
@@ -463,6 +464,13 @@ model EventOrder {
   status        OrderStatus @default(PENDING)
   adminRemarks  String?     // Admin comments/notes
   
+  // Payment Information
+  paymentStatus     PaymentStatus @default(PENDING) // Payment status
+  razorpayOrderId   String?       // Razorpay order ID
+  razorpayPaymentId String?       // Razorpay payment ID
+  paymentDate       DateTime?     // When payment was completed
+  paymentMethod     String?       // Payment method used
+  
   // Timestamps
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -481,9 +489,11 @@ model EventOrder {
 }
 
 enum OrderStatus {
-  PENDING     // Order placed, waiting for admin review
-  CONFIRMED   // Admin confirmed the order
-  IN_PROGRESS // Order is being prepared
-  COMPLETED   // Order is ready/delivered
-  CANCELLED   // Order was cancelled
+  PENDING         // Order placed, waiting for admin review
+  CONFIRMED       // Admin confirmed the order, payment required
+  PAYMENT_PENDING // Payment initiated but not completed
+  PAID            // Payment completed successfully
+  IN_PROGRESS     // Order is being prepared
+  COMPLETED       // Order is ready/delivered
+  CANCELLED       // Order was cancelled
 }

@@ -584,9 +584,9 @@ const StudentDashboard = () => {
                         <div className="flex justify-between items-start mb-4">
                           <h4 className="font-semibold text-gray-900">{registration.event.title || registration.event.name}</h4>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            registration.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
+                            registration.status === 'REGISTERED' || registration.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
                             registration.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-blue-100 text-blue-800'
+                            'bg-red-100 text-red-800'
                           }`}>
                             {registration.status}
                           </span>

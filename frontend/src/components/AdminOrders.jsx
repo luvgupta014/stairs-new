@@ -17,7 +17,10 @@ import {
   FaSpinner,
   FaEye,
   FaEdit,
-  FaDownload
+  FaDownload,
+  FaCreditCard,
+  FaMoneyBillWave,
+  FaBell
 } from 'react-icons/fa';
 import Spinner from '../components/Spinner';
 
@@ -29,6 +32,7 @@ const AdminOrders = () => {
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [paidOrders, setPaidOrders] = useState([]);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -60,7 +64,26 @@ const AdminOrders = () => {
       const response = await getAllOrdersForAdmin(filters);
       
       if (response.success) {
-        setOrders(response.data.orders || []);
+        const newOrders = response.data.orders || [];
+        
+        // Check for newly paid orders to show notifications
+        if (orders.length > 0) {
+          const newlyPaidOrders = newOrders.filter(newOrder => 
+            newOrder.status === 'PAID' && 
+            !orders.find(oldOrder => 
+              oldOrder.id === newOrder.id && oldOrder.status === 'PAID'
+            )
+          );
+          
+          if (newlyPaidOrders.length > 0) {
+            setPaidOrders(prev => [...prev, ...newlyPaidOrders]);
+            newlyPaidOrders.forEach(order => {
+              showMessage('success', `🎉 Payment received for order ${order.orderNumber}! Ready to process.`);
+            });
+          }
+        }
+        
+        setOrders(newOrders);
       }
     } catch (error) {
       console.error('Failed to load orders:', error);
@@ -83,7 +106,11 @@ const AdminOrders = () => {
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
-    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    setTimeout(() => setMessage({ type: '', text: '' }), 8000); // Extended for payment notifications
+  };
+
+  const dismissPaidOrderNotification = (orderId) => {
+    setPaidOrders(prev => prev.filter(order => order.id !== orderId));
   };
 
   const handleFilterChange = (key, value) => {
@@ -201,6 +228,8 @@ const AdminOrders = () => {
     switch (status) {
       case 'PENDING': return 'bg-yellow-100 text-yellow-800';
       case 'CONFIRMED': return 'bg-blue-100 text-blue-800';
+      case 'PAYMENT_PENDING': return 'bg-orange-100 text-orange-800';
+      case 'PAID': return 'bg-green-100 text-green-800';
       case 'IN_PROGRESS': return 'bg-purple-100 text-purple-800';
       case 'COMPLETED': return 'bg-green-100 text-green-800';
       case 'CANCELLED': return 'bg-red-100 text-red-800';
@@ -212,6 +241,8 @@ const AdminOrders = () => {
     switch (status) {
       case 'PENDING': return <FaClock className="w-4 h-4" />;
       case 'CONFIRMED': return <FaCheck className="w-4 h-4" />;
+      case 'PAYMENT_PENDING': return <FaCreditCard className="w-4 h-4" />;
+      case 'PAID': return <FaMoneyBillWave className="w-4 h-4" />;
       case 'IN_PROGRESS': return <FaSpinner className="w-4 h-4 animate-spin" />;
       case 'COMPLETED': return <FaCheck className="w-4 h-4" />;
       case 'CANCELLED': return <FaExclamationTriangle className="w-4 h-4" />;
@@ -235,6 +266,51 @@ const AdminOrders = () => {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Event Orders Management</h1>
           <p className="text-gray-600">Manage certificate, medal, and trophy orders from coaches</p>
         </div>
+
+        {/* Payment Notifications */}
+        {paidOrders.length > 0 && (
+          <div className="mb-6 space-y-2">
+            {paidOrders.map((order) => (
+              <div key={order.id} className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <div className="p-2 rounded-lg bg-green-100 mr-3">
+                      <FaBell className="text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-green-800 font-medium">
+                        💰 Payment Received - Order {order.orderNumber}
+                      </p>
+                      <p className="text-green-600 text-sm">
+                        {order.event.name} • ₹{order.totalAmount?.toLocaleString()} • 
+                        Coach: {order.coach.name}
+                      </p>
+                      {order.paymentDate && (
+                        <p className="text-green-500 text-xs">
+                          Paid on: {new Date(order.paymentDate).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => openOrderModal(order)}
+                      className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+                    >
+                      Process Order
+                    </button>
+                    <button
+                      onClick={() => dismissPaidOrderNotification(order.id)}
+                      className="text-green-600 hover:text-green-800 px-2"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Status Messages */}
         {message.text && (
@@ -347,6 +423,8 @@ const AdminOrders = () => {
                 <option value="">All Statuses</option>
                 <option value="PENDING">Pending</option>
                 <option value="CONFIRMED">Confirmed</option>
+                <option value="PAYMENT_PENDING">Payment Pending</option>
+                <option value="PAID">Paid</option>
                 <option value="IN_PROGRESS">In Progress</option>
                 <option value="COMPLETED">Completed</option>
                 <option value="CANCELLED">Cancelled</option>
@@ -548,19 +626,36 @@ const AdminOrders = () => {
                           {getStatusIcon(order.status)}
                           <span className="ml-1">{order.status}</span>
                         </span>
+                        {order.paymentStatus && order.status === 'PAID' && (
+                          <div className="mt-1">
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              <FaMoneyBillWave className="w-3 h-3 mr-1" />
+                              Payment Complete
+                            </span>
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
                           {order.totalAmount ? `₹${order.totalAmount.toLocaleString()}` : 'Not set'}
                         </div>
+                        {order.paymentDate && (
+                          <div className="text-xs text-green-600">
+                            Paid: {new Date(order.paymentDate).toLocaleDateString()}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
                           onClick={() => openOrderModal(order)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm inline-flex items-center"
+                          className={`px-3 py-1 rounded text-sm inline-flex items-center ${
+                            order.status === 'PAID' 
+                              ? 'bg-green-600 hover:bg-green-700 text-white' 
+                              : 'bg-blue-600 hover:bg-blue-700 text-white'
+                          }`}
                         >
                           <FaEdit className="mr-1" />
-                          Manage
+                          {order.status === 'PAID' ? 'Process' : 'Manage'}
                         </button>
                       </td>
                     </tr>
@@ -593,6 +688,8 @@ const AdminOrders = () => {
                   >
                     <option value="PENDING">Pending</option>
                     <option value="CONFIRMED">Confirmed</option>
+                    <option value="PAYMENT_PENDING">Payment Pending</option>
+                    <option value="PAID">Paid</option>
                     <option value="IN_PROGRESS">In Progress</option>
                     <option value="COMPLETED">Completed</option>
                     <option value="CANCELLED">Cancelled</option>
@@ -679,6 +776,22 @@ const AdminOrders = () => {
                 {editingOrder.specialInstructions && (
                   <div className="mt-2 text-sm">
                     <strong>Special Instructions:</strong> {editingOrder.specialInstructions}
+                  </div>
+                )}
+                {editingOrder.paymentStatus === 'SUCCESS' && editingOrder.paymentDate && (
+                  <div className="mt-2 p-2 bg-green-100 rounded text-sm">
+                    <div className="flex items-center text-green-800">
+                      <FaMoneyBillWave className="mr-2" />
+                      <strong>Payment Completed</strong>
+                    </div>
+                    <div className="text-green-600 mt-1">
+                      Paid on: {new Date(editingOrder.paymentDate).toLocaleString()}
+                    </div>
+                    {editingOrder.razorpayPaymentId && (
+                      <div className="text-green-600 text-xs mt-1">
+                        Payment ID: {editingOrder.razorpayPaymentId}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

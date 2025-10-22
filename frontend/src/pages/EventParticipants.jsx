@@ -134,9 +134,10 @@ const EventParticipants = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Statuses</option>
-              <option value="CONFIRMED">Confirmed</option>
+              <option value="REGISTERED">Registered</option>
+              <option value="APPROVED">Approved</option>
               <option value="PENDING">Pending</option>
-              <option value="CANCELLED">Cancelled</option>
+              <option value="REJECTED">Rejected</option>
             </select>
           </div>
           
@@ -227,7 +228,7 @@ const EventParticipants = () => {
                     
                     <td className="py-4 px-6">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        participant.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
+                        participant.status === 'REGISTERED' || participant.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
                         participant.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
                         'bg-red-100 text-red-800'
                       }`}>
