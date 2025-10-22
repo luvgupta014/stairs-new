@@ -279,6 +279,17 @@ export const requestCoachConnection = async (coachId) => {
   }
 };
 
+// General Event APIs
+export const getEvents = async (params = {}) => {
+  try {
+    const response = await api.get('/api/events', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Get events error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 // Student Event APIs
 export const getStudentEvents = async (params = {}) => {
   try {
@@ -537,7 +548,7 @@ export const getUserRole = () => {
 // Event Result Files API
 export const uploadEventResults = async (eventId, formData) => {
   try {
-    const response = await api.post(`/api/event/${eventId}/results`, formData, {
+    const response = await api.post(`/api/events/${eventId}/results`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -551,7 +562,7 @@ export const uploadEventResults = async (eventId, formData) => {
 
 export const getEventResultFiles = async (eventId, params = {}) => {
   try {
-    const response = await api.get(`/api/event/${eventId}/results`, { params });
+    const response = await api.get(`/api/events/${eventId}/results`, { params });
     return response.data;
   } catch (error) {
     console.error('Get event result files error:', error);
@@ -559,9 +570,9 @@ export const getEventResultFiles = async (eventId, params = {}) => {
   }
 };
 
-export const deleteEventResultFile = async (fileId) => {
+export const deleteEventResultFile = async (eventId) => {
   try {
-    const response = await api.delete(`/api/event/results/${fileId}`);
+    const response = await api.delete(`/api/events/${eventId}/results`);
     return response.data;
   } catch (error) {
     console.error('Delete event result file error:', error);
@@ -571,7 +582,8 @@ export const deleteEventResultFile = async (fileId) => {
 
 export const getAllEventResultFilesForAdmin = async (params = {}) => {
   try {
-    const response = await api.get('/api/event/results/admin/all', { params });
+    const response = await api.get('/api/admin/event-results', { params });
+    return response.data;
     return response.data;
   } catch (error) {
     console.error('Get all event result files error:', error);
@@ -582,7 +594,7 @@ export const getAllEventResultFilesForAdmin = async (params = {}) => {
 // Event Orders API
 export const createEventOrder = async (eventId, orderData) => {
   try {
-    const response = await api.post(`/api/event/${eventId}/orders`, orderData);
+    const response = await api.post(`/api/coach/events/${eventId}/orders`, orderData);
     return response.data;
   } catch (error) {
     console.error('Create event order error:', error);
@@ -592,7 +604,7 @@ export const createEventOrder = async (eventId, orderData) => {
 
 export const getEventOrders = async (eventId, params = {}) => {
   try {
-    const response = await api.get(`/api/event/${eventId}/orders`, { params });
+    const response = await api.get(`/api/coach/events/${eventId}/orders`, { params });
     return response.data;
   } catch (error) {
     console.error('Get event orders error:', error);
@@ -600,9 +612,9 @@ export const getEventOrders = async (eventId, params = {}) => {
   }
 };
 
-export const updateEventOrder = async (orderId, orderData) => {
+export const updateEventOrder = async (eventId, orderId, orderData) => {
   try {
-    const response = await api.put(`/api/event/orders/${orderId}`, orderData);
+    const response = await api.put(`/api/coach/events/${eventId}/orders/${orderId}`, orderData);
     return response.data;
   } catch (error) {
     console.error('Update event order error:', error);
@@ -610,9 +622,9 @@ export const updateEventOrder = async (orderId, orderData) => {
   }
 };
 
-export const deleteEventOrder = async (orderId) => {
+export const deleteEventOrder = async (eventId, orderId) => {
   try {
-    const response = await api.delete(`/api/event/orders/${orderId}`);
+    const response = await api.delete(`/api/coach/events/${eventId}/orders/${orderId}`);
     return response.data;
   } catch (error) {
     console.error('Delete event order error:', error);

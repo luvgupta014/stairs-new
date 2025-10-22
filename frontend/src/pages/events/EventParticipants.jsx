@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { getEventRegistrations } from '../api';
-import Spinner from '../components/Spinner';
+import { getEventRegistrations } from '../../api';
+import Spinner from '../../components/Spinner';
 import { FaArrowLeft, FaDownload, FaEnvelope, FaPhone, FaUser } from 'react-icons/fa';
 
 const EventParticipants = () => {

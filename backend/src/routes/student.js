@@ -1,5 +1,6 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
+const EventService = require('../services/eventService');
 const { authenticate, requireStudent } = require('../utils/authMiddleware');
 const { 
   successResponse, 
@@ -10,6 +11,7 @@ const {
 
 const router = express.Router();
 const prisma = new PrismaClient();
+const eventService = new EventService();
 
 // Get student profile
 router.get('/profile', authenticate, requireStudent, async (req, res) => {
@@ -463,7 +465,7 @@ router.delete('/connections/:connectionId', authenticate, requireStudent, async 
   }
 });
 
-// Get available events - FIXED to show approved events
+// Get available events - FIXED to use consolidated event service
 router.get('/events', authenticate, requireStudent, async (req, res) => {
   try {
     const { 
@@ -479,63 +481,23 @@ router.get('/events', authenticate, requireStudent, async (req, res) => {
 
     console.log('🔍 Student fetching available events...');
 
-    const { skip, take } = getPaginationParams(page, limit);
-
-    const where = {
-      status: { in: ['APPROVED', 'ACTIVE'] },    // FIXED: Show approved and active events
-      startDate: { gte: new Date() },            // Only future events
-      ...(sport && { sport: { contains: sport, mode: 'insensitive' } }),
-      ...(location && { 
-        OR: [
-          { venue: { contains: location, mode: 'insensitive' } },     // FIXED: venue instead of location
-          { city: { contains: location, mode: 'insensitive' } },
-          { address: { contains: location, mode: 'insensitive' } }
-        ]
-      }),
-      ...(dateFrom && { startDate: { gte: new Date(dateFrom) } }),
-      ...(dateTo && { endDate: { lte: new Date(dateTo) } }),
-      ...(maxFees && { eventFee: { lte: parseFloat(maxFees) } }),     // FIXED: eventFee instead of fees
-      ...(search && {
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },        // FIXED: name instead of title
-          { description: { contains: search, mode: 'insensitive' } },
-          { sport: { contains: search, mode: 'insensitive' } },
-          { venue: { contains: search, mode: 'insensitive' } }
-        ]
-      })
+    const filters = {
+      sport,
+      location,
+      dateFrom,
+      dateTo,
+      maxFees,
+      search
+      // Don't set status here - let the service handle student filtering
     };
 
-    const [events, total] = await Promise.all([
-      prisma.event.findMany({
-        where,
-        include: {                                                   // FIXED: Include coach details
-          coach: {
-            select: {
-              id: true,
-              name: true,
-              primarySport: true,
-              user: {
-                select: {
-                  email: true,
-                  phone: true
-                }
-              }
-            }
-          }
-        },
-        skip,
-        take,
-        orderBy: {
-          startDate: 'asc'
-        }
-      }),
-      prisma.event.count({ where })
-    ]);
+    const pagination = { page, limit };
 
-    console.log(`📊 Found ${events.length} available events for student`);
+    // Use consolidated event service
+    const result = await eventService.getEvents(filters, pagination, 'STUDENT', req.student.id);
 
-    // Format events for frontend compatibility
-    const formattedEvents = events.map(event => ({
+    // Format events for frontend compatibility  
+    const formattedEvents = result.events.map(event => ({
       id: event.id,
       title: event.name,                    // Map name to title for frontend
       name: event.name,
@@ -553,7 +515,8 @@ router.get('/events', authenticate, requireStudent, async (req, res) => {
       maxParticipants: event.maxParticipants,
       currentParticipants: event.currentParticipants,
       status: event.status,
-      organizer: {                          // FIXED: Use coach as organizer
+      isRegistered: event.isRegistered,
+      organizer: {                          // Use coach as organizer
         id: event.coach?.id,
         firstName: event.coach?.name?.split(' ')[0] || 'Unknown',
         lastName: event.coach?.name?.split(' ').slice(1).join(' ') || '',
@@ -562,14 +525,17 @@ router.get('/events', authenticate, requireStudent, async (req, res) => {
         phone: event.coach?.user?.phone
       },
       coach: event.coach,
+      institute: event.institute,
+      club: event.club,
       createdAt: event.createdAt
     }));
 
-    const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
+    console.log(`📊 Found ${formattedEvents.length} available events for student`);
 
     res.json(successResponse({
       events: formattedEvents,
-      pagination
+      pagination: result.pagination,
+      total: result.total
     }, 'Events retrieved successfully.'));
 
   } catch (error) {

@@ -151,8 +151,8 @@ const StudentDashboard = () => {
       
       const eventsData = await getStudentEvents({
         page: 1,
-        limit: 20,
-        status: 'APPROVED'
+        limit: 20
+        // Don't set status here - let the backend handle student filtering
       });
       
       console.log('✅ Available events loaded:', eventsData);

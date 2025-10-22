@@ -1402,6 +1402,262 @@ router.get('/events/:eventId/registrations', authenticate, requireCoach, async (
   }
 });
 
+/**
+ * Event Orders Management
+ */
+
+// Create order for event (certificates, medals, trophies)
+router.post('/events/:eventId/orders', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { certificates = 0, medals = 0, trophies = 0, specialInstructions = '', urgentDelivery = false } = req.body;
+
+    console.log(`📦 Creating order for event ${eventId}:`, { certificates, medals, trophies, urgentDelivery });
+
+    // Verify event belongs to coach
+    const event = await prisma.event.findFirst({
+      where: {
+        id: eventId,
+        coachId: req.coach.id
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found or access denied.', 404));
+    }
+
+    // Validate quantities
+    const totalQuantity = parseInt(certificates) + parseInt(medals) + parseInt(trophies);
+    if (totalQuantity === 0) {
+      return res.status(400).json(errorResponse('At least one item must be ordered.', 400));
+    }
+
+    // Check if order already exists for this event and coach
+    const existingOrder = await prisma.eventOrder.findFirst({
+      where: { 
+        eventId,
+        coachId: req.coach.id 
+      }
+    });
+
+    if (existingOrder) {
+      return res.status(400).json(errorResponse('You already have an order for this event. Please edit or delete the existing order first.', 400));
+    }
+
+    // Generate order number
+    const orderCount = await prisma.eventOrder.count();
+    const orderNumber = `ORD-${Date.now()}-${String(orderCount + 1).padStart(4, '0')}`;
+
+    // Create order
+    const order = await prisma.eventOrder.create({
+      data: {
+        orderNumber,
+        eventId,
+        coachId: req.coach.id,
+        certificates: parseInt(certificates),
+        medals: parseInt(medals),
+        trophies: parseInt(trophies),
+        specialInstructions,
+        urgentDelivery,
+        status: 'PENDING',
+        totalAmount: 0 // Will be updated by admin
+      },
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            startDate: true,
+            endDate: true
+          }
+        },
+        coach: {
+          select: {
+            id: true,
+            name: true,
+            user: {
+              select: {
+                email: true,
+                phone: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    console.log(`✅ Order created: ${orderNumber} for coach ${req.coach.id}`);
+
+    res.status(201).json(successResponse(order, 'Order created successfully. Admin will review and provide pricing.', 201));
+
+  } catch (error) {
+    console.error('Create order error:', error);
+    res.status(500).json(errorResponse('Failed to create order.', 500));
+  }
+});
+
+// Get orders for coach's events
+router.get('/events/:eventId/orders', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    console.log(`📦 Getting orders for event ${eventId}, coach ${req.coach.id}`);
+
+    // Verify event belongs to coach
+    const event = await prisma.event.findFirst({
+      where: {
+        id: eventId,
+        coachId: req.coach.id
+      }
+    });
+
+    if (!event) {
+      console.log(`❌ Event ${eventId} not found for coach ${req.coach.id}`);
+      return res.status(404).json(errorResponse('Event not found or access denied.', 404));
+    }
+
+    const orders = await prisma.eventOrder.findMany({
+      where: { eventId },
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            startDate: true,
+            endDate: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    console.log(`✅ Found ${orders.length} orders for event ${eventId}`);
+
+    res.json(successResponse({
+      event: {
+        id: event.id,
+        name: event.name,
+        startDate: event.startDate,
+        endDate: event.endDate
+      },
+      orders
+    }, 'Orders retrieved successfully.'));
+
+  } catch (error) {
+    console.error('Get orders error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve orders.', 500));
+  }
+});
+
+// Update order (before admin pricing)
+router.put('/events/:eventId/orders/:orderId', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { eventId, orderId } = req.params;
+    const { certificates = 0, medals = 0, trophies = 0, specialInstructions = '', urgentDelivery = false } = req.body;
+
+    // Verify event belongs to coach
+    const event = await prisma.event.findFirst({
+      where: {
+        id: eventId,
+        coachId: req.coach.id
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found or access denied.', 404));
+    }
+
+    // Verify order exists and is still pending
+    const order = await prisma.eventOrder.findFirst({
+      where: {
+        id: orderId,
+        eventId,
+        status: 'PENDING' // Only allow updates for pending orders
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json(errorResponse('Order not found or cannot be modified.', 404));
+    }
+
+    // Validate quantities
+    const totalQuantity = parseInt(certificates) + parseInt(medals) + parseInt(trophies);
+    if (totalQuantity === 0) {
+      return res.status(400).json(errorResponse('At least one item must be ordered.', 400));
+    }
+
+    // Update order
+    const updatedOrder = await prisma.eventOrder.update({
+      where: { id: orderId },
+      data: {
+        certificates: parseInt(certificates),
+        medals: parseInt(medals),
+        trophies: parseInt(trophies),
+        specialInstructions,
+        urgentDelivery
+      },
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            startDate: true,
+            endDate: true
+          }
+        }
+      }
+    });
+
+    res.json(successResponse(updatedOrder, 'Order updated successfully.'));
+
+  } catch (error) {
+    console.error('Update order error:', error);
+    res.status(500).json(errorResponse('Failed to update order.', 500));
+  }
+});
+
+// Delete order (before admin pricing)
+router.delete('/events/:eventId/orders/:orderId', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { eventId, orderId } = req.params;
+
+    // Verify event belongs to coach
+    const event = await prisma.event.findFirst({
+      where: {
+        id: eventId,
+        coachId: req.coach.id
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found or access denied.', 404));
+    }
+
+    // Verify order exists and can be deleted
+    const order = await prisma.eventOrder.findFirst({
+      where: {
+        id: orderId,
+        eventId,
+        status: { in: ['PENDING', 'QUOTED'] } // Can only delete pending or quoted orders
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json(errorResponse('Order not found or cannot be deleted.', 404));
+    }
+
+    await prisma.eventOrder.delete({
+      where: { id: orderId }
+    });
+
+    res.json(successResponse(null, 'Order deleted successfully.'));
+
+  } catch (error) {
+    console.error('Delete order error:', error);
+    res.status(500).json(errorResponse('Failed to delete order.', 500));
+  }
+});
+
 // Get dashboard analytics
 router.get('/dashboard', authenticate, requireCoach, async (req, res) => {
   try {

@@ -250,6 +250,28 @@ const generateToken = (payload, expiresIn = '24h') => {
 };
 
 /**
+ * Generic role requirement middleware
+ * @param {Array} allowedRoles - Array of allowed roles
+ * @returns {Function} Middleware function
+ */
+const requireRole = (allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json(errorResponse('Authentication required.', 401));
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json(errorResponse(
+        `Access denied. Required roles: ${allowedRoles.join(', ')}`, 
+        403
+      ));
+    }
+
+    next();
+  };
+};
+
+/**
  * Verify JWT Token
  * @param {string} token - JWT token to verify
  * @returns {Object} Decoded token payload
@@ -271,6 +293,7 @@ module.exports = {
   requireClub,
   requireAdmin,
   requireApproved,
+  requireRole,
   optionalAuth,
   authenticateToken,
   generateToken,

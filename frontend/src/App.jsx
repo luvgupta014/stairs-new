@@ -9,8 +9,8 @@ import Header from "./components/Header";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
 import StudentProfile from "./pages/StudentProfile";
-import EventParticipants from "./pages/EventParticipants";
-import EventEdit from "./pages/EventEdit";
+import EventParticipants from "./pages/events/EventParticipants";
+import EventEdit from "./pages/events/EventEdit";
 
 // Landing Page
 import Landing from "./pages/Landing";
@@ -30,29 +30,31 @@ import ResetPassword from "./pages/auth/ResetPassword";
 import StudentRegister from "./pages/StudentRegister";
 import CoachRegister from "./pages/CoachRegister";
 import InstituteRegister from "./pages/InstituteRegister";
-import VerifyOtp from "./pages/VerifyOtp";
+import VerifyOtp from "./pages/auth/VerifyOtp";
 
 // Premium Registration Pages
 import CoachRegisterPremium from "./pages/CoachRegisterPremium";
 import InstituteRegisterPremium from "./pages/InstituteRegisterPremium";
 import ClubRegisterPremium from "./pages/ClubRegisterPremium";
-import VerifyOtpPremium from "./pages/VerifyOtpPremium";
+import VerifyOtpPremium from "./pages/auth/VerifyOtpPremium";
 
 // Dashboard Pages
 import StudentDashboard from "./pages/dashboard/StudentDashboard";
 import CoachDashboard from "./pages/dashboard/CoachDashboard";
 import ClubDashboard from "./pages/dashboard/ClubDashboard";
 import InstituteDashboard from "./pages/dashboard/InstituteDashboard";
-import AdminDashboard from "./pages/AdminDashboard";
+import AdminDashboard from "./pages/dashboard/AdminDashboard";
 
 // Other Pages
-import EventCreate from "./pages/EventCreate";
+import Events from "./pages/events/Events";
+import EventDetails from "./pages/events/EventDetails";
+import EventCreate from "./pages/events/EventCreate";
 import BulkUpload from "./pages/BulkUpload";
 import CoachPayment from "./pages/CoachPayment";
 import CoachRegisterPremiumNew from "./pages/CoachRegisterPremium";
 import AdminEventResults from "./components/AdminEventResults";
-import EventResultUpload from "./pages/EventResultUpload";
-import EventOrders from "./pages/EventOrders";
+import EventResultUpload from "./pages/events/EventResultUpload";
+import EventOrders from "./pages/events/EventOrders";
 import AdminOrders from "./components/AdminOrders";
 
 function App() {
@@ -232,6 +234,90 @@ function App() {
                   <main className="flex-grow">
                     <ProtectedRoute role="COACH">
                       <BulkUpload />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/events"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute>
+                      <Events />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/events/:eventId"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute>
+                      <EventDetails />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/events/:eventId/edit"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute>
+                      <EventEdit />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/events/:eventId/participants"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute>
+                      <EventParticipants />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/events/:eventId/results"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute>
+                      <EventResultUpload />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/events/:eventId/orders"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute>
+                      <EventOrders />
                     </ProtectedRoute>
                   </main>
                   <Footer />

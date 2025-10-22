@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getAdminDashboard, moderateEvent, getAdminEvents, getEventRegistrations, getEventParticipants } from '../api';
-import InfoModal from '../components/InfoModal';
-import DetailModal from '../components/DetailModal';
-import ActionModal from '../components/ActionModal';
-import ParticipantsModal from '../components/ParticipantsModal';
+import { getAdminDashboard, moderateEvent, getAdminEvents, getEventRegistrations, getEventParticipants } from '../../api';
+import InfoModal from '../../components/InfoModal';
+import DetailModal from '../../components/DetailModal';
+import ActionModal from '../../components/ActionModal';
+import ParticipantsModal from '../../components/ParticipantsModal';
 
 const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);

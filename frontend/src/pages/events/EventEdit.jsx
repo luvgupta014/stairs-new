@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react';
-import { createEvent, getCoachDashboard } from '../api';
-import Spinner from '../components/Spinner';
-import GoogleMapsPlacesAutocomplete from '../components/GoogleMapsPlacesAutocomplete';
-import { useNavigate, Link } from 'react-router-dom';
-import { FaExclamationTriangle, FaCreditCard, FaMapMarkerAlt } from 'react-icons/fa';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { updateEvent } from '../../api';
+import Spinner from '../../components/Spinner';
+import GoogleMapsPlacesAutocomplete from '../../components/GoogleMapsPlacesAutocomplete';
+import { FaMapMarkerAlt, FaSave, FaTimes } from 'react-icons/fa';
 
-const EventCreate = () => {
+const EventEdit = () => {
+  const { eventId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -22,60 +25,53 @@ const EventCreate = () => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
-  const [coachData, setCoachData] = useState(null);
-  const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(true);
-  const navigate = useNavigate();
 
   useEffect(() => {
-    checkPaymentStatus();
-  }, []);
-
-  const checkPaymentStatus = async () => {
-    try {
-      const response = await getCoachDashboard();
-      if (response.success) {
-        setCoachData(response.data.coach);
-      }
-    } catch (error) {
-      console.error('Failed to check payment status:', error);
-    } finally {
-      setCheckingPaymentStatus(false);
+    // Pre-fill form with event data from location state
+    if (location.state?.event) {
+      const event = location.state.event;
+      setFormData({
+        name: event.name || '',
+        description: event.description || '',
+        sport: event.sport || '',
+        venue: event.venue || '',
+        address: event.address || '',
+        city: event.city || '',
+        state: event.state || '',
+        latitude: event.latitude?.toString() || '',
+        longitude: event.longitude?.toString() || '',
+        startDate: event.startDate ? new Date(event.startDate).toISOString().slice(0, 16) : '',
+        endDate: event.endDate ? new Date(event.endDate).toISOString().slice(0, 16) : '',
+        maxParticipants: event.maxParticipants?.toString() || ''
+      });
     }
-  };
+  }, [location.state]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // Check payment status before allowing event creation
-    if (coachData?.paymentStatus === 'PENDING' && !coachData?.isActive) {
-      setError('Please complete your payment to create events. You can add events after payment completion.');
-      return;
-    }
-
     setLoading(true);
     setError('');
 
     try {
       const eventData = {
         ...formData,
-        startDate: formData.startDate,
-        endDate: formData.endDate || null,
         maxParticipants: formData.maxParticipants ? parseInt(formData.maxParticipants) : null
       };
 
-      const result = await createEvent(eventData);
+      const result = await updateEvent(eventId, eventData);
       
       if (result.success) {
-        setSuccess(true);
-        setTimeout(() => {
-          navigate('/dashboard/coach');
-        }, 2000);
+        navigate('/dashboard/coach', { 
+          state: { 
+            message: 'Event updated successfully!',
+            activeTab: 'events'
+          }
+        });
       } else {
-        setError(result.message || 'Failed to create event');
+        setError(result.message || 'Failed to update event');
       }
     } catch (error) {
-      setError(error.message || 'Failed to create event');
+      setError(error.message || 'Failed to update event');
     } finally {
       setLoading(false);
     }
@@ -114,40 +110,13 @@ const EventCreate = () => {
     }));
   };
 
-  if (checkingPaymentStatus) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
-
-  if (success) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full text-center">
-          <div className="bg-white rounded-lg shadow-md p-8">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-green-600 text-2xl">✓</span>
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Event Created Successfully!</h2>
-            <p className="text-gray-600 mb-4">
-              Your event has been created and submitted for admin approval.
-            </p>
-            <p className="text-sm text-gray-500">Redirecting to dashboard...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="bg-white rounded-lg shadow-md p-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Create New Event</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Edit Event</h1>
           <p className="text-gray-600">
-            Fill in the details below to create a new sports event for your students.
+            Update your event details below.
           </p>
         </div>
 
@@ -178,36 +147,11 @@ const EventCreate = () => {
           </div>
         )}
 
-        {/* Payment Status Alert */}
-        {coachData?.paymentStatus === 'PENDING' && !coachData?.isActive && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-6">
-            <div className="flex items-start">
-              <FaExclamationTriangle className="text-amber-500 mt-1 mr-3 flex-shrink-0" />
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-amber-900 mb-2">
-                  Payment Required
-                </h3>
-                <p className="text-amber-700 mb-4">
-                  You need to complete your subscription payment to create events. Complete your payment to unlock full access to student management and event creation.
-                </p>
-                <Link
-                  to="/coach/payment"
-                  state={{ from: '/coach/event/create' }}
-                  className="inline-flex items-center bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors"
-                >
-                  <FaCreditCard className="mr-2" />
-                  Complete Payment
-                </Link>
-              </div>
-            </div>
-          </div>
-        )}
-
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Hidden fields for coordinates */}
           <input type="hidden" name="latitude" value={formData.latitude} />
           <input type="hidden" name="longitude" value={formData.longitude} />
-          
+
           {/* Basic Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -429,9 +373,10 @@ const EventCreate = () => {
           <div className="flex justify-between pt-6">
             <button
               type="button"
-              onClick={() => navigate('/dashboard/coach')}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-500"
+              onClick={() => navigate('/dashboard/coach', { state: { activeTab: 'events' } })}
+              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-500 inline-flex items-center"
             >
+              <FaTimes className="mr-2" />
               Cancel
             </button>
             <button
@@ -442,10 +387,13 @@ const EventCreate = () => {
               {loading ? (
                 <>
                   <Spinner size="sm" color="white" />
-                  <span className="ml-2">Creating...</span>
+                  <span className="ml-2">Updating...</span>
                 </>
               ) : (
-                'Create Event'
+                <>
+                  <FaSave className="mr-2" />
+                  Update Event
+                </>
               )}
             </button>
           </div>
@@ -455,4 +403,4 @@ const EventCreate = () => {
   );
 };
 
-export default EventCreate;
+export default EventEdit;

@@ -13,7 +13,7 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(localStorage.getItem('authToken'));
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -137,7 +137,7 @@ export const AuthProvider = ({ children }) => {
         const demoToken = `demo-token-${role}-${Date.now()}`;
         
         // Store demo session
-        localStorage.setItem('token', demoToken);
+        localStorage.setItem('authToken', demoToken);
         localStorage.setItem('user', JSON.stringify(demoUser));
         
         setToken(demoToken);
@@ -157,7 +157,7 @@ export const AuthProvider = ({ children }) => {
         const { token: newToken, user: userData } = response.data.data;
         
         // Store token and user data
-        localStorage.setItem('token', newToken);
+        localStorage.setItem('authToken', newToken);
         localStorage.setItem('user', JSON.stringify(userData));
         
         setToken(newToken);
@@ -222,7 +222,7 @@ const register = async (data, role) => {
         const { token: newToken, user: userData } = response.data.data;
         
         // Store token and user data
-        localStorage.setItem('token', newToken);
+        localStorage.setItem('authToken', newToken);
         localStorage.setItem('user', JSON.stringify(userData));
         
         setToken(newToken);
@@ -263,7 +263,7 @@ const register = async (data, role) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem('authToken');
     localStorage.removeItem('user');
     setToken(null);
     setUser(null);
@@ -272,7 +272,7 @@ const register = async (data, role) => {
 
   const clearStaleAuth = () => {
     // Clear any stale authentication data
-    const storedToken = localStorage.getItem('token');
+    const storedToken = localStorage.getItem('authToken');
     const storedUser = localStorage.getItem('user');
     
     // Clear if token exists but user doesn't, or vice versa

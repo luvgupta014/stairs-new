@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import Spinner from '../components/Spinner';
-import Modal from '../components/Modal';
+import { useAuth } from '../../contexts/AuthContext';
+import Spinner from '../../components/Spinner';
+import Modal from '../../components/Modal';
 
 const VerifyOtp = () => {
   const navigate = useNavigate();

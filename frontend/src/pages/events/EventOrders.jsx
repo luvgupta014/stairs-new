@@ -7,7 +7,7 @@ import {
   deleteEventOrder,
   createOrderPayment,
   verifyOrderPayment
-} from '../api';
+} from '../../api';
 import { 
   FaPlus, 
   FaEdit, 
@@ -24,7 +24,7 @@ import {
   FaCreditCard,
   FaMoneyBillWave
 } from 'react-icons/fa';
-import Spinner from '../components/Spinner';
+import Spinner from '../../components/Spinner';
 
 const EventOrders = () => {
   const { eventId } = useParams();
@@ -55,14 +55,18 @@ const EventOrders = () => {
   const loadOrders = async () => {
     try {
       setLoading(true);
+      console.log('🔄 Loading orders for event:', eventId);
       const response = await getEventOrders(eventId);
+      
+      console.log('📦 Orders response:', response);
       
       if (response.success) {
         setEventData(response.data.event);
         setOrders(response.data.orders || []);
+        console.log('✅ Orders loaded:', response.data.orders?.length || 0);
       }
     } catch (error) {
-      console.error('Failed to load orders:', error);
+      console.error('❌ Failed to load orders:', error);
       showMessage('error', 'Failed to load orders');
     } finally {
       setLoading(false);
@@ -114,10 +118,13 @@ const EventOrders = () => {
       setSubmitting(true);
       
       if (editingOrder) {
-        await updateEventOrder(editingOrder.id, orderForm);
+        console.log('🔄 Updating order:', editingOrder.id, orderForm);
+        await updateEventOrder(eventId, editingOrder.id, orderForm);
         showMessage('success', 'Order updated successfully');
       } else {
-        await createEventOrder(eventId, orderForm);
+        console.log('🔄 Creating new order:', orderForm);
+        const result = await createEventOrder(eventId, orderForm);
+        console.log('✅ Order created:', result);
         showMessage('success', 'Order created successfully');
       }
       
@@ -137,7 +144,7 @@ const EventOrders = () => {
     }
 
     try {
-      await deleteEventOrder(orderId);
+      await deleteEventOrder(eventId, orderId);
       showMessage('success', 'Order deleted successfully');
       loadOrders();
     } catch (error) {

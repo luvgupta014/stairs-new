@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { uploadEventResults, getEventResultFiles, deleteEventResultFile } from '../api';
+import { uploadEventResults, getEventResultFiles, deleteEventResultFile } from '../../api';
 import { 
   FaUpload, 
   FaFileExcel, 
@@ -14,7 +14,7 @@ import {
   FaArrowLeft
 } from 'react-icons/fa';
 import { useParams, useNavigate } from 'react-router-dom';
-import Spinner from '../components/Spinner';
+import Spinner from '../../components/Spinner';
 
 const EventResultUpload = () => {
   const { eventId } = useParams();
