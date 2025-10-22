@@ -5,6 +5,7 @@ import {
   requestCoachConnection,
   getStudentEvents,
   registerForEvent,
+  unregisterFromEvent,
   getStudentEventRegistrations
 } from '../../api';
 import CoachCard from '../../components/CoachCard';
@@ -24,6 +25,12 @@ const StudentDashboard = () => {
   const [connectedCoaches, setConnectedCoaches] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [registeringEventId, setRegisteringEventId] = useState(null);
+  
+  // ADDED: Filter states for events
+  const [eventsFilter, setEventsFilter] = useState('all'); // all, registered, pending, approved
+  const [modalSearchFilter, setModalSearchFilter] = useState('');
+  const [modalSportFilter, setModalSportFilter] = useState('');
+  
   const navigate = useNavigate();
   
   // Get user profile from localStorage
@@ -194,6 +201,12 @@ const StudentDashboard = () => {
     }
   };
 
+  // ADDED: Handle viewing event details
+  const handleViewEventDetails = (eventId) => {
+    console.log(`🔍 Navigating to event details for event ${eventId}`);
+    navigate(`/events/${eventId}`);
+  };
+
   // ADDED: Handle event registration
   const handleRegisterForEvent = async (eventId) => {
     try {
@@ -224,12 +237,92 @@ const StudentDashboard = () => {
     }
   };
 
+  // ADDED: Handle event unregistration
+  const handleUnregisterFromEvent = async (eventId) => {
+    if (!window.confirm('Are you sure you want to unregister from this event?')) {
+      return;
+    }
+
+    try {
+      setRegisteringEventId(eventId);
+      console.log(`🔄 Unregistering from event ${eventId}...`);
+      
+      await unregisterFromEvent(eventId);
+      
+      console.log('✅ Successfully unregistered from event');
+      
+      // Refresh the events and registrations data
+      await Promise.all([
+        loadAvailableEvents(),
+        loadMyEventRegistrations(),
+        loadDashboardData()
+      ]);
+      
+      alert('Successfully unregistered from the event!');
+    } catch (error) {
+      console.error('❌ Failed to unregister from event:', error);
+      alert(`Failed to unregister from event: ${error.message || 'Unknown error'}`);
+    } finally {
+      setRegisteringEventId(null);
+    }
+  };
+
   // ADDED: Browse events handler
   const handleBrowseEvents = () => {
     setShowEventsModal(true);
+    // Clear filters when opening modal
+    setModalSearchFilter('');
+    setModalSportFilter('');
     if (availableEvents.length === 0) {
       loadAvailableEvents();
     }
+  };
+
+  // ADDED: Filter functions
+  const getFilteredRegistrations = () => {
+    if (!myEventRegistrations) return [];
+    
+    switch (eventsFilter) {
+      case 'registered':
+        return myEventRegistrations.filter(reg => reg.status === 'REGISTERED');
+      case 'pending':
+        return myEventRegistrations.filter(reg => reg.status === 'PENDING');
+      case 'approved':
+        return myEventRegistrations.filter(reg => reg.status === 'APPROVED');
+      default:
+        return myEventRegistrations;
+    }
+  };
+
+  const getFilteredAvailableEvents = () => {
+    if (!availableEvents) return [];
+    
+    let filtered = [...availableEvents];
+    
+    // Search filter
+    if (modalSearchFilter.trim()) {
+      const searchTerm = modalSearchFilter.toLowerCase();
+      filtered = filtered.filter(event =>
+        (event.name || event.title || '').toLowerCase().includes(searchTerm) ||
+        (event.sport || '').toLowerCase().includes(searchTerm) ||
+        (event.venue || event.location || '').toLowerCase().includes(searchTerm)
+      );
+    }
+    
+    // Sport filter
+    if (modalSportFilter && modalSportFilter !== 'all') {
+      filtered = filtered.filter(event => 
+        (event.sport || '').toLowerCase() === modalSportFilter.toLowerCase()
+      );
+    }
+    
+    return filtered;
+  };
+
+  const getAvailableSports = () => {
+    if (!availableEvents) return [];
+    const sports = [...new Set(availableEvents.map(event => event.sport).filter(Boolean))];
+    return sports.sort();
   };
 
   if (loading) {
@@ -278,6 +371,13 @@ const StudentDashboard = () => {
                 className="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-400 transition-colors"
               >
                 Browse Events
+              </button>
+              {/* Link to full events page */}
+              <button 
+                onClick={() => navigate('/events')}
+                className="bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-500 transition-colors"
+              >
+                View All Events
               </button>
             </div>
           </div>
@@ -560,13 +660,17 @@ const StudentDashboard = () => {
             {activeTab === 'events' && (
               <div>
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900">My Events ({myEventRegistrations.length})</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">My Events ({getFilteredRegistrations().length})</h3>
                   <div className="flex space-x-3">
-                    <select className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                      <option>All Events</option>
-                      <option>Registered</option>
-                      <option>Pending</option>
-                      <option>Approved</option>
+                    <select 
+                      value={eventsFilter}
+                      onChange={(e) => setEventsFilter(e.target.value)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">All Events ({myEventRegistrations.length})</option>
+                      <option value="registered">Registered ({myEventRegistrations.filter(r => r.status === 'REGISTERED').length})</option>
+                      <option value="pending">Pending ({myEventRegistrations.filter(r => r.status === 'PENDING').length})</option>
+                      <option value="approved">Approved ({myEventRegistrations.filter(r => r.status === 'APPROVED').length})</option>
                     </select>
                     <button 
                       onClick={handleBrowseEvents}
@@ -577,9 +681,9 @@ const StudentDashboard = () => {
                   </div>
                 </div>
 
-                {myEventRegistrations.length > 0 ? (
+                {getFilteredRegistrations().length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {myEventRegistrations.map(registration => (
+                    {getFilteredRegistrations().map(registration => (
                       <div key={registration.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
                         <div className="flex justify-between items-start mb-4">
                           <h4 className="font-semibold text-gray-900">{registration.event.title || registration.event.name}</h4>
@@ -602,9 +706,22 @@ const StudentDashboard = () => {
                         </div>
 
                         <div className="flex space-x-2">
-                          <button className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
+                          <button 
+                            onClick={() => handleViewEventDetails(registration.event.id)}
+                            className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors"
+                          >
                             View Details
                           </button>
+                          {/* Add unregister button for registered events */}
+                          {(registration.status === 'REGISTERED' || registration.status === 'APPROVED') && (
+                            <button
+                              onClick={() => handleUnregisterFromEvent(registration.event.id)}
+                              disabled={registeringEventId === registration.event.id}
+                              className="flex-1 bg-red-600 text-white px-3 py-2 rounded text-sm hover:bg-red-700 transition-colors disabled:opacity-50"
+                            >
+                              {registeringEventId === registration.event.id ? 'Processing...' : 'Unregister'}
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -614,8 +731,16 @@ const StudentDashboard = () => {
                     <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                       <span className="text-gray-400 text-4xl">🏆</span>
                     </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Event Registrations</h3>
-                    <p className="text-gray-600 mb-6">Browse available events and register to participate.</p>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      {eventsFilter === 'all' ? 'No Event Registrations' : 
+                       eventsFilter === 'registered' ? 'No Registered Events' :
+                       eventsFilter === 'pending' ? 'No Pending Events' :
+                       'No Approved Events'}
+                    </h3>
+                    <p className="text-gray-600 mb-6">
+                      {eventsFilter === 'all' ? 'Browse available events and register to participate.' :
+                       `You don't have any ${eventsFilter} events.`}
+                    </p>
                     <button
                       onClick={handleBrowseEvents}
                       className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
@@ -692,16 +817,39 @@ const StudentDashboard = () => {
             <input
               type="text"
               placeholder="Search events..."
+              value={modalSearchFilter}
+              onChange={(e) => setModalSearchFilter(e.target.value)}
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             />
-            <select className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-              <option>All Sports</option>
-              <option>Football</option>
-              <option>Basketball</option>
-              <option>Cricket</option>
-              <option>Swimming</option>
+            <select 
+              value={modalSportFilter}
+              onChange={(e) => setModalSportFilter(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Sports</option>
+              {getAvailableSports().map(sport => (
+                <option key={sport} value={sport}>{sport}</option>
+              ))}
             </select>
           </div>
+          
+          {/* Filter results info */}
+          {(modalSearchFilter || modalSportFilter) && (
+            <div className="text-sm text-gray-600 mb-2">
+              Showing {getFilteredAvailableEvents().length} of {availableEvents.length} events
+              {modalSearchFilter && ` matching "${modalSearchFilter}"`}
+              {modalSportFilter && ` in ${modalSportFilter}`}
+              <button
+                onClick={() => {
+                  setModalSearchFilter('');
+                  setModalSportFilter('');
+                }}
+                className="ml-2 text-blue-600 hover:text-blue-800"
+              >
+                Clear filters
+              </button>
+            </div>
+          )}
         </div>
         
         {eventsLoading ? (
@@ -709,9 +857,9 @@ const StudentDashboard = () => {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
             <p className="mt-2 text-gray-600">Loading events...</p>
           </div>
-        ) : availableEvents.length > 0 ? (
+        ) : getFilteredAvailableEvents().length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-h-96 overflow-y-auto">
-            {availableEvents.map(event => (
+            {getFilteredAvailableEvents().map(event => (
               <div key={event.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
                 <div className="flex justify-between items-start mb-4">
                   <h4 className="font-semibold text-gray-900">{event.title || event.name}</h4>
@@ -732,16 +880,31 @@ const StudentDashboard = () => {
                 </div>
 
                 <div className="flex space-x-2">
-                  <button className="flex-1 bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200 transition-colors">
+                  <button 
+                    onClick={() => handleViewEventDetails(event.id)}
+                    className="flex-1 bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200 transition-colors"
+                  >
                     View Details
                   </button>
-                  <button
-                    onClick={() => handleRegisterForEvent(event.id)}
-                    disabled={registeringEventId === event.id}
-                    className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
-                  >
-                    {registeringEventId === event.id ? 'Registering...' : 'Register'}
-                  </button>
+                  
+                  {/* Registration/Unregistration button */}
+                  {event.isRegistered ? (
+                    <button
+                      onClick={() => handleUnregisterFromEvent(event.id)}
+                      disabled={registeringEventId === event.id}
+                      className="flex-1 bg-red-600 text-white px-3 py-2 rounded text-sm hover:bg-red-700 transition-colors disabled:opacity-50"
+                    >
+                      {registeringEventId === event.id ? 'Processing...' : 'Unregister'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleRegisterForEvent(event.id)}
+                      disabled={registeringEventId === event.id}
+                      className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                      {registeringEventId === event.id ? 'Registering...' : 'Register'}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -749,8 +912,25 @@ const StudentDashboard = () => {
         ) : (
           <div className="text-center py-8">
             <div className="text-gray-400 text-4xl mb-4">🏆</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Events Available</h3>
-            <p className="text-gray-600">Check back later for upcoming events.</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {(modalSearchFilter || modalSportFilter) ? 'No events match your filters' : 'No Events Available'}
+            </h3>
+            <p className="text-gray-600">
+              {(modalSearchFilter || modalSportFilter) ? 
+                'Try adjusting your search or sport filter.' : 
+                'Check back later for upcoming events.'}
+            </p>
+            {(modalSearchFilter || modalSportFilter) && (
+              <button
+                onClick={() => {
+                  setModalSearchFilter('');
+                  setModalSportFilter('');
+                }}
+                className="mt-4 text-blue-600 hover:text-blue-800 font-medium"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         )}
       </Modal>

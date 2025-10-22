@@ -14,6 +14,49 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json(errorResponse('Access denied. No token provided.', 401));
     }
 
+    // Handle demo tokens for development
+    if (token.startsWith('demo-token-')) {
+      console.log('[AUTH] Demo token detected:', token);
+      const parts = token.split('-');
+      if (parts.length >= 3) {
+        const role = parts[2].toUpperCase();
+        const demoUser = {
+          id: `demo-${role.toLowerCase()}-${parts[3] || Date.now()}`,
+          email: `demo@${role.toLowerCase()}.com`,
+          role: role,
+          name: `Demo ${role.charAt(0) + role.slice(1).toLowerCase()}`,
+          isActive: true,
+          studentProfile: role === 'STUDENT' ? {
+            id: `demo-student-profile-${parts[3] || Date.now()}`,
+            userId: `demo-${role.toLowerCase()}-${parts[3] || Date.now()}`,
+            firstName: 'Demo',
+            lastName: 'Student',
+            phone: '+1234567890',
+            dateOfBirth: new Date('1990-01-01'),
+            parentContact: '+1234567891',
+            schoolName: 'Demo School',
+            grade: '10th',
+            createdAt: new Date(),
+            updatedAt: new Date()
+          } : null,
+          coachProfile: role === 'COACH' ? {
+            id: `demo-coach-profile-${parts[3] || Date.now()}`,
+            userId: `demo-${role.toLowerCase()}-${parts[3] || Date.now()}`,
+            firstName: 'Demo',
+            lastName: 'Coach',
+            phone: '+1234567890',
+            experience: '5 years',
+            specialization: 'Football',
+            createdAt: new Date(),
+            updatedAt: new Date()
+          } : null
+        };
+        req.user = demoUser;
+        console.log('[AUTH] Demo user set:', demoUser.role);
+        return next();
+      }
+    }
+
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -50,6 +93,14 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json(errorResponse('Account is not active.', 401));
     }
 
+    console.log('[AUTH] User loaded successfully:', {
+      id: user.id,
+      role: user.role,
+      email: user.email,
+      hasStudentProfile: !!user.studentProfile,
+      studentProfileId: user.studentProfile?.id
+    });
+
     req.user = user;
     next();
   } catch (error) {
@@ -85,8 +136,10 @@ const requireStudent = async (req, res, next) => {
     }
 
     req.student = req.user.studentProfile;
+    console.log('[AUTH] Student middleware - student ID:', req.student.id);
     next();
   } catch (error) {
+    console.error('[AUTH] Student middleware error:', error);
     return res.status(500).json(errorResponse('Authorization error.', 500));
   }
 };

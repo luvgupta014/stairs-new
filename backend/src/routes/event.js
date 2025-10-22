@@ -1,6 +1,6 @@
 const express = require('express');
 const EventController = require('../controllers/eventController');
-const { authenticate, requireRole } = require('../utils/authMiddleware');
+const { authenticate, requireRole, requireStudent } = require('../utils/authMiddleware');
 const multer = require('multer');
 const path = require('path');
 
@@ -84,14 +84,14 @@ router.put('/:eventId/cancel',
 // Register for event (students only)
 router.post('/:eventId/register', 
   authenticate, 
-  requireRole(['STUDENT']), 
+  requireStudent, 
   eventController.registerForEvent.bind(eventController)
 );
 
 // Unregister from event (students only)
 router.delete('/:eventId/register', 
   authenticate, 
-  requireRole(['STUDENT']), 
+  requireStudent, 
   eventController.unregisterFromEvent.bind(eventController)
 );
 

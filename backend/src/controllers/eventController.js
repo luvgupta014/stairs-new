@@ -1,7 +1,9 @@
 const EventService = require('../services/eventService');
 const { successResponse, errorResponse } = require('../utils/helpers');
+const { PrismaClient } = require('@prisma/client');
 
 const eventService = new EventService();
+const prisma = new PrismaClient();
 
 /**
  * Events Controller
@@ -268,15 +270,41 @@ class EventController {
       const { eventId } = req.params;
       const { user } = req;
 
+      console.log('🔍 Event registration debug:');
+      console.log('- User ID:', user?.id);
+      console.log('- User role:', user?.role);
+      console.log('- Student object:', req.student);
+      console.log('- Student ID:', req.student?.id);
+
       if (user.role !== 'STUDENT') {
         return res.status(403).json(errorResponse('Only students can register for events', 403));
       }
 
-      if (!req.student?.id) {
-        return res.status(400).json(errorResponse('Student profile not found', 400));
+      // If req.student is not set by middleware, try to get it from user
+      let studentId = req.student?.id;
+      if (!studentId && user.studentProfile?.id) {
+        studentId = user.studentProfile.id;
+        console.log('🔄 Using studentProfile from user object:', studentId);
       }
 
-      const registration = await eventService.registerForEvent(eventId, req.student.id);
+      if (!studentId) {
+        console.error('❌ No student profile found anywhere. User:', user?.id, 'Student profile:', user?.studentProfile);
+        
+        // Try to find student profile directly
+        const studentProfile = await prisma.student.findUnique({
+          where: { userId: user.id }
+        });
+        
+        if (studentProfile) {
+          studentId = studentProfile.id;
+          console.log('🔄 Found student profile directly:', studentId);
+        } else {
+          console.error('❌ No student profile exists for user:', user.id);
+          return res.status(400).json(errorResponse('Student profile not found. Please complete your profile first.', 400));
+        }
+      }
+
+      const registration = await eventService.registerForEvent(eventId, studentId);
 
       res.status(201).json(successResponse(registration, 'Successfully registered for event'));
     } catch (error) {
@@ -301,11 +329,26 @@ class EventController {
         return res.status(403).json(errorResponse('Only students can unregister from events', 403));
       }
 
-      if (!req.student?.id) {
-        return res.status(400).json(errorResponse('Student profile not found', 400));
+      // If req.student is not set by middleware, try to get it from user
+      let studentId = req.student?.id;
+      if (!studentId && user.studentProfile?.id) {
+        studentId = user.studentProfile.id;
       }
 
-      await eventService.unregisterFromEvent(eventId, req.student.id);
+      if (!studentId) {
+        // Try to find student profile directly
+        const studentProfile = await prisma.student.findUnique({
+          where: { userId: user.id }
+        });
+        
+        if (studentProfile) {
+          studentId = studentProfile.id;
+        } else {
+          return res.status(400).json(errorResponse('Student profile not found', 400));
+        }
+      }
+
+      await eventService.unregisterFromEvent(eventId, studentId);
 
       res.json(successResponse(null, 'Successfully unregistered from event'));
     } catch (error) {

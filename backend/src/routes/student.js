@@ -544,6 +544,127 @@ router.get('/events', authenticate, requireStudent, async (req, res) => {
   }
 });
 
+// Get event details
+router.get('/events/:eventId', authenticate, requireStudent, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    
+    console.log(`🔍 Student fetching event details for: ${eventId}`);
+
+    // Get student profile
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user.id }
+    });
+
+    if (!student) {
+      return res.status(404).json(errorResponse('Student profile not found.', 404));
+    }
+
+    // Get event details with enhanced information
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        coach: {
+          select: {
+            id: true,
+            name: true,
+            primarySport: true,
+            specialization: true,
+            experience: true,
+            rating: true,
+            city: true,
+            user: {
+              select: {
+                email: true,
+                phone: true
+              }
+            }
+          }
+        },
+        registrations: {
+          where: { studentId: student.id },
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            message: true
+          }
+        },
+        _count: {
+          select: {
+            registrations: true
+          }
+        }
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    // Check if student can view this event (must be approved/active)
+    if (!['APPROVED', 'ACTIVE'].includes(event.status)) {
+      return res.status(403).json(errorResponse('This event is not available for viewing.', 403));
+    }
+
+    // Format event details for frontend
+    const eventDetails = {
+      id: event.id,
+      title: event.name,
+      name: event.name,
+      description: event.description,
+      sport: event.sport,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      venue: event.venue,
+      address: event.address,
+      city: event.city,
+      state: event.state,
+      latitude: event.latitude,
+      longitude: event.longitude,
+      eventFee: event.eventFee,
+      fees: event.eventFee,
+      maxParticipants: event.maxParticipants,
+      currentParticipants: event._count.registrations,
+      availableSpots: event.maxParticipants - event._count.registrations,
+      status: event.status,
+      createdAt: event.createdAt,
+      updatedAt: event.updatedAt,
+      
+      // Registration info
+      isRegistered: event.registrations.length > 0,
+      registrationStatus: event.registrations.length > 0 ? event.registrations[0].status : null,
+      registrationDate: event.registrations.length > 0 ? event.registrations[0].createdAt : null,
+      registrationMessage: event.registrations.length > 0 ? event.registrations[0].message : null,
+      
+      // Check if registration is still possible
+      canRegister: event.registrations.length === 0 && 
+                   event._count.registrations < event.maxParticipants &&
+                   new Date(event.startDate) > new Date() &&
+                   ['APPROVED', 'ACTIVE'].includes(event.status),
+      
+      // Coach/Organizer details
+      organizer: {
+        id: event.coach.id,
+        name: event.coach.name,
+        primarySport: event.coach.primarySport,
+        specialization: event.coach.specialization,
+        experience: event.coach.experience,
+        rating: event.coach.rating,
+        city: event.coach.city,
+        email: event.coach.user.email,
+        phone: event.coach.user.phone
+      }
+    };
+
+    res.json(successResponse(eventDetails, 'Event details retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get event details error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve event details.', 500));
+  }
+});
+
 // Register for event - FIXED
 router.post('/events/:eventId/register', authenticate, requireStudent, async (req, res) => {
   try {
@@ -700,10 +821,20 @@ router.get('/event-registrations', authenticate, requireStudent, async (req, res
       prisma.eventRegistration.count({ where })
     ]);
 
-    const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
+    // Filter out registrations for cancelled, suspended, or deleted events
+    const validRegistrations = registrations.filter(reg => {
+      // Keep registrations for events that are still active/approved/pending/completed
+      const validStatuses = ['APPROVED', 'ACTIVE', 'PENDING', 'COMPLETED'];
+      return validStatuses.includes(reg.event.status);
+    });
+
+    // Update total count to reflect filtered results
+    const filteredTotal = validRegistrations.length;
+
+    const pagination = getPaginationMeta(filteredTotal, parseInt(page), parseInt(limit));
 
     // Format for frontend compatibility
-    const formattedRegistrations = registrations.map(reg => ({
+    const formattedRegistrations = validRegistrations.map(reg => ({
       id: reg.id,
       status: reg.status,
       message: reg.message,
@@ -777,8 +908,8 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
         where: { 
           studentId,
           event: {
-            startDate: { gte: new Date() },
-            status: { in: ['APPROVED', 'ACTIVE'] }    // FIXED: Use correct status
+            startDate: { gt: new Date() },                     // Changed to gt: exclude current/past events
+            status: { in: ['APPROVED', 'ACTIVE'] }
           }
         }
       }),
@@ -801,8 +932,8 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
         where: { 
           studentId,
           event: {
-            startDate: { gte: new Date() },
-            status: { in: ['APPROVED', 'ACTIVE'] }    // FIXED: Use correct status
+            startDate: { gt: new Date() },                     // Changed to gt: exclude current/past events
+            status: { in: ['APPROVED', 'ACTIVE'] }
           }
         },
         include: {

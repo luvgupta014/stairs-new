@@ -301,6 +301,16 @@ export const getStudentEvents = async (params = {}) => {
   }
 };
 
+export const getStudentEventDetails = async (eventId) => {
+  try {
+    const response = await api.get(`/api/student/events/${eventId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Get student event details error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 export const getStudentEventRegistrations = async (params = {}) => {
   try {
     const response = await api.get('/api/student/event-registrations', { params });
@@ -313,10 +323,20 @@ export const getStudentEventRegistrations = async (params = {}) => {
 
 export const registerForEvent = async (eventId) => {
   try {
-    const response = await api.post(`/api/student/events/${eventId}/register`);
+    const response = await api.post(`/api/events/${eventId}/register`);
     return response.data;
   } catch (error) {
     console.error('Register for event error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const unregisterFromEvent = async (eventId) => {
+  try {
+    const response = await api.delete(`/api/events/${eventId}/register`);
+    return response.data;
+  } catch (error) {
+    console.error('Unregister from event error:', error);
     throw error.response?.data || error.message;
   }
 };

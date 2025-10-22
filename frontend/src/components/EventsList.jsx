@@ -31,26 +31,47 @@ const EventsList = ({
 
   // Filter events based on current filters
   useEffect(() => {
+    console.log('🔍 EventsList filtering - events:', events.length, 'filters:', filters);
+    console.log('🔍 Sample event for filtering:', events[0]);
+    
+    if (events.length === 0) {
+      console.log('⚠️ No events to filter');
+      setFilteredEvents([]);
+      return;
+    }
+    
     let filtered = [...events];
+    console.log('🔍 Starting with all events:', filtered.length);
 
     // Search filter
-    if (filters.search) {
-      const searchTerm = filters.search.toLowerCase();
+    if (filters.search && filters.search.trim() !== '') {
+      const searchTerm = filters.search.toLowerCase().trim();
+      console.log('🔎 Applying search filter:', searchTerm);
+      console.log('🔎 Sample event fields:', {
+        name: events[0]?.name,
+        sport: events[0]?.sport,
+        venue: events[0]?.venue,
+        city: events[0]?.city
+      });
       filtered = filtered.filter(event =>
-        event.name.toLowerCase().includes(searchTerm) ||
-        event.sport.toLowerCase().includes(searchTerm) ||
-        event.venue.toLowerCase().includes(searchTerm) ||
-        event.city.toLowerCase().includes(searchTerm)
+        (event.name || '').toLowerCase().includes(searchTerm) ||
+        (event.sport || '').toLowerCase().includes(searchTerm) ||
+        (event.venue || '').toLowerCase().includes(searchTerm) ||
+        (event.city || '').toLowerCase().includes(searchTerm)
       );
+      console.log('📊 After search filter:', filtered.length);
     }
 
     // Sport filter
-    if (filters.sport) {
-      filtered = filtered.filter(event => event.sport === filters.sport);
+    if (filters.sport && filters.sport.trim() !== '') {
+      console.log('🏀 Applying sport filter:', filters.sport);
+      filtered = filtered.filter(event => (event.sport || '') === filters.sport);
+      console.log('📊 After sport filter:', filtered.length);
     }
 
     // Status filter
-    if (filters.status) {
+    if (filters.status && filters.status.trim() !== '') {
+      console.log('📊 Applying status filter:', filters.status);
       const now = new Date();
       switch (filters.status) {
         case 'upcoming':
@@ -73,10 +94,12 @@ const EventsList = ({
         default:
           break;
       }
+      console.log('📊 After status filter:', filtered.length);
     }
 
     // Date range filter
-    if (filters.dateRange) {
+    if (filters.dateRange && filters.dateRange.trim() !== '') {
+      console.log('📅 Applying date range filter:', filters.dateRange);
       const now = new Date();
       switch (filters.dateRange) {
         case 'today':
@@ -102,18 +125,25 @@ const EventsList = ({
         default:
           break;
       }
+      console.log('📅 After date range filter:', filtered.length);
     }
 
     setFilteredEvents(filtered);
     setCurrentPage(1); // Reset to first page when filters change
+    console.log('✅ Final filtered events:', filtered.length);
   }, [events, filters]);
 
   // Handle filter changes
   const handleFilterChange = (filterName, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [filterName]: value
-    }));
+    console.log('🔧 Filter change:', filterName, '=', value);
+    setFilters(prev => {
+      const newFilters = {
+        ...prev,
+        [filterName]: value
+      };
+      console.log('🔧 New filters state:', newFilters);
+      return newFilters;
+    });
   };
 
   // Clear all filters
@@ -127,7 +157,8 @@ const EventsList = ({
   };
 
   // Get unique sports from events
-  const availableSports = [...new Set(events.map(event => event.sport))].sort();
+  const availableSports = [...new Set(events.map(event => event.sport).filter(Boolean))].sort();
+  console.log('🏀 Available sports:', availableSports);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredEvents.length / itemsPerPage);

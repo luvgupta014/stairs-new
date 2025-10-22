@@ -33,22 +33,41 @@ const EventCard = ({
     const regDeadline = event.registrationDeadline ? 
       new Date(event.registrationDeadline) : startDate;
     
-    return now < regDeadline && now < startDate;
+    // Registration is open if:
+    // 1. Current time is before registration deadline
+    // 2. Current time is before event start date
+    // 3. Event hasn't reached max capacity
+    return now < regDeadline && 
+           now < startDate && 
+           (event.currentParticipants || 0) < event.maxParticipants;
+  };
+
+  // Check if user can unregister
+  const canUnregister = () => {
+    const now = new Date();
+    const startDate = new Date(event.startDate);
+    
+    // Can unregister if:
+    // 1. User is registered
+    // 2. Event hasn't started yet
+    return event.isRegistered && now < startDate;
   };
 
   // Check if user owns this event
   const isOwner = () => {
-    if (userRole === 'coach') return event.coachId === userId;
-    if (userRole === 'institute') return event.instituteId === userId;
-    if (userRole === 'club') return event.clubId === userId;
+    if (userRole === 'coach' || userRole === 'COACH') return event.coachId === userId;
+    if (userRole === 'institute' || userRole === 'INSTITUTE') return event.instituteId === userId;
+    if (userRole === 'club' || userRole === 'CLUB') return event.clubId === userId;
     return false;
   };
 
   // Get creator name
   const getCreatorName = () => {
-    if (event.coach) return event.coach.name;
-    if (event.institute) return event.institute.name;
-    if (event.club) return event.club.name;
+    if (event.organizer?.name) return event.organizer.name;
+    if (event.coach?.name) return event.coach.name;
+    if (event.institute?.name) return event.institute.name;
+    if (event.club?.name) return event.club.name;
+    if (event.createdBy?.name) return event.createdBy.name;
     return 'Unknown';
   };
 
@@ -69,8 +88,21 @@ const EventCard = ({
 
   // Handle action click
   const handleAction = (action) => {
-    onAction(action, event);
+    console.log('🔥 EventCard handleAction called with:', action);
+    console.log('📊 Event data:', { id: event.id, name: event.name });
+    console.log('👤 User role:', userRole);
+    console.log('🎯 onAction type:', typeof onAction);
+    
+    if (typeof onAction === 'function') {
+      onAction(action, event);
+      console.log('✅ onAction called successfully');
+    } else {
+      console.error('❌ onAction is not a function:', onAction);
+    }
   };
+
+  console.log('🎨 EventCard render - userRole:', userRole, 'event:', event.name);
+  console.log('🔍 Student check:', (userRole === 'student' || userRole === 'STUDENT'));
 
   return (
     <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 overflow-hidden">
@@ -118,11 +150,27 @@ const EventCard = ({
           </div>
           
           <div className="flex items-center text-gray-600">
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            {event.venue}, {event.city}
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const query = event.latitude && event.longitude 
+                  ? `${event.latitude},${event.longitude}`
+                  : encodeURIComponent(`${event.venue}, ${event.city}, ${event.state || ''}`);
+                const url = event.latitude && event.longitude
+                  ? `https://www.google.com/maps/dir/?api=1&destination=${event.latitude},${event.longitude}`
+                  : `https://www.google.com/maps/search/?api=1&query=${query}`;
+                window.open(url, '_blank');
+              }}
+              className="text-left hover:text-blue-600 hover:underline transition-colors"
+              title="Open in Google Maps"
+            >
+              {event.venue}, {event.city}
+            </button>
           </div>
           
           <div className="flex items-center text-gray-600">
@@ -144,24 +192,40 @@ const EventCard = ({
       <div className="p-4 bg-gray-50 border-t border-gray-200">
         <div className="flex flex-wrap gap-2">
           {/* Student Actions */}
-          {userRole === 'student' && (
+          {(userRole === 'student' || userRole === 'STUDENT') && (
             <>
               <button
-                onClick={() => handleAction('view')}
+                onClick={(e) => {
+                  console.log('🖱️ View Details button clicked!');
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleAction('view');
+                }}
+                type="button"
                 className="flex-1 bg-blue-600 text-white px-3 py-2 rounded-md text-sm hover:bg-blue-700 transition-colors"
+                style={{ minWidth: '100px' }}
               >
                 View Details
               </button>
               
-              {isRegistrationOpen() && (
-                event.isRegistered ? (
-                  <button
-                    onClick={() => handleAction('unregister')}
-                    className="bg-red-600 text-white px-3 py-2 rounded-md text-sm hover:bg-red-700 transition-colors"
-                  >
-                    Unregister
-                  </button>
-                ) : (
+              {/* Registration/Unregistration buttons */}
+              {event.isRegistered ? (
+                // Show unregister button if user is registered
+                <button
+                  onClick={() => handleAction('unregister')}
+                  disabled={!canUnregister()}
+                  className={`px-3 py-2 rounded-md text-sm transition-colors ${
+                    canUnregister() 
+                      ? 'bg-red-600 text-white hover:bg-red-700' 
+                      : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                  }`}
+                  title={!canUnregister() ? 'Cannot unregister after event has started' : 'Unregister from this event'}
+                >
+                  {canUnregister() ? 'Unregister' : 'Registered'}
+                </button>
+              ) : (
+                // Show register button if user is not registered and registration is open
+                isRegistrationOpen() && (
                   <button
                     onClick={() => handleAction('register')}
                     disabled={event.currentParticipants >= event.maxParticipants}
@@ -175,7 +239,7 @@ const EventCard = ({
           )}
 
           {/* Creator Actions */}
-          {(userRole === 'coach' || userRole === 'institute' || userRole === 'club') && isOwner() && (
+          {(userRole === 'coach' || userRole === 'COACH' || userRole === 'institute' || userRole === 'INSTITUTE' || userRole === 'club' || userRole === 'CLUB') && isOwner() && (
             <>
               <button
                 onClick={() => handleAction('view')}
@@ -203,7 +267,7 @@ const EventCard = ({
           )}
 
           {/* Admin Actions */}
-          {userRole === 'admin' && (
+          {(userRole === 'admin' || userRole === 'ADMIN') && (
             <>
               <button
                 onClick={() => handleAction('view')}

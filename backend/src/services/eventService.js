@@ -186,10 +186,13 @@ class EventService {
       // Apply role-based filtering
       if (userRole === 'STUDENT') {
         // Students see only approved/active future events
+        // Exclude events that have already started (not just today's date)
+        const now = new Date();
         where.status = { in: ['APPROVED', 'ACTIVE'] };
-        where.startDate = { gte: new Date() };
+        where.startDate = { gt: now }; // Changed from gte to gt to exclude current/past events
         console.log('🔍 Student event filters:', JSON.stringify(where, null, 2));
-        console.log('🕐 Current date for filtering:', new Date().toISOString());
+        console.log('🕐 Current date for filtering:', now.toISOString());
+        console.log('📝 Note: Events starting now or in the past are excluded for registration');
       } else if (userRole === 'COACH' && userId) {
         // For general events endpoint, don't filter by coach
         // This is handled in getEventsByCreator method
@@ -620,8 +623,7 @@ class EventService {
         data: {
           studentId,
           eventId,
-          status: 'CONFIRMED',
-          registeredAt: new Date()
+          status: 'REGISTERED'
         },
         include: {
           event: {
@@ -671,9 +673,9 @@ class EventService {
     try {
       const registration = await prisma.eventRegistration.findUnique({
         where: {
-          studentId_eventId: {
-            studentId,
-            eventId
+          eventId_studentId: {
+            eventId,
+            studentId
           }
         },
         include: {

@@ -5,7 +5,7 @@ import Button from '../../components/Button';
 import Modal from '../../components/Modal';
 import Spinner from '../../components/Spinner';
 import { useNavigate } from 'react-router-dom';
-import { getStudentEvents, getCoachEvents, getEvents } from '../../api';
+import { getStudentEvents, getCoachEvents, getEvents, registerForEvent, unregisterFromEvent } from '../../api';
 
 /**
  * Events Page
@@ -34,30 +34,55 @@ const Events = () => {
       console.log('🔄 Loading events for user role:', user?.role);
 
       let response;
+      let loadedEvents = [];
+      
       if (user?.role === 'STUDENT') {
         // Students see available events for registration
+        console.log('📚 Calling getStudentEvents...');
         response = await getStudentEvents({
           page: 1,
           limit: 50
         });
-        setEvents(response.data?.events || []);
+        console.log('📚 Student events response:', response);
+        loadedEvents = response.data?.events || [];
       } else if (user?.role === 'COACH') {
         // Coaches see their own events
         response = await getCoachEvents({
           page: 1,
           limit: 50
         });
-        setEvents(response.data?.events || []);
+        loadedEvents = response.data?.events || [];
       } else {
         // Admin and others see all events
         response = await getEvents({
           page: 1,
           limit: 50
         });
-        setEvents(response.data?.events || []);
+        loadedEvents = response.data?.events || [];
       }
 
-      console.log('✅ Events loaded:', response.data?.events?.length || 0);
+      console.log('📊 Loaded events count:', loadedEvents.length);
+      console.log('📊 First event structure:', loadedEvents[0]);
+      
+      // Normalize all events to ensure consistent field names for filtering
+      const normalizedEvents = loadedEvents.map(event => ({
+        ...event,
+        name: event.name || event.title || '',
+        sport: event.sport || '',
+        venue: event.venue || event.location || '',
+        city: event.city || '',
+        startDate: event.startDate || '',
+        endDate: event.endDate || '',
+        isRegistered: event.isRegistered || false
+      }));
+      
+      console.log('✅ Normalized events:', normalizedEvents.length);
+      console.log('📊 Sample normalized event:', normalizedEvents[0]);
+      setEvents(normalizedEvents);
+
+      console.log('✅ Events loaded:', normalizedEvents.length);
+      console.log('📊 Sample event for debug:', normalizedEvents[0]);
+      
     } catch (err) {
       console.error('❌ Error loading events:', err);
       setError('Failed to load events. Please try again.');
@@ -69,21 +94,7 @@ const Events = () => {
   // Handle event registration
   const handleEventRegister = async (eventId) => {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`/api/events/${eventId}/register`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to register for event');
-      }
-
-      const data = await response.json();
+      const response = await registerForEvent(eventId);
       
       // Show success message
       alert('Successfully registered for the event!');
@@ -93,6 +104,26 @@ const Events = () => {
     } catch (err) {
       console.error('Error registering for event:', err);
       alert(err.message || 'Failed to register for event. Please try again.');
+    }
+  };
+
+  // Handle event unregistration
+  const handleEventUnregister = async (eventId) => {
+    if (!window.confirm('Are you sure you want to unregister from this event?')) {
+      return;
+    }
+
+    try {
+      await unregisterFromEvent(eventId);
+
+      // Show success message
+      alert('Successfully unregistered from the event!');
+      
+      // Reload events to update registration status
+      loadEvents();
+    } catch (err) {
+      console.error('Error unregistering from event:', err);
+      alert(err.message || 'Failed to unregister from event. Please try again.');
     }
   };
 
@@ -138,8 +169,43 @@ const Events = () => {
     navigate(`/events/${eventId}/edit`);
   };
 
+  // Handle event actions (unified handler for EventsList)
+  const handleEventAction = (action, event) => {
+    console.log('🎯 Event action triggered:', action);
+    console.log('📊 Event details:', { id: event.id, name: event.name });
+    console.log('👤 User role:', user?.role);
+    
+    switch (action) {
+      case 'view':
+        console.log('🔍 Navigating to event details:', event.id);
+        handleEventView(event.id);
+        break;
+      case 'register':
+        handleEventRegister(event.id);
+        break;
+      case 'unregister':
+        handleEventUnregister(event.id);
+        break;
+      case 'edit':
+        if (canManageEvents()) handleEventEdit(event.id);
+        break;
+      case 'delete':
+        if (canManageEvents()) handleEventDelete(event.id);
+        break;
+      case 'participants':
+        if (canManageEvents()) handleViewParticipants(event.id);
+        break;
+      case 'results':
+        if (canManageEvents()) handleUploadResults(event.id);
+        break;
+      default:
+        console.warn('Unknown event action:', action);
+    }
+  };
+
   // Handle viewing event details
   const handleEventView = (eventId) => {
+    console.log('🚀 Navigating to event details page:', `/events/${eventId}`);
     navigate(`/events/${eventId}`);
   };
 
@@ -177,11 +243,26 @@ const Events = () => {
       <div className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Events</h1>
-              <p className="text-gray-600 mt-1">
-                Discover and participate in sports events
-              </p>
+            <div className="flex items-center">
+              {/* Back button for students */}
+              {user?.role === 'STUDENT' && (
+                <button
+                  onClick={() => navigate('/dashboard/student')}
+                  className="mr-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+                  title="Back to Dashboard"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+              )}
+              
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Events</h1>
+                <p className="text-gray-600 mt-1">
+                  Discover and participate in sports events
+                </p>
+              </div>
             </div>
             
             {canCreateEvents() && (
@@ -220,12 +301,7 @@ const Events = () => {
         {/* Events List */}
         <EventsList
           events={events}
-          onRegister={handleEventRegister}
-          onEdit={canManageEvents() ? handleEventEdit : null}
-          onDelete={canManageEvents() ? handleEventDelete : null}
-          onView={handleEventView}
-          onViewParticipants={canManageEvents() ? handleViewParticipants : null}
-          onUploadResults={canManageEvents() ? handleUploadResults : null}
+          onEventAction={handleEventAction}
           userRole={user?.role}
           userId={user?.id}
         />
