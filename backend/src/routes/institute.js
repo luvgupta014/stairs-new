@@ -66,17 +66,21 @@ router.get('/profile', authenticate, requireInstitute, async (req, res) => {
           }
         },
         students: {
-          select: {
-            id: true,
-            name: true,
-            sport: true,
-            level: true,
-            user: {
+          include: {
+            student: {
               select: {
-                email: true,
-                phone: true,
-                isActive: true,
-                isVerified: true
+                id: true,
+                name: true,
+                sport: true,
+                level: true,
+                user: {
+                  select: {
+                    email: true,
+                    phone: true,
+                    isActive: true,
+                    isVerified: true
+                  }
+                }
               }
             }
           },
@@ -86,15 +90,19 @@ router.get('/profile', authenticate, requireInstitute, async (req, res) => {
           }
         },
         coaches: {
-          select: {
-            id: true,
-            name: true,
-            specialization: true,
-            paymentStatus: true,
-            user: {
+          include: {
+            coach: {
               select: {
-                email: true,
-                phone: true
+                id: true,
+                name: true,
+                specialization: true,
+                paymentStatus: true,
+                user: {
+                  select: {
+                    email: true,
+                    phone: true
+                  }
+                }
               }
             }
           },
@@ -348,7 +356,7 @@ router.post('/bulk-upload/students', authenticate, requireInstitute, requireAppr
             phone: rowData.phone,
             password: hashedPassword,
             role: 'STUDENT',
-            status: 'ACTIVE',
+            isActive: true,
             phoneVerified: true,
             student: {
               create: {
@@ -358,12 +366,19 @@ router.post('/bulk-upload/students', authenticate, requireInstitute, requireAppr
                 sport: rowData.sport || null,
                 level: rowData.level || 'BEGINNER',
                 preferredLocation: rowData.preferredLocation || null,
-                institute: req.institute.name
               }
             }
           },
           include: {
             student: true
+          }
+        });
+
+        // Create institute-student relationship
+        await prisma.instituteStudent.create({
+          data: {
+            instituteId: req.institute.id,
+            studentId: user.student.id
           }
         });
 
@@ -515,7 +530,7 @@ router.post('/bulk-upload/coaches', authenticate, requireInstitute, requireAppro
             phone: rowData.phone,
             password: hashedPassword,
             role: 'COACH',
-            status: 'ACTIVE',
+            isActive: true,
             coach: {
               create: {
                 firstName: rowData.firstName,
@@ -578,10 +593,15 @@ router.get('/students', authenticate, requireInstitute, async (req, res) => {
     const { skip, take } = getPaginationParams(page, limit);
 
     const where = {
-      institute: req.institute.name,
+      institutes: {
+        some: {
+          instituteId: req.institute.id
+        }
+      },
       ...(search && {
         OR: [
-          { name: { contains: search, mode: 'insensitive' } },
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } },
           { user: { email: { contains: search, mode: 'insensitive' } } }
         ]
       }),
@@ -668,7 +688,7 @@ router.get('/coaches', authenticate, requireInstitute, async (req, res) => {
             }
           },
           connections: {
-            where: { status: 'ACTIVE' },
+            where: { status: 'ACCEPTED' },
             include: {
               student: {
                 select: {
@@ -710,7 +730,7 @@ router.get('/coaches', authenticate, requireInstitute, async (req, res) => {
 // Get dashboard analytics
 router.get('/dashboard', authenticate, requireInstitute, async (req, res) => {
   try {
-    const instituteName = req.institute.name;
+    const instituteId = req.institute.id;
 
     const [
       totalStudents,
@@ -719,23 +739,44 @@ router.get('/dashboard', authenticate, requireInstitute, async (req, res) => {
       pendingApprovals,
       recentRegistrations
     ] = await Promise.all([
-      prisma.student.count({
-        where: { institute: instituteName }
+      prisma.instituteStudent.count({
+        where: { instituteId: instituteId }
       }),
-      prisma.coach.count(),
+      prisma.instituteCoach.count({
+        where: { instituteId: instituteId }
+      }),
       prisma.studentCoachConnection.count({
         where: {
-          status: 'ACTIVE',
-          student: { institute: instituteName }
+          status: 'ACCEPTED',
+          student: {
+            instituteStudents: {
+              some: {
+                instituteId: instituteId
+              }
+            }
+          }
         }
       }),
       prisma.coach.count({
-        where: { approvalStatus: 'PENDING' }
+        where: { 
+          OR: [
+            { paymentStatus: 'PENDING' },
+            { isActive: false }
+          ]
+        }
       }),
       prisma.user.findMany({
         where: {
           OR: [
-            { student: { institute: instituteName } },
+            { 
+              studentProfile: { 
+                instituteStudents: {
+                  some: {
+                    instituteId: instituteId
+                  }
+                }
+              } 
+            },
             { role: 'COACH' }
           ]
         },
@@ -744,16 +785,14 @@ router.get('/dashboard', authenticate, requireInstitute, async (req, res) => {
           email: true,
           role: true,
           createdAt: true,
-          student: {
+          studentProfile: {
             select: {
-              firstName: true,
-              lastName: true
+              name: true
             }
           },
-          coach: {
+          coachProfile: {
             select: {
-              firstName: true,
-              lastName: true
+              name: true
             }
           }
         },

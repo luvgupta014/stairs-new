@@ -190,7 +190,7 @@ const InstituteRegisterPremium = () => {
         payLater: formData.payLater
       };
 
-      const response = await api.post('/auth/institute/register', registrationData);
+      const response = await api.post('/api/auth/institute/register', registrationData);
 
       if (response.data.success) {
         navigate('/verify-otp-premium', {

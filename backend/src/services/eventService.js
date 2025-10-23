@@ -374,15 +374,6 @@ class EventService {
               }
             }
           },
-          institute: {
-            select: {
-              id: true,
-              name: true,
-              user: {
-                select: { email: true, phone: true }
-              }
-            }
-          },
           club: {
             select: {
               id: true,
@@ -474,20 +465,6 @@ class EventService {
               id: true,
               name: true,
               primarySport: true,
-              user: { select: { email: true, phone: true } }
-            }
-          },
-          institute: {
-            select: {
-              id: true,
-              name: true,
-              user: { select: { email: true, phone: true } }
-            }
-          },
-          club: {
-            select: {
-              id: true,
-              name: true,
               user: { select: { email: true, phone: true } }
             }
           },
@@ -1038,9 +1015,7 @@ class EventService {
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       include: {
-        coach: { select: { id: true, name: true } },
-        institute: { select: { id: true, name: true } },
-        club: { select: { id: true, name: true } }
+        coach: { select: { id: true, name: true } }
       }
     });
 

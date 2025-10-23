@@ -146,6 +146,7 @@ model Institute {
   sportsOffered String? // JSON string
   studentsCount Int      @default(0)
   coachesCount  Int      @default(0)
+  paymentStatus PaymentStatus @default(PENDING)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -171,6 +172,7 @@ model Club {
   facilities    String? // JSON string
   membershipTypes String? // JSON string
   membersCount  Int      @default(0)
+  paymentStatus PaymentStatus @default(PENDING)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

@@ -451,8 +451,42 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     console.log('🎉 === OTP VERIFICATION COMPLETED ===');
+    
+    console.log('🔍 User data for payment check:', {
+      role: updatedUser.role,
+      hasCoachProfile: !!updatedUser.coachProfile,
+      hasInstituteProfile: !!updatedUser.instituteProfile,
+      hasClubProfile: !!updatedUser.clubProfile,
+      coachPaymentStatus: updatedUser.coachProfile?.paymentStatus,
+      institutePaymentStatus: updatedUser.instituteProfile?.paymentStatus,
+      clubPaymentStatus: updatedUser.clubProfile?.paymentStatus
+    });
+    
+    // Check if payment is required for this user
+    let requiresPayment = false;
+    let paymentStatus = 'SUCCESS'; // Default for students
+    
+    if (updatedUser.role === 'COACH' && updatedUser.coachProfile) {
+      paymentStatus = updatedUser.coachProfile.paymentStatus || 'PENDING';
+      requiresPayment = paymentStatus === 'PENDING';
+    } else if (updatedUser.role === 'INSTITUTE' && updatedUser.instituteProfile) {
+      paymentStatus = updatedUser.instituteProfile.paymentStatus || 'PENDING';
+      requiresPayment = paymentStatus === 'PENDING';
+    } else if (updatedUser.role === 'CLUB' && updatedUser.clubProfile) {
+      paymentStatus = updatedUser.clubProfile.paymentStatus || 'PENDING';
+      requiresPayment = paymentStatus === 'PENDING';
+    }
+    
+    console.log('💰 Payment status check:', {
+      role: updatedUser.role,
+      paymentStatus,
+      requiresPayment
+    });
+    
     const responseData = {
       token,
+      requiresPayment,
+      paymentStatus,
       user: {
         id: updatedUser.id,
         uniqueId: updatedUser.uniqueId,
@@ -1143,8 +1177,8 @@ router.post('/club/register', async (req, res) => {
             location: address,
             city: address?.split(',')[1]?.trim() || '',
             state: address?.split(',')[2]?.trim() || '',
-            established: establishedYear ? parseInt(establishedYear) : new Date().getFullYear(),
-            sportsOffered: JSON.stringify(sportsOffered || [])
+            established: establishedYear ? establishedYear.toString() : new Date().getFullYear().toString(),
+            facilities: JSON.stringify(sportsOffered || [])
           }
         },
         otpRecords: {

@@ -51,6 +51,8 @@ import EventDetails from "./pages/events/EventDetails";
 import EventCreate from "./pages/events/EventCreate";
 import BulkUpload from "./pages/BulkUpload";
 import CoachPayment from "./pages/CoachPayment";
+import InstitutePayment from "./pages/InstitutePayment";
+import ClubPayment from "./pages/ClubPayment";
 import CoachRegisterPremiumNew from "./pages/CoachRegisterPremium";
 import AdminEventResults from "./components/AdminEventResults";
 import EventResultUpload from "./pages/events/EventResultUpload";
@@ -209,6 +211,22 @@ function App() {
               element={
                 <ProtectedRoute role="COACH">
                   <CoachPayment />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/institute/payment"
+              element={
+                <ProtectedRoute role="INSTITUTE">
+                  <InstitutePayment />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/club/payment"
+              element={
+                <ProtectedRoute role="CLUB">
+                  <ClubPayment />
                 </ProtectedRoute>
               }
             />

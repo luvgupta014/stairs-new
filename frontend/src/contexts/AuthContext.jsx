@@ -147,11 +147,19 @@ export const AuthProvider = ({ children }) => {
       }
       
       // Production API login
+      console.log('🔄 Attempting login with:', {
+        email: credentials.email,
+        role: role.toUpperCase(),
+        hasPassword: !!credentials.password
+      });
+      
       const response = await api.post('/api/auth/login', {
         email: credentials.email,
         password: credentials.password,
         role: role.toUpperCase()
       });
+
+      console.log('✅ Login API response:', response.data);
 
       if (response.data.success) {
         const { token: newToken, user: userData } = response.data.data;
@@ -171,7 +179,17 @@ export const AuthProvider = ({ children }) => {
       
       return { success: false, message: response.data.message };
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('❌ Login error details:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          data: error.config?.data
+        }
+      });
       return { 
         success: false, 
         message: error.response?.data?.message || 'Login failed. Please try again.' 

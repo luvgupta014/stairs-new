@@ -25,7 +25,7 @@ const InstituteLogin = () => {
       // Check if it's a demo login
       if (formData.email.startsWith('demo@')) {
         // Use demo authentication
-        const result = await login(formData.email, formData.password, 'institute');
+        const result = await login({ email: formData.email, password: formData.password }, 'institute');
         if (result.success) {
           navigate('/dashboard/institute');
         } else {
@@ -33,7 +33,7 @@ const InstituteLogin = () => {
         }
       } else {
         // Use real API authentication
-        const result = await login(formData.email, formData.password, 'institute');
+        const result = await login({ email: formData.email, password: formData.password }, 'institute');
         if (result.success) {
           navigate('/dashboard/institute');
         } else {

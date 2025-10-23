@@ -141,7 +141,6 @@ router.get('/connection-requests', authenticate, requireCoach, async (req, res) 
               lastName: true,
               sport: true,
               level: true,
-              institute: true,
               bio: true,
               user: {
                 select: {
@@ -249,7 +248,7 @@ router.get('/students', authenticate, requireCoach, requireApproved, async (req,
 
     const where = {
       coachId: req.coach.id,
-      status: 'ACTIVE',
+      status: 'ACCEPTED',
       ...(search && {
         student: {
           OR: [
@@ -272,7 +271,6 @@ router.get('/students', authenticate, requireCoach, requireApproved, async (req,
               lastName: true,
               sport: true,
               level: true,
-              institute: true,
               bio: true,
               achievements: true,
               user: {

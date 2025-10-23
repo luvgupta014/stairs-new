@@ -25,7 +25,7 @@ const ClubLogin = () => {
       // Check if it's a demo login
       if (formData.email.startsWith('demo@')) {
         // Use demo authentication
-        const result = await login(formData.email, formData.password, 'club');
+        const result = await login({ email: formData.email, password: formData.password }, 'club');
         if (result.success) {
           navigate('/dashboard/club');
         } else {
@@ -33,7 +33,7 @@ const ClubLogin = () => {
         }
       } else {
         // Use real API authentication
-        const result = await login(formData.email, formData.password, 'club');
+        const result = await login({ email: formData.email, password: formData.password }, 'club');
         if (result.success) {
           navigate('/dashboard/club');
         } else {

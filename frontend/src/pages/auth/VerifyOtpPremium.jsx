@@ -81,16 +81,40 @@ const VerifyOtpPremium = () => {
         localStorage.setItem('token', response.data.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
 
-        // Navigate to appropriate dashboard
-        setTimeout(() => {
-          if (role === 'COACH') {
-            navigate('/coach/dashboard');
-          } else if (role === 'INSTITUTE') {
-            navigate('/institute/dashboard');
-          } else if (role === 'CLUB') {
-            navigate('/club/dashboard');
-          }
-        }, 1500);
+        // Check if payment is required
+        if (response.data.data.requiresPayment) {
+          // Store payment info and redirect to payment page
+          const paymentData = {
+            userId: response.data.data.user.id,
+            role: response.data.data.user.role,
+            profileId: response.data.data.user.profile?.id,
+            email: response.data.data.user.email,
+            name: response.data.data.user.profile?.name
+          };
+          localStorage.setItem('pendingPayment', JSON.stringify(paymentData));
+          
+          // Navigate to payment page based on role
+          setTimeout(() => {
+            if (role === 'COACH') {
+              navigate('/coach/payment');
+            } else if (role === 'INSTITUTE') {
+              navigate('/institute/payment');
+            } else if (role === 'CLUB') {
+              navigate('/club/payment');
+            }
+          }, 1500);
+        } else {
+          // Navigate to appropriate dashboard
+          setTimeout(() => {
+            if (role === 'COACH') {
+              navigate('/coach/dashboard');
+            } else if (role === 'INSTITUTE') {
+              navigate('/institute/dashboard');
+            } else if (role === 'CLUB') {
+              navigate('/club/dashboard');
+            }
+          }, 1500);
+        }
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid OTP. Please try again.');
@@ -108,7 +132,7 @@ const VerifyOtpPremium = () => {
     setError('');
 
     try {
-      await api.post('/auth/resend-otp', { userId });
+      await api.post('/api/auth/resend-otp', { userId });
       setCountdown(60);
       setOtp(['', '', '', '', '', '']);
       document.getElementById('otp-0').focus();

@@ -93,7 +93,7 @@ export const forgotPassword = async (email) => {
 // Add reset password API
 export const resetPassword = async (email, otp, newPassword) => {
   try {
-    const response = await api.post('/auth/reset-password', {
+    const response = await api.post('/api/auth/reset-password', {
       email,
       otp,
       newPassword
@@ -232,7 +232,7 @@ export const getClubDashboard = async () => {
   try {
     // TODO: Integrate with backend dashboard data
     const response = await api.get('/api/club/dashboard');
-    return response.data;
+    return response.data.data; // Extract data from response
   } catch (error) {
     throw error.response?.data || error.message;
   }
@@ -242,7 +242,7 @@ export const getClubMembers = async () => {
   try {
     // TODO: Integrate with backend club members data
     const response = await api.get('/api/club/members');
-    return response.data;
+    return response.data.data.members; // Extract members array from response
   } catch (error) {
     throw error.response?.data || error.message;
   }

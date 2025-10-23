@@ -172,7 +172,7 @@ const ClubRegisterPremium = () => {
         payLater: formData.payLater
       };
 
-      const response = await api.post('/auth/club/register', registrationData);
+      const response = await api.post('/api/auth/club/register', registrationData);
 
       if (response.data.success) {
         navigate('/verify-otp-premium', {

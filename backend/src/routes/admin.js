@@ -466,8 +466,8 @@ router.get('/users', authenticate, requireAdmin, async (req, res) => {
               { lastName: { contains: search, mode: 'insensitive' } }
             ]
           }},
-          { institute: { name: { contains: search, mode: 'insensitive' } } },
-          { club: { name: { contains: search, mode: 'insensitive' } } }
+          { instituteProfile: { name: { contains: search, mode: 'insensitive' } } },
+          { clubProfile: { name: { contains: search, mode: 'insensitive' } } }
         ]
       })
     };
@@ -1286,7 +1286,7 @@ router.post('/create-admin', authenticate, requireAdmin, async (req, res) => {
         phone,
         password: hashedPassword,
         role: 'ADMIN',
-        status: 'ACTIVE',
+        isActive: true,
         phoneVerified: true,
         admin: {
           create: {

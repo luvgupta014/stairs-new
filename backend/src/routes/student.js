@@ -291,7 +291,7 @@ router.get('/coaches/:coachId', authenticate, requireStudent, async (req, res) =
         },
         studentConnections: {
           where: {
-            status: 'ACTIVE'
+            status: 'ACCEPTED'
           },
           select: {
             student: {
@@ -525,8 +525,6 @@ router.get('/events', authenticate, requireStudent, async (req, res) => {
         phone: event.coach?.user?.phone
       },
       coach: event.coach,
-      institute: event.institute,
-      club: event.club,
       createdAt: event.createdAt
     }));
 

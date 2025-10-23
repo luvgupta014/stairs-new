@@ -29,11 +29,14 @@ router.get('/profile', authenticate, requireClub, async (req, res) => {
         },
         members: {
           include: {
-            user: {
-              select: {
-                email: true,
-                phone: true,
-                status: true
+            student: {
+              include: {
+                user: {
+                  select: {
+                    email: true,
+                    phone: true
+                  }
+                }
               }
             }
           },
@@ -42,15 +45,9 @@ router.get('/profile', authenticate, requireClub, async (req, res) => {
           },
           take: 10
         },
-        facilities: {
-          orderBy: {
-            createdAt: 'desc'
-          }
-        },
         _count: {
           select: {
-            members: true,
-            facilities: true
+            members: true
           }
         }
       }
@@ -128,11 +125,10 @@ router.get('/members', authenticate, requireClub, async (req, res) => {
     const where = {
       clubId: req.club.id,
       ...(status && { status: status.toUpperCase() }),
-      ...(sport && { sport: { contains: sport, mode: 'insensitive' } }),
       ...(search && {
         OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { user: { email: { contains: search, mode: 'insensitive' } } }
+          { student: { name: { contains: search, mode: 'insensitive' } } },
+          { student: { user: { email: { contains: search, mode: 'insensitive' } } } }
         ]
       })
     };
@@ -141,28 +137,43 @@ router.get('/members', authenticate, requireClub, async (req, res) => {
       prisma.clubMember.findMany({
         where,
         include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-              phone: true,
-              status: true
+          student: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                  phone: true,
+                  isActive: true
+                }
+              }
             }
           }
         },
         skip,
         take,
-        orderBy: {
-          joinedAt: 'desc'
-        }
+        orderBy: { joinedAt: 'desc' }
       }),
       prisma.clubMember.count({ where })
     ]);
 
     const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
 
+    // Transform members data to match frontend expectations
+    const transformedMembers = members.map(member => ({
+      id: member.id,
+      name: member.student.name || 'Unknown',
+      email: member.student.user.email,
+      phone: member.student.user.phone,
+      membershipType: member.membershipType || 'REGULAR',
+      status: member.status.toLowerCase(),
+      joinedDate: member.joinedAt.toISOString().split('T')[0],
+      lastActivity: member.joinedAt.toISOString().split('T')[0], // Using joinedAt as placeholder
+      isActive: member.student.user.isActive
+    }));
+
     res.json(successResponse({
-      members,
+      members: transformedMembers,
       pagination
     }, 'Club members retrieved successfully.'));
 
@@ -505,9 +516,6 @@ router.get('/dashboard', authenticate, requireClub, async (req, res) => {
     const [
       totalMembers,
       activeMembers,
-      totalFacilities,
-      availableFacilities,
-      monthlyRevenue,
       membersByType,
       recentJoins
     ] = await Promise.all([
@@ -516,21 +524,6 @@ router.get('/dashboard', authenticate, requireClub, async (req, res) => {
       }),
       prisma.clubMember.count({
         where: { clubId, status: 'ACTIVE' }
-      }),
-      prisma.clubFacility.count({
-        where: { clubId }
-      }),
-      prisma.clubFacility.count({
-        where: { clubId, available: true }
-      }),
-      prisma.clubMember.aggregate({
-        where: { 
-          clubId,
-          createdAt: {
-            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-          }
-        },
-        _sum: { fees: true }
       }),
       prisma.clubMember.groupBy({
         by: ['membershipType'],
@@ -542,10 +535,14 @@ router.get('/dashboard', authenticate, requireClub, async (req, res) => {
         orderBy: { joinedAt: 'desc' },
         take: 10,
         include: {
-          user: {
-            select: {
-              email: true,
-              phone: true
+          student: {
+            include: {
+              user: {
+                select: {
+                  email: true,
+                  phone: true
+                }
+              }
             }
           }
         }
@@ -555,12 +552,10 @@ router.get('/dashboard', authenticate, requireClub, async (req, res) => {
     res.json(successResponse({
       totalMembers,
       activeMembers,
-      totalFacilities,
-      availableFacilities,
-      monthlyRevenue: monthlyRevenue._sum.fees || 0,
+      monthlyRevenue: 0, // Since there's no fees field, set to 0
       membersByType,
       recentJoins
-    }, 'Club analytics retrieved successfully.'));
+    }, 'Club dashboard data retrieved successfully.'));
 
   } catch (error) {
     console.error('Get club analytics error:', error);
