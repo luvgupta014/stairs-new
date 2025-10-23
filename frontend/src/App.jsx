@@ -50,9 +50,7 @@ import Events from "./pages/events/Events";
 import EventDetails from "./pages/events/EventDetails";
 import EventCreate from "./pages/events/EventCreate";
 import BulkUpload from "./pages/BulkUpload";
-import CoachPayment from "./pages/CoachPayment";
-import InstitutePayment from "./pages/InstitutePayment";
-import ClubPayment from "./pages/ClubPayment";
+import Payment from "./components/Payment";
 import CoachRegisterPremiumNew from "./pages/CoachRegisterPremium";
 import AdminEventResults from "./components/AdminEventResults";
 import EventResultUpload from "./pages/events/EventResultUpload";
@@ -210,7 +208,7 @@ function App() {
               path="/coach/payment"
               element={
                 <ProtectedRoute role="COACH">
-                  <CoachPayment />
+                  <Payment userType="coach" />
                 </ProtectedRoute>
               }
             />
@@ -218,7 +216,7 @@ function App() {
               path="/institute/payment"
               element={
                 <ProtectedRoute role="INSTITUTE">
-                  <InstitutePayment />
+                  <Payment userType="institute" />
                 </ProtectedRoute>
               }
             />
@@ -226,7 +224,15 @@ function App() {
               path="/club/payment"
               element={
                 <ProtectedRoute role="CLUB">
-                  <ClubPayment />
+                  <Payment userType="club" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/student/payment"
+              element={
+                <ProtectedRoute role="STUDENT">
+                  <Payment userType="student" />
                 </ProtectedRoute>
               }
             />
