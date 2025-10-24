@@ -1,0 +1,8 @@
+{
+  "name": "stairs-backend-production",
+  "scripts": {
+    "build": "npx prisma generate",
+    "start": "node src/index.js",
+    "deploy": "npx prisma db push && node src/index.js"
+  }
+}
