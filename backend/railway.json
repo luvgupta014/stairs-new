@@ -1,8 +1,11 @@
 {
-  "name": "stairs-backend-production",
-  "scripts": {
-    "build": "npx prisma generate",
-    "start": "node src/index.js",
-    "deploy": "npx prisma db push && node src/index.js"
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm install && npx prisma generate"
+  },
+  "deploy": {
+    "startCommand": "node src/index.js",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
   }
 }
