@@ -6,8 +6,9 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "build": "npx prisma generate",
-    "railway:build": "npm install && npx prisma generate",
+    "build": "npm ci && npx prisma generate",
+    "postinstall": "npx prisma generate",
+    "railway:build": "npm ci && npx prisma generate",
     "railway:start": "node src/index.js",
     "deploy": "npx prisma db push && npm start",
     "test": "echo \"Error: no test specified\" && exit 1"
