@@ -1,6 +1,7 @@
 const EventService = require('../services/eventService');
 const { successResponse, errorResponse } = require('../utils/helpers');
 const { PrismaClient } = require('@prisma/client');
+const path = require('path');
 
 const eventService = new EventService();
 const prisma = new PrismaClient();
@@ -435,49 +436,37 @@ class EventController {
 
       console.log(`📁 Uploading result files for event ${eventId}`);
       console.log(`📋 User ID: ${user?.id}, Role: ${user?.role}`);
-      console.log('📄 File:', req.file);
+      console.log('📄 Files:', req.files);
       console.log('📄 Description:', description);
 
-      // Get user-specific ID based on role
-      let uploaderId = null;
-      let uploaderType = user.role;
+      // Get coach ID (guaranteed by requireCoach middleware)
+      const uploaderId = req.coach.id;
+      const uploaderType = 'COACH';
 
-      if (user.role === 'COACH') {
-        if (!req.coach?.id) {
-          return res.status(400).json(errorResponse('Coach profile not found', 400));
-        }
-        uploaderId = req.coach.id;
-      } else if (user.role === 'INSTITUTE') {
-        if (!req.institute?.id) {
-          return res.status(400).json(errorResponse('Institute profile not found', 400));
-        }
-        uploaderId = req.institute.id;
-      } else if (user.role === 'CLUB') {
-        if (!req.club?.id) {
-          return res.status(400).json(errorResponse('Club profile not found', 400));
-        }
-        uploaderId = req.club.id;
-      } else if (user.role === 'ADMIN') {
-        uploaderId = user.id;
-      } else {
-        return res.status(403).json(errorResponse('Only coaches, institutes, clubs and admins can upload result files', 403));
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json(errorResponse('No files uploaded', 400));
       }
 
-      if (!req.file) {
-        return res.status(400).json(errorResponse('No file uploaded', 400));
+      const results = [];
+      
+      // Process each uploaded file
+      for (const file of req.files) {
+        const result = await eventService.uploadResults(
+          eventId, 
+          file, 
+          description, 
+          uploaderId, 
+          uploaderType
+        );
+        results.push(result);
       }
-
-      const result = await eventService.uploadResults(
-        eventId, 
-        req.file, 
-        description, 
-        uploaderId, 
-        uploaderType
-      );
 
       res.json(successResponse(
-        result,
-        `Successfully uploaded result file for event "${result.event.name}".`
+        { 
+          uploadedFiles: results,
+          count: results.length
+        },
+        `Successfully uploaded ${results.length} file(s) for event.`
       ));
     } catch (error) {
       console.error('❌ Upload error:', error);
@@ -500,11 +489,17 @@ class EventController {
 
       // Get user-specific ID based on role
       let userId = null;
-      if (user.role === 'COACH') userId = req.coach?.id;
-      else if (user.role === 'INSTITUTE') userId = req.institute?.id;
-      else if (user.role === 'CLUB') userId = req.club?.id;
-      else if (user.role === 'ADMIN') userId = null; // Admin can access all
-      else if (user.role === 'STUDENT') userId = req.student?.id; // Students can view results
+      if (user.role === 'COACH') {
+        userId = req.coach?.id || user.coachProfile?.id;
+      } else if (user.role === 'INSTITUTE') {
+        userId = req.institute?.id || user.instituteProfile?.id;
+      } else if (user.role === 'CLUB') {
+        userId = req.club?.id || user.clubProfile?.id;
+      } else if (user.role === 'ADMIN') {
+        userId = null; // Admin can access all
+      } else if (user.role === 'STUDENT') {
+        userId = req.student?.id || user.studentProfile?.id; // Students can view results
+      }
 
       const result = await eventService.getResults(
         eventId, 
@@ -523,26 +518,73 @@ class EventController {
   }
 
   /**
-   * Delete a result file
+   * Delete a specific result file
+   * DELETE /api/events/:eventId/results/:fileId
+   */
+  async deleteResultFile(req, res) {
+    try {
+      const { eventId, fileId } = req.params;
+      
+      // Get coach ID (guaranteed by requireCoach middleware)
+      const coachId = req.coach.id;
+
+      console.log(`🗑️ Coach ${coachId} deleting file ${fileId} for event ${eventId}`);
+
+      // Verify the file belongs to this coach and event
+      const file = await prisma.eventResultFile.findFirst({
+        where: {
+          id: fileId,
+          eventId: eventId,
+          coachId: coachId
+        }
+      });
+
+      if (!file) {
+        return res.status(404).json(errorResponse('File not found or you do not have permission to delete it', 404));
+      }
+
+      // Delete the file from database
+      await prisma.eventResultFile.delete({
+        where: { id: fileId }
+      });
+
+      // Delete physical file
+      const fs = require('fs');
+      const filePath = path.join(__dirname, '../../../uploads/event-results', file.filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log(`🗑️ Physical file deleted: ${file.filename}`);
+      }
+
+      console.log(`✅ File ${file.originalName} deleted by coach ${coachId}`);
+
+      res.json(successResponse({ 
+        deletedFile: {
+          id: file.id,
+          originalName: file.originalName
+        }
+      }, 'File deleted successfully'));
+    } catch (error) {
+      console.error('❌ Delete file error:', error);
+      const statusCode = error.message.includes('not found') ? 404 : 
+                        error.message.includes('permission') ? 403 : 500;
+      res.status(statusCode).json(errorResponse(error.message || 'Failed to delete file', statusCode));
+    }
+  }
+
+  /**
+   * Delete all result files for an event
    * DELETE /api/events/:eventId/results
    */
   async deleteResults(req, res) {
     try {
       const { eventId } = req.params;
-      const { user } = req;
+      
+      // Get coach ID (guaranteed by requireCoach middleware)
+      const userId = req.coach.id;
+      const userType = 'COACH';
 
-      // Get user-specific ID based on role
-      let userId = null;
-      if (user.role === 'COACH') userId = req.coach?.id;
-      else if (user.role === 'INSTITUTE') userId = req.institute?.id;
-      else if (user.role === 'CLUB') userId = req.club?.id;
-      else if (user.role === 'ADMIN') userId = null; // Admin can delete any file
-
-      if (!userId && user.role !== 'ADMIN') {
-        return res.status(400).json(errorResponse('User profile not found', 400));
-      }
-
-      const result = await eventService.deleteResults(eventId, userId, user.role);
+      const result = await eventService.deleteResults(eventId, userId, userType);
 
       res.json(successResponse(result, 'Event result files deleted successfully'));
     } catch (error) {
@@ -554,7 +596,62 @@ class EventController {
   }
 
   /**
-   * Download a result file
+   * Download a specific result file
+   * GET /api/events/:eventId/results/:fileId/download
+   */
+  async downloadResultFile(req, res) {
+    try {
+      const { eventId, fileId } = req.params;
+      const coachId = req.coach.id;
+
+      console.log(`📥 Coach ${coachId} downloading file ${fileId} for event ${eventId}`);
+
+      // Get file details and verify ownership
+      const file = await prisma.eventResultFile.findFirst({
+        where: {
+          id: fileId,
+          eventId: eventId,
+          coachId: coachId
+        }
+      });
+
+      if (!file) {
+        return res.status(404).json(errorResponse('File not found or you do not have access to it', 404));
+      }
+
+      const filePath = path.join(__dirname, '../../../uploads/event-results', file.filename);
+      
+      // Check if file exists on disk
+      if (!require('fs').existsSync(filePath)) {
+        return res.status(404).json(errorResponse('File not found on server', 404));
+      }
+
+      // Set appropriate headers for Excel files
+      const isExcel = file.mimeType.includes('spreadsheet') || file.originalName.toLowerCase().endsWith('.xlsx') || file.originalName.toLowerCase().endsWith('.xls');
+      
+      if (isExcel) {
+        if (file.originalName.toLowerCase().endsWith('.xlsx')) {
+          res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        } else if (file.originalName.toLowerCase().endsWith('.xls')) {
+          res.setHeader('Content-Type', 'application/vnd.ms-excel');
+        }
+      } else {
+        res.setHeader('Content-Type', file.mimeType);
+      }
+
+      res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`);
+      res.sendFile(filePath);
+
+      console.log(`✅ File ${file.originalName} downloaded by coach ${coachId}`);
+
+    } catch (error) {
+      console.error('❌ Download file error:', error);
+      res.status(500).json(errorResponse('Failed to download file', 500));
+    }
+  }
+
+  /**
+   * Download all result files for an event (legacy)
    * GET /api/events/:eventId/results/download
    */
   async downloadResults(req, res) {

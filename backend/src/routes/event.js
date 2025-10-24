@@ -1,6 +1,6 @@
 const express = require('express');
 const EventController = require('../controllers/eventController');
-const { authenticate, requireRole, requireStudent } = require('../utils/authMiddleware');
+const { authenticate, requireRole, requireStudent, requireCoach } = require('../utils/authMiddleware');
 const multer = require('multer');
 const path = require('path');
 
@@ -10,11 +10,23 @@ const eventController = new EventController();
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/results/');
+    const uploadsPath = path.join(__dirname, '../../../uploads/event-results/');
+    console.log('📁 Upload destination:', uploadsPath);
+    
+    // Ensure directory exists
+    const fs = require('fs');
+    if (!fs.existsSync(uploadsPath)) {
+      fs.mkdirSync(uploadsPath, { recursive: true });
+      console.log('📁 Created uploads directory:', uploadsPath);
+    }
+    
+    cb(null, uploadsPath);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, `event-${req.params.eventId}-${uniqueSuffix}${path.extname(file.originalname)}`);
+    const filename = `event-${req.params.eventId}-${uniqueSuffix}${path.extname(file.originalname)}`;
+    console.log('📄 Generated filename:', filename);
+    cb(null, filename);
   }
 });
 
@@ -34,6 +46,26 @@ const upload = multer({
     }
   }
 });
+
+// Error handling middleware for multer
+const handleMulterError = (err, req, res, next) => {
+  console.error('❌ Multer error:', err);
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ success: false, message: 'File too large. Maximum size is 10MB.' });
+    }
+    if (err.code === 'LIMIT_FILE_COUNT') {
+      return res.status(400).json({ success: false, message: 'Too many files. Maximum is 5 files.' });
+    }
+    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({ success: false, message: 'Unexpected field name. Use "files" as field name.' });
+    }
+  }
+  if (err.message === 'Invalid file type. Only PDF, Excel, and CSV files are allowed.') {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+  return res.status(500).json({ success: false, message: 'File upload error: ' + err.message });
+};
 
 /**
  * Event Routes
@@ -113,11 +145,39 @@ router.get('/:eventId/registrations',
  * Event Results Routes
  */
 
-// Upload event results (creators and admin only)
+// Test endpoint for file upload debugging
+router.post('/test-upload', 
+  authenticate, 
+  requireCoach,
+  (req, res, next) => {
+    console.log('🧪 Test upload endpoint hit');
+    console.log('Headers:', req.headers);
+    next();
+  },
+  upload.array('files', 1),
+  (req, res) => {
+    console.log('🧪 Test upload successful');
+    console.log('Files:', req.files);
+    console.log('Body:', req.body);
+    res.json({ success: true, message: 'Test upload works', filesCount: req.files?.length || 0 });
+  }
+);
+
+// Upload event results (coaches only for now due to schema limitations)
 router.post('/:eventId/results', 
   authenticate, 
-  requireRole(['COACH', 'INSTITUTE', 'CLUB', 'ADMIN']),
-  upload.single('resultsFile'),
+  requireCoach, // Use requireCoach middleware to ensure req.coach is set
+  (req, res, next) => {
+    console.log('🔍 Upload endpoint hit:', {
+      eventId: req.params.eventId,
+      coachId: req.coach?.id,
+      contentType: req.headers['content-type'],
+      contentLength: req.headers['content-length']
+    });
+    next();
+  },
+  upload.array('files', 5), // Changed from single('resultsFile') to array('files', 5)
+  handleMulterError, // Add multer error handling
   eventController.uploadResults.bind(eventController)
 );
 
@@ -127,17 +187,32 @@ router.get('/:eventId/results',
   eventController.getResults.bind(eventController)
 );
 
-// Download event results
+// Download event results (coaches only for now due to schema limitations)
 router.get('/:eventId/results/download', 
   authenticate,
+  requireCoach, // Add requireCoach for consistency
   eventController.downloadResults.bind(eventController)
 );
 
-// Delete event results (creators and admin only)
+// Download individual result file (coaches only)
+router.get('/:eventId/results/:fileId/download', 
+  authenticate,
+  requireCoach,
+  eventController.downloadResultFile.bind(eventController)
+);
+
+// Delete event results (coaches only for now due to schema limitations)
 router.delete('/:eventId/results', 
   authenticate, 
-  requireRole(['COACH', 'INSTITUTE', 'CLUB', 'ADMIN']),
+  requireCoach, // Use requireCoach middleware to ensure req.coach is set
   eventController.deleteResults.bind(eventController)
+);
+
+// Delete individual result file (coaches only)
+router.delete('/:eventId/results/:fileId', 
+  authenticate, 
+  requireCoach,
+  eventController.deleteResultFile.bind(eventController)
 );
 
 module.exports = router;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { uploadEventResults, getEventResultFiles, deleteEventResultFile } from '../../api';
+import { uploadEventResults, getEventResultFiles, deleteEventResultFile, downloadIndividualEventResultFile } from '../../api';
 import { 
   FaUpload, 
   FaFileExcel, 
@@ -114,7 +114,7 @@ const EventResultUpload = () => {
     }
 
     try {
-      const response = await deleteEventResultFile(fileId);
+      const response = await deleteEventResultFile(eventId, fileId);
       
       if (response.success) {
         showMessage('success', 'File deleted successfully');
@@ -123,6 +123,32 @@ const EventResultUpload = () => {
     } catch (error) {
       console.error('Delete failed:', error);
       showMessage('error', error.message || 'Failed to delete file');
+    }
+  };
+
+  const handleDownload = async (fileId, originalName) => {
+    try {
+      const response = await downloadIndividualEventResultFile(eventId, fileId);
+      
+      // Create blob URL and trigger download
+      const blob = new Blob([response.data], { 
+        type: response.headers['content-type'] || 'application/octet-stream'
+      });
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = originalName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      console.log(`📥 Downloaded: ${originalName}`);
+      showMessage('success', `Downloaded ${originalName}`);
+    } catch (error) {
+      console.error('Download failed:', error);
+      showMessage('error', error.message || 'Failed to download file');
     }
   };
 
@@ -332,30 +358,24 @@ const EventResultUpload = () => {
                             {file.originalName}
                           </h3>
                           <div className="mt-1 flex items-center space-x-4 text-xs text-gray-500">
-                            <span>Size: {formatFileSize(file.size || file.fileSize)}</span>
+                            <span>Size: {formatFileSize(file.size)}</span>
                             <span>Uploaded: {formatDate(file.uploadedAt)}</span>
-                            {file.uploadedBy && (
-                              <span>By: {file.uploadedBy}</span>
+                            {file.coach?.name && (
+                              <span>By: {file.coach.name}</span>
                             )}
                           </div>
-                          {file.description && (
-                            <p className="mt-1 text-xs text-gray-600">{file.description}</p>
-                          )}
                         </div>
                       </div>
                     </div>
                     
                     <div className="flex items-center space-x-2">
-                      <a
-                        href={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/uploads/event-results/${file.filename}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        download={file.originalName}
+                      <button
+                        onClick={() => handleDownload(file.id, file.originalName)}
                         className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs font-medium transition-colors inline-flex items-center"
                       >
                         <FaDownload className="mr-1" />
                         Download
-                      </a>
+                      </button>
                       
                       <button
                         onClick={() => handleDelete(file.id, file.originalName)}

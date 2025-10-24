@@ -2186,4 +2186,242 @@ router.post('/orders/:orderId/verify-payment', authenticate, requireCoach, async
   }
 });
 
+/**
+ * Event Result Files Management for Coaches
+ */
+
+// Get all result files uploaded by this coach
+router.get('/event-results', authenticate, requireCoach, async (req, res) => {
+  try {
+    console.log('🔍 Coach fetching their event result files...');
+    
+    const { page = 1, limit = 20, eventId, search, dateRange } = req.query;
+    const { skip, take } = getPaginationParams(page, limit);
+    const coachId = req.coach.id;
+
+    // Build where clause
+    let where = {
+      coachId: coachId
+    };
+
+    // Filter by specific event
+    if (eventId && eventId !== '') {
+      where.eventId = eventId;
+    }
+
+    // Search filter (by original file name or event name)
+    if (search && search !== '') {
+      where.OR = [
+        { originalName: { contains: search, mode: 'insensitive' } },
+        { 
+          event: {
+            name: { contains: search, mode: 'insensitive' }
+          }
+        }
+      ];
+    }
+
+    // Date range filter
+    if (dateRange && dateRange !== '') {
+      const now = new Date();
+      let dateFilter = {};
+      
+      switch (dateRange) {
+        case 'today':
+          dateFilter = {
+            gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+            lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+          };
+          break;
+        case 'week':
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          dateFilter = { gte: weekAgo };
+          break;
+        case 'month':
+          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          dateFilter = { gte: monthAgo };
+          break;
+      }
+      
+      if (Object.keys(dateFilter).length > 0) {
+        where.uploadedAt = dateFilter;
+      }
+    }
+
+    // Get files with event details
+    const [files, totalCount] = await Promise.all([
+      prisma.eventResultFile.findMany({
+        where,
+        include: {
+          event: {
+            select: {
+              id: true,
+              name: true,
+              sport: true,
+              startDate: true,
+              location: true,
+              status: true
+            }
+          }
+        },
+        orderBy: { uploadedAt: 'desc' },
+        skip,
+        take
+      }),
+      prisma.eventResultFile.count({ where })
+    ]);
+
+    // Format response
+    const formattedFiles = files.map(file => ({
+      id: file.id,
+      filename: file.filename,
+      originalName: file.originalName,
+      mimeType: file.mimeType,
+      size: file.size,
+      uploadedAt: file.uploadedAt,
+      downloadUrl: `/uploads/event-results/${file.filename}`,
+      event: {
+        id: file.event.id,
+        name: file.event.name,
+        sport: file.event.sport,
+        startDate: file.event.startDate,
+        location: file.event.location,
+        status: file.event.status
+      }
+    }));
+
+    const pagination = getPaginationMeta(totalCount, page, limit);
+
+    console.log(`✅ Found ${totalCount} result files for coach ${coachId}`);
+
+    res.json(successResponse({
+      files: formattedFiles,
+      pagination,
+      totalCount
+    }, 'Event result files retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get coach event result files error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve event result files.', 500));
+  }
+});
+
+// Get result files for a specific event (coach's own event)
+router.get('/events/:eventId/results', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const coachId = req.coach.id;
+    
+    console.log(`🔍 Coach ${coachId} fetching result files for event ${eventId}`);
+
+    // Verify the event belongs to this coach
+    const event = await prisma.event.findFirst({
+      where: {
+        id: eventId,
+        coachId: coachId
+      },
+      select: {
+        id: true,
+        name: true,
+        sport: true,
+        startDate: true,
+        status: true
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found or you do not have access to it.', 404));
+    }
+
+    // Get result files for this event
+    const files = await prisma.eventResultFile.findMany({
+      where: {
+        eventId: eventId,
+        coachId: coachId
+      },
+      orderBy: { uploadedAt: 'desc' }
+    });
+
+    // Format response
+    const formattedFiles = files.map(file => ({
+      id: file.id,
+      filename: file.filename,
+      originalName: file.originalName,
+      mimeType: file.mimeType,
+      size: file.size,
+      uploadedAt: file.uploadedAt,
+      downloadUrl: `/uploads/event-results/${file.filename}`,
+      isExcel: file.mimeType.includes('spreadsheet') || file.originalName.toLowerCase().endsWith('.xlsx') || file.originalName.toLowerCase().endsWith('.xls')
+    }));
+
+    res.json(successResponse({
+      event,
+      files: formattedFiles,
+      totalCount: files.length
+    }, 'Event result files retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get event result files error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve event result files.', 500));
+  }
+});
+
+// Download a specific result file (coach's own file)
+router.get('/event-results/:fileId/download', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const coachId = req.coach.id;
+
+    console.log(`📥 Coach ${coachId} downloading result file ${fileId}`);
+
+    // Get file details and verify ownership
+    const file = await prisma.eventResultFile.findFirst({
+      where: {
+        id: fileId,
+        coachId: coachId
+      },
+      include: {
+        event: {
+          select: {
+            name: true
+          }
+        }
+      }
+    });
+
+    if (!file) {
+      return res.status(404).json(errorResponse('File not found or you do not have access to it.', 404));
+    }
+
+    const filePath = path.join(__dirname, '../../../uploads/event-results', file.filename);
+    
+    // Check if file exists on disk
+    if (!require('fs').existsSync(filePath)) {
+      return res.status(404).json(errorResponse('File not found on server.', 404));
+    }
+
+    // Set appropriate headers for Excel files
+    const isExcel = file.mimeType.includes('spreadsheet') || file.originalName.toLowerCase().endsWith('.xlsx') || file.originalName.toLowerCase().endsWith('.xls');
+    
+    if (isExcel) {
+      if (file.originalName.toLowerCase().endsWith('.xlsx')) {
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      } else if (file.originalName.toLowerCase().endsWith('.xls')) {
+        res.setHeader('Content-Type', 'application/vnd.ms-excel');
+      }
+    } else {
+      res.setHeader('Content-Type', file.mimeType);
+    }
+
+    res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`);
+    res.sendFile(filePath);
+
+    console.log(`✅ File ${file.originalName} downloaded by coach ${coachId}`);
+
+  } catch (error) {
+    console.error('❌ Download result file error:', error);
+    res.status(500).json(errorResponse('Failed to download file.', 500));
+  }
+});
+
 module.exports = router;

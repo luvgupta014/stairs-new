@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const { PrismaClient } = require('@prisma/client');
 const { authenticate, requireAdmin } = require('../utils/authMiddleware');
 const { 
@@ -1718,6 +1719,236 @@ router.put('/orders/bulk-update', authenticate, requireAdmin, async (req, res) =
   } catch (error) {
     console.error('❌ Bulk update orders error:', error);
     res.status(500).json(errorResponse('Failed to bulk update orders.', 500));
+  }
+});
+
+// Get all event result files for admin
+router.get('/event-results', authenticate, requireAdmin, async (req, res) => {
+  try {
+    console.log('🔍 Admin fetching all event result files...');
+    console.log('👤 Request user:', { id: req.user?.id, role: req.user?.role });
+
+    const { page = 1, limit = 20, search, sport, coachName, dateRange } = req.query;
+    console.log('📋 Query params:', { page, limit, search, sport, coachName, dateRange });
+    
+    const { skip, take } = getPaginationParams(page, limit);
+    console.log('📋 Pagination:', { skip, take });
+
+    // First, let's try a simple query to see if the table exists
+    console.log('🔍 Testing basic EventResultFile query...');
+    let testCount;
+    try {
+      testCount = await prisma.eventResultFile.count();
+      console.log('📊 Total EventResultFile records:', testCount);
+    } catch (countError) {
+      console.error('❌ Error counting EventResultFile records:', countError);
+      return res.status(500).json(errorResponse('Database table not accessible.', 500));
+    }
+
+    // Build where clause for filtering
+    let where = {};
+
+    // Search filter (by event name or original file name)
+    if (search) {
+      where = {
+        OR: [
+          { originalName: { contains: search, mode: 'insensitive' } },
+          { 
+            event: {
+              name: { contains: search, mode: 'insensitive' }
+            }
+          }
+        ]
+      };
+    }
+
+    // Sport filter
+    if (sport && sport !== '') {
+      where.event = { ...where.event, sport: { contains: sport, mode: 'insensitive' } };
+    }
+
+    // Coach name filter
+    if (coachName && coachName !== '') {
+      where.coach = { name: { contains: coachName, mode: 'insensitive' } };
+    }
+
+    // Date range filter
+    if (dateRange && dateRange !== '') {
+      const now = new Date();
+      let dateFilter = {};
+      
+      switch (dateRange) {
+        case 'today':
+          dateFilter = {
+            gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+            lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+          };
+          break;
+        case 'week':
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          dateFilter = { gte: weekAgo };
+          break;
+        case 'month':
+          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          dateFilter = { gte: monthAgo };
+          break;
+      }
+      
+      if (Object.keys(dateFilter).length > 0) {
+        where.uploadedAt = dateFilter;
+      }
+    }
+
+    console.log('📋 Final where clause:', JSON.stringify(where, null, 2));
+
+    // Get event result files with all related data
+    console.log('🔍 Fetching event result files with relations...');
+    
+    let files, totalCount;
+    try {
+      [files, totalCount] = await Promise.all([
+        prisma.eventResultFile.findMany({
+          where,
+          include: {
+            event: {
+              select: {
+                id: true,
+                name: true,
+                sport: true,
+                startDate: true,
+                venue: true,
+                status: true
+              }
+            },
+            coach: {
+              select: {
+                id: true,
+                name: true,
+                user: {
+                  select: {
+                    email: true,
+                    phone: true
+                  }
+                }
+              }
+            }
+          },
+          orderBy: { uploadedAt: 'desc' },
+          skip,
+          take
+        }),
+        prisma.eventResultFile.count({ where })
+      ]);
+    } catch (queryError) {
+      console.error('❌ Error fetching event result files:', queryError);
+      return res.status(500).json(errorResponse('Failed to fetch result files from database.', 500));
+    }
+
+    console.log('📊 Found files:', files?.length || 0, 'Total count:', totalCount);
+
+    // Format the response
+    const formattedFiles = files.map(file => ({
+      id: file.id,
+      filename: file.filename,
+      originalName: file.originalName,
+      mimeType: file.mimeType,
+      size: file.size,
+      uploadedAt: file.uploadedAt,
+      downloadUrl: `/uploads/event-results/${file.filename}`,
+      isExcel: file.mimeType.includes('spreadsheet') || file.originalName.toLowerCase().endsWith('.xlsx') || file.originalName.toLowerCase().endsWith('.xls'),
+      event: {
+        id: file.event.id,
+        name: file.event.name,
+        sport: file.event.sport,
+        startDate: file.event.startDate,
+        location: file.event.venue,
+        status: file.event.status
+      },
+      coach: {
+        id: file.coach.id,
+        name: file.coach.name,
+        firstName: file.coach.name.split(' ')[0] || '',
+        lastName: file.coach.name.split(' ').slice(1).join(' ') || '',
+        email: file.coach.user.email,
+        phone: file.coach.user.phone
+      }
+    }));
+
+    const pagination = getPaginationMeta(totalCount, page, limit);
+
+    console.log(`✅ Found ${totalCount} event result files, returning ${formattedFiles.length} files`);
+
+    res.json(successResponse({
+      files: formattedFiles,
+      pagination,
+      totalCount
+    }, 'Event result files retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get all event result files error:', error);
+    console.error('❌ Error stack:', error.stack);
+    res.status(500).json(errorResponse('Failed to retrieve event result files.', 500));
+  }
+});
+
+// Download event result file (Admin)
+router.get('/event-results/:fileId/download', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { fileId } = req.params;
+
+    console.log(`📥 Admin downloading result file ${fileId}`);
+
+    // Get file details
+    const file = await prisma.eventResultFile.findUnique({
+      where: {
+        id: fileId
+      },
+      include: {
+        event: {
+          select: {
+            name: true
+          }
+        },
+        coach: {
+          select: {
+            name: true
+          }
+        }
+      }
+    });
+
+    if (!file) {
+      return res.status(404).json(errorResponse('File not found.', 404));
+    }
+
+    const filePath = path.join(__dirname, '../../../uploads/event-results', file.filename);
+    
+    // Check if file exists on disk
+    if (!require('fs').existsSync(filePath)) {
+      return res.status(404).json(errorResponse('File not found on server.', 404));
+    }
+
+    // Set appropriate headers for Excel files
+    const isExcel = file.mimeType.includes('spreadsheet') || file.originalName.toLowerCase().endsWith('.xlsx') || file.originalName.toLowerCase().endsWith('.xls');
+    
+    if (isExcel) {
+      if (file.originalName.toLowerCase().endsWith('.xlsx')) {
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      } else if (file.originalName.toLowerCase().endsWith('.xls')) {
+        res.setHeader('Content-Type', 'application/vnd.ms-excel');
+      }
+    } else {
+      res.setHeader('Content-Type', file.mimeType);
+    }
+
+    res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`);
+    res.sendFile(filePath);
+
+    console.log(`✅ File ${file.originalName} downloaded by admin`);
+
+  } catch (error) {
+    console.error('❌ Download result file error:', error);
+    res.status(500).json(errorResponse('Failed to download file.', 500));
   }
 });
 

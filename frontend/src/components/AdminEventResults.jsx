@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getAllEventResultFilesForAdmin } from '../api';
+import { getAllEventResultFilesForAdmin, downloadEventResultFile } from '../api';
 import Spinner from './Spinner';
 import { FaDownload, FaCalendar, FaUser, FaFileExcel, FaSearch, FaFilter } from 'react-icons/fa';
 
@@ -117,14 +117,33 @@ const AdminEventResults = () => {
     });
   };
 
-  const downloadFile = (file) => {
-    const link = document.createElement('a');
-    link.href = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/uploads/event-results/${file.filename}`;
-    link.download = file.originalName;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const downloadFile = async (file) => {
+    try {
+      const response = await downloadEventResultFile(file.id, true); // true for admin
+      
+      // Create blob URL and trigger download
+      const blob = new Blob([response.data], { 
+        type: file.isExcel ? 
+          (file.originalName.endsWith('.xlsx') ? 
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 
+            'application/vnd.ms-excel') 
+          : file.mimeType 
+      });
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = file.originalName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      console.log(`📥 Downloaded: ${file.originalName}`);
+    } catch (error) {
+      console.error('Download failed:', error);
+      setError('Failed to download file. Please try again.');
+    }
   };
 
   const formatFileSize = (bytes) => {

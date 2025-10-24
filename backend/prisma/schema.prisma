@@ -130,6 +130,7 @@ model Coach {
   instituteCoaches   InstituteCoach[]
   eventResultFiles   EventResultFile[]
   eventOrders        EventOrder[]
+  payments           Payment[]  // Add this for the opposite relation
 
   @@map("coaches")
 }

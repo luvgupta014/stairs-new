@@ -17,6 +17,12 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Handle FormData - remove Content-Type to let browser set boundary
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+    
     return config;
   },
   (error) => {
@@ -137,11 +143,7 @@ export const bulkUploadStudents = async (file) => {
   try {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await api.post('/api/coach/students/bulk-upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post('/api/coach/students/bulk-upload', formData);
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;
@@ -568,11 +570,7 @@ export const getUserRole = () => {
 // Event Result Files API
 export const uploadEventResults = async (eventId, formData) => {
   try {
-    const response = await api.post(`/api/events/${eventId}/results`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post(`/api/events/${eventId}/results`, formData);
     return response.data;
   } catch (error) {
     console.error('Upload event results error:', error);
@@ -590,12 +588,30 @@ export const getEventResultFiles = async (eventId, params = {}) => {
   }
 };
 
-export const deleteEventResultFile = async (eventId) => {
+export const deleteEventResultFile = async (eventId, fileId = null) => {
   try {
-    const response = await api.delete(`/api/events/${eventId}/results`);
+    // If fileId is provided, delete specific file, otherwise delete all files
+    const endpoint = fileId 
+      ? `/api/events/${eventId}/results/${fileId}`
+      : `/api/events/${eventId}/results`;
+    
+    const response = await api.delete(endpoint);
     return response.data;
   } catch (error) {
     console.error('Delete event result file error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+// Download individual event result file
+export const downloadIndividualEventResultFile = async (eventId, fileId) => {
+  try {
+    const response = await api.get(`/api/events/${eventId}/results/${fileId}/download`, {
+      responseType: 'blob' // Important for file downloads
+    });
+    return response;
+  } catch (error) {
+    console.error('Download individual event result file error:', error);
     throw error.response?.data || error.message;
   }
 };
@@ -604,9 +620,42 @@ export const getAllEventResultFilesForAdmin = async (params = {}) => {
   try {
     const response = await api.get('/api/admin/event-results', { params });
     return response.data;
-    return response.data;
   } catch (error) {
     console.error('Get all event result files error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+// Coach Event Result Files APIs
+export const getCoachEventResultFiles = async (params = {}) => {
+  try {
+    const response = await api.get('/api/coach/event-results', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Get coach event result files error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getEventResultFilesByEventId = async (eventId, params = {}) => {
+  try {
+    const response = await api.get(`/api/coach/events/${eventId}/results`, { params });
+    return response.data;
+  } catch (error) {
+    console.error('Get event result files by event ID error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const downloadEventResultFile = async (fileId, isAdmin = false) => {
+  try {
+    const endpoint = isAdmin ? `/api/admin/event-results/${fileId}/download` : `/api/coach/event-results/${fileId}/download`;
+    const response = await api.get(endpoint, {
+      responseType: 'blob' // Important for file downloads
+    });
+    return response;
+  } catch (error) {
+    console.error('Download event result file error:', error);
     throw error.response?.data || error.message;
   }
 };
