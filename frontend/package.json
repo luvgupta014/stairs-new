@@ -6,8 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:staging": "vite build --mode staging",
+    "build:production": "vite build --mode production",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "debug:config": "node -e \"console.log('Environment configuration test')\""
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.0.1",
