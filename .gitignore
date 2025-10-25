@@ -15,7 +15,16 @@ node_modules/
 */.env.test.local
 .env.production.local
 */.env.production.local
-.env.production
+
+# Allow template environment files
+!.env.example
+!*/.env.example
+!.env.development
+!*/.env.development
+!.env.production  
+!*/.env.production
+!.env.staging
+!*/.env.staging
 
 # Database files (never commit)
 *.db
