@@ -32,10 +32,14 @@ app.use(helmet({
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 1000, // Increased limit for production - 1000 requests per 15 minutes
   message: errorResponse('Too many requests from this IP, please try again later.', 429),
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for health checks
+    return req.path === '/health';
+  }
 });
 
 app.use(limiter);
@@ -46,6 +50,8 @@ app.use(cors({
     'http://localhost:3000',
     'http://localhost:5173', 
     'http://localhost:5174',
+    'http://160.187.22.41:3008',  // Production frontend
+    'http://160.187.22.41:5173',  // Development on production server
     process.env.FRONTEND_URL || 'http://localhost:5173'
   ],
   credentials: true,
