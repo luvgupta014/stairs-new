@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import { FaMapMarkerAlt, FaExclamationTriangle } from "react-icons/fa";
-import SimpleVenueInput from "./SimpleVenueInput";
 
 const GoogleMapsPlacesAutocomplete = ({
   onPlaceSelect,
@@ -15,7 +14,6 @@ const GoogleMapsPlacesAutocomplete = ({
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [isManualMode, setIsManualMode] = useState(false);
-  const [forceSimpleMode, setForceSimpleMode] = useState(false);
   const scriptLoadedRef = useRef(false);
 
   const checkGoogleMapsAvailability = () => {
@@ -31,8 +29,7 @@ const GoogleMapsPlacesAutocomplete = ({
     console.log("Attempting to initialize autocomplete...");
 
     if (!inputRef.current) {
-      console.log("Input ref not available, retrying in 100ms...");
-      setTimeout(initializeAutocomplete, 100);
+      console.log("Input ref not available");
       return false;
     }
 
@@ -248,32 +245,6 @@ const GoogleMapsPlacesAutocomplete = ({
     onChange?.(syntheticEvent);
   };
 
-  // If there's a load error or user chooses simple mode, use SimpleVenueInput
-  if (forceSimpleMode || (isLoaded && isManualMode)) {
-    return (
-      <div>
-        <SimpleVenueInput
-          onPlaceSelect={onPlaceSelect}
-          placeholder={placeholder}
-          value={value}
-          onChange={onChange}
-          className={className}
-          disabled={disabled}
-        />
-        {loadError && !forceSimpleMode && (
-          <div className="mt-2">
-            <button
-              onClick={() => setForceSimpleMode(false)}
-              className="text-xs text-blue-600 hover:text-blue-800 underline"
-            >
-              ← Back to Google Maps (if available)
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
   if (!isLoaded) {
     return (
       <div className="relative">
@@ -328,7 +299,10 @@ const GoogleMapsPlacesAutocomplete = ({
               <p className="font-medium">Smart search unavailable</p>
               <p className="mt-1">{loadError}</p>
               <p className="mt-1 text-amber-700">
-                💡 <strong>If you see "ERR_BLOCKED_BY_CLIENT":</strong> Please disable ad blocker for this site or manually enter the venue address.
+                💡 <strong>Ad Blocker Detected:</strong> Smart venue search is blocked. Please disable ad blocker for this site, or continue with manual entry below.
+              </p>
+              <p className="mt-1 text-green-700">
+                ✓ <strong>Manual Mode Active:</strong> You can still enter complete venue details manually.
               </p>
               <p className="mt-1">
                 Using manual input mode. You can still enter venue details manually.
@@ -338,12 +312,6 @@ const GoogleMapsPlacesAutocomplete = ({
                   Contact administrator to configure Google Maps API key.
                 </p>
               )}
-              <button
-                onClick={() => setForceSimpleMode(true)}
-                className="mt-2 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
-              >
-                Use Simple Venue Entry Instead
-              </button>
             </div>
           </div>
         </div>

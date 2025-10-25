@@ -4,7 +4,7 @@
 node_modules/
 */node_modules/
 
-# Environment files (sensitive data)
+# Environment files (sensitive data) - NEVER COMMIT THESE!
 .env
 */.env
 .env.local
@@ -16,15 +16,17 @@ node_modules/
 .env.production.local
 */.env.production.local
 
-# Allow template environment files
+# SECURITY: Block all .env files except examples
 !.env.example
 !*/.env.example
-!.env.development
-!*/.env.development
-!.env.production  
-!*/.env.production
-!.env.staging
-!*/.env.staging
+!.env.template
+!*/.env.template
+
+# API Keys and secrets (CRITICAL SECURITY)
+*.key
+*.pem
+config/secrets.json
+secrets/
 
 # Database files (never commit)
 *.db

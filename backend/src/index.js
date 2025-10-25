@@ -16,6 +16,7 @@ const clubRoutes = require('./routes/club');
 const adminRoutes = require('./routes/admin');
 const eventRoutes = require('./routes/event');
 const paymentRoutes = require('./routes/payment');
+const mapsRoutes = require('./routes/maps');
 
 // Import middleware
 const { errorResponse } = require('./utils/helpers');
@@ -117,6 +118,7 @@ app.use('/api/club', clubRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/maps', mapsRoutes);
 
 // Static file serving (for uploaded files)
 app.use('/uploads', express.static('uploads'));

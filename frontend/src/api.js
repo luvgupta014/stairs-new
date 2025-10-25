@@ -1,18 +1,16 @@
 import axios from 'axios';
-import { config } from './config/environment.js';
 
 // Debug function to help diagnose connection issues
 window.debugBackendConnection = () => {
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
   console.log('🔍 Backend Connection Debug Info:');
-  console.log('  Backend URL:', config.backendUrl);
-  console.log('  Environment:', config.environment);
-  console.log('  Frontend URL:', config.frontendUrl);
-  console.log('  Is Development:', config.isDevelopment);
+  console.log('  Backend URL:', backendUrl);
+  console.log('  Environment:', import.meta.env.MODE);
   console.log('  All VITE env vars:', Object.keys(import.meta.env).filter(key => key.startsWith('VITE_')));
   
-  // Test multiple possible backend URLs based on current environment
+  // Test multiple possible backend URLs
   const possibleUrls = [
-    config.backendUrl,
+    backendUrl,
     // Auto-detect alternatives based on current location
     `${window.location.protocol}//${window.location.hostname}:5000`,
     `${window.location.protocol}//${window.location.hostname}:3001`, 
@@ -56,8 +54,8 @@ window.debugBackendConnection = () => {
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: config.backendUrl,
-  timeout: config.apiTimeout,
+  baseURL: import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000',
+  timeout: 60000, // Increased to 60 seconds for all requests
   headers: {
     'Content-Type': 'application/json',
   },

@@ -8,7 +8,6 @@ import { AuthProvider } from "./contexts/AuthContext";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
-import BackendStatus from "./components/BackendStatus";
 import StudentProfile from "./pages/StudentProfile";
 import EventParticipants from "./pages/events/EventParticipants";
 import EventEdit from "./pages/events/EventEdit";
@@ -63,7 +62,6 @@ function App() {
     <AuthProvider>
       <Router>
         <div className="min-h-screen bg-gray-50 flex flex-col">
-          <BackendStatus />
           <Routes>
             {/* Landing Page Route (no header/footer) */}
             <Route path="/" element={<Landing />} />

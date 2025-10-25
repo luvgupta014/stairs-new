@@ -1,21 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { healthCheck } from '../api';
-import { config } from '../config/environment';
 
 const BackendStatus = () => {
   const [status, setStatus] = useState('checking'); // 'checking', 'connected', 'disconnected'
-  const [backendUrl, setBackendUrl] = useState(config.backendUrl);
+  const [backendUrl, setBackendUrl] = useState('');
 
   useEffect(() => {
     const checkBackendStatus = async () => {
       try {
+        setBackendUrl(import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000');
         await healthCheck();
         setStatus('connected');
       } catch (error) {
         setStatus('disconnected');
-        if (config.enableDebugLogs) {
-          console.error('Backend status check failed:', error);
-        }
+        console.error('Backend status check failed:', error);
       }
     };
 
