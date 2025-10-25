@@ -1,5 +1,4 @@
 const nodemailer = require('nodemailer');
-const { decodePassword } = require('./passwordEncoder');
 
 // Create transporter with safe configuration
 const createTransporter = () => {
@@ -10,19 +9,13 @@ const createTransporter = () => {
       return null;
     }
 
-    // Decode password if it's base64 encoded (optional security measure)
-    let emailPass = process.env.EMAIL_PASS;
-    if (process.env.EMAIL_PASS_ENCODED === 'true') {
-      emailPass = decodePassword(process.env.EMAIL_PASS);
-    }
-
     const transporter = nodemailer.createTransporter({
       host: 'smtp.gmail.com',
       port: 587,
       secure: false,
       auth: {
         user: process.env.EMAIL_USER,
-        pass: emailPass
+        pass: process.env.EMAIL_PASS
       },
       tls: {
         rejectUnauthorized: false

@@ -29,7 +29,8 @@ const GoogleMapsPlacesAutocomplete = ({
     console.log("Attempting to initialize autocomplete...");
 
     if (!inputRef.current) {
-      console.error("Input ref not available");
+      console.log("Input ref not available, retrying in 100ms...");
+      setTimeout(initializeAutocomplete, 100);
       return false;
     }
 
@@ -155,13 +156,16 @@ const GoogleMapsPlacesAutocomplete = ({
         const checkAndInit = () => {
           if (checkGoogleMapsAvailability()) {
             scriptLoadedRef.current = true;
-            if (initializeAutocomplete()) {
-              setIsLoaded(true);
-            } else {
-              setLoadError("Failed to initialize autocomplete");
-              setIsManualMode(true);
-              setIsLoaded(true);
-            }
+            // Add delay to ensure input ref is ready
+            setTimeout(() => {
+              if (initializeAutocomplete()) {
+                setIsLoaded(true);
+              } else {
+                setLoadError("Failed to initialize autocomplete");
+                setIsManualMode(true);
+                setIsLoaded(true);
+              }
+            }, 200);
           } else {
             // Keep checking
             setTimeout(checkAndInit, 100);
@@ -185,19 +189,22 @@ const GoogleMapsPlacesAutocomplete = ({
         console.log("Google Maps callback triggered");
         scriptLoadedRef.current = true;
 
-        if (checkGoogleMapsAvailability()) {
-          if (initializeAutocomplete()) {
-            setIsLoaded(true);
+        // Add delay to ensure input component is fully mounted
+        setTimeout(() => {
+          if (checkGoogleMapsAvailability()) {
+            if (initializeAutocomplete()) {
+              setIsLoaded(true);
+            } else {
+              setLoadError("Failed to initialize autocomplete");
+              setIsManualMode(true);
+              setIsLoaded(true);
+            }
           } else {
-            setLoadError("Failed to initialize autocomplete");
+            setLoadError("Google Maps API not properly loaded");
             setIsManualMode(true);
             setIsLoaded(true);
           }
-        } else {
-          setLoadError("Google Maps API not properly loaded");
-          setIsManualMode(true);
-          setIsLoaded(true);
-        }
+        }, 300);
 
         // Clean up callback
         delete window[callbackName];
@@ -291,9 +298,12 @@ const GoogleMapsPlacesAutocomplete = ({
             <FaExclamationTriangle className="w-3 h-3 mt-0.5 mr-2 flex-shrink-0" />
             <div>
               <p className="font-medium">Smart search unavailable</p>
-              <p>
-                Using manual input mode. You can still enter venue details
-                manually.
+              <p className="mt-1">{loadError}</p>
+              <p className="mt-1 text-amber-700">
+                💡 <strong>If you see "ERR_BLOCKED_BY_CLIENT":</strong> Please disable ad blocker for this site or manually enter the venue address.
+              </p>
+              <p className="mt-1">
+                Using manual input mode. You can still enter venue details manually.
               </p>
               {loadError.includes("API key") && (
                 <p className="mt-1 text-xs">
