@@ -8,25 +8,48 @@ window.debugBackendConnection = () => {
   console.log('  Environment:', import.meta.env.MODE);
   console.log('  All VITE env vars:', Object.keys(import.meta.env).filter(key => key.startsWith('VITE_')));
   
-  // Test basic connectivity
-  fetch(`${backendUrl}/health`)
-    .then(response => {
-      if (response.ok) {
-        console.log('✅ Backend health check passed');
-        return response.text();
-      } else {
-        console.log('❌ Backend responded with error:', response.status);
-      }
+  // Test multiple possible backend URLs
+  const possibleUrls = [
+    backendUrl,
+    'http://160.187.22.41:5000',
+    'http://160.187.22.41:3001', 
+    'http://160.187.22.41:8000',
+    'http://160.187.22.41:8080',
+    'http://localhost:5000'
+  ];
+  
+  console.log('🔍 Testing possible backend URLs...');
+  
+  possibleUrls.forEach(url => {
+    fetch(`${url}/health`, { 
+      method: 'GET',
+      timeout: 5000 
     })
-    .then(data => console.log('Backend response:', data))
-    .catch(error => {
-      console.log('❌ Backend health check failed:', error.message);
-      console.log('💡 Common solutions:');
-      console.log('  1. Check if backend server is running');
-      console.log('  2. Verify VITE_BACKEND_URL environment variable');
-      console.log('  3. Check firewall/network settings');
-      console.log('  4. Try different ports (3001, 8000, 8080)');
-    });
+      .then(response => {
+        if (response.ok) {
+          console.log(`✅ Backend found at: ${url}`);
+          return response.text();
+        } else {
+          console.log(`❌ Backend at ${url} responded with error:`, response.status);
+        }
+      })
+      .then(data => {
+        if (data) console.log(`✅ Response from ${url}:`, data);
+      })
+      .catch(error => {
+        console.log(`❌ Cannot reach backend at ${url}:`, error.message);
+      });
+  });
+  
+  // Show fix instructions
+  setTimeout(() => {
+    console.log('💡 If no backend found, try these solutions:');
+    console.log('  1. SSH to server: ssh root@160.187.22.41');
+    console.log('  2. Start backend: cd ~/stairs-new/backend && npm run dev');
+    console.log('  3. Check PM2: pm2 list');
+    console.log('  4. Check ports: netstat -tlnp | grep LISTEN');
+    console.log('  5. See PRODUCTION_SERVER_FIX.md for complete guide');
+  }, 3000);
 };
 
 // Create axios instance with base configuration
@@ -880,5 +903,21 @@ export const getAllPaymentPlans = async () => {
     throw error.response?.data || error.message;
   }
 };
+
+// Health check function for testing backend connectivity
+export const healthCheck = async () => {
+  try {
+    console.log(`🏥 Testing backend health at ${api.defaults.baseURL}`);
+    const response = await api.get('/health', { timeout: 5000 });
+    console.log('✅ Backend health check passed');
+    return response.data;
+  } catch (error) {
+    console.error('❌ Backend health check failed:', error.message);
+    throw error;
+  }
+};
+
+// Expose health check globally for debugging
+window.testBackendHealth = healthCheck;
 
 export default api;
