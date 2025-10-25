@@ -15,6 +15,15 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 
+// Test endpoint to check authentication
+router.get('/test-auth', authenticate, (req, res) => {
+  res.json(successResponse({
+    userId: req.user.id,
+    userRole: req.user.role,
+    message: 'Authentication working'
+  }, 'Auth test successful'));
+});
+
 // Get payment plans for a specific user type
 router.get('/plans/:userType', async (req, res) => {
   try {
@@ -82,10 +91,16 @@ router.post('/create-order', authenticate, async (req, res) => {
     }
 
     // Create Razorpay order
+    const timestamp = Date.now().toString().slice(-8); // Last 8 digits
+    const userIdShort = req.user.id.slice(-6); // Last 6 chars of user ID
+    const receipt = `${userType.slice(0,2)}_${userIdShort}_${timestamp}`; // Max ~20 chars
+    
+    console.log(`Generated receipt: "${receipt}" (length: ${receipt.length})`);
+    
     const order = await razorpay.orders.create({
       amount: plan.price * 100, // Amount in paise
       currency: 'INR',
-      receipt: `${userType}_${req.user.id}_${Date.now()}`,
+      receipt: receipt,
       notes: {
         userId: req.user.id,
         userType: userType,
@@ -94,17 +109,28 @@ router.post('/create-order', authenticate, async (req, res) => {
       }
     });
 
+    console.log(`✅ Razorpay order created successfully: ${order.id} for ${plan.name} (₹${plan.price})`);
+
+    // Determine payment type based on plan duration
+    const paymentType = 'REGISTRATION'; // Use a known valid enum value temporarily
+    console.log(`💾 Saving payment record with type: ${paymentType}`);
+
     // Save payment record
     const payment = await prisma.payment.create({
       data: {
         userId: req.user.id,
-        orderId: order.id,
+        userType: userType.toUpperCase(),
+        type: paymentType,
         amount: plan.price,
         currency: 'INR',
+        razorpayOrderId: order.id,
         status: 'PENDING',
-        planId: planId,
-        planName: plan.name,
-        userType: userType
+        description: `${plan.name} subscription for ${userType}`,
+        metadata: JSON.stringify({ 
+          planId: planId,
+          planName: plan.name,
+          userType: userType 
+        })
       }
     });
 
@@ -132,6 +158,8 @@ router.post('/verify', authenticate, async (req, res) => {
       userType 
     } = req.body;
 
+    console.log(`🔍 Verifying payment for user ${req.user.id}, order: ${razorpay_order_id}`);
+
     // Verify signature
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSign = crypto
@@ -140,68 +168,92 @@ router.post('/verify', authenticate, async (req, res) => {
       .digest("hex");
 
     if (razorpay_signature !== expectedSign) {
+      console.log('❌ Payment signature verification failed');
       return res.status(400).json(errorResponse('Invalid payment signature.', 400));
     }
+
+    console.log('✅ Payment signature verified successfully');
 
     // Update payment record
     const payment = await prisma.payment.updateMany({
       where: {
-        orderId: razorpay_order_id,
+        razorpayOrderId: razorpay_order_id,
         userId: req.user.id
       },
       data: {
         razorpayPaymentId: razorpay_payment_id,
-        razorpaySignature: razorpay_signature,
-        status: 'SUCCESS',
-        paidAt: new Date()
+        status: 'SUCCESS'
       }
     });
 
+    console.log(`💾 Updated ${payment.count} payment records`);
+
     if (payment.count === 0) {
+      console.log('❌ No payment record found to update');
       return res.status(404).json(errorResponse('Payment record not found.', 404));
     }
 
-    // Update user's payment status based on user type
-    const updateData = {
-      paymentStatus: 'SUCCESS',
-      subscriptionType: req.body.planId || 'BASIC',
-      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
-    };
+    // Update user profile based on userType
+    console.log(`🔄 Updating ${userType} profile for user ${req.user.id}`);
+    
+    const subscriptionExpiresAt = new Date();
+    subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1); // 1 month subscription
 
-    switch (userType) {
-      case 'coach':
-        await prisma.coach.update({
-          where: { userId: req.user.id },
-          data: updateData
-        });
-        break;
-      case 'institute':
-        await prisma.institute.update({
-          where: { userId: req.user.id },
-          data: updateData
-        });
-        break;
-      case 'club':
-        await prisma.club.update({
-          where: { userId: req.user.id },
-          data: updateData
-        });
-        break;
-      case 'student':
-        await prisma.student.update({
-          where: { userId: req.user.id },
-          data: updateData
-        });
-        break;
+    if (userType.toLowerCase() === 'coach') {
+      await prisma.coach.update({
+        where: { userId: req.user.id },
+        data: {
+          paymentStatus: 'SUCCESS',
+          isActive: true,
+          subscriptionType: 'MONTHLY',
+          subscriptionExpiresAt: subscriptionExpiresAt
+        }
+      });
+      console.log('✅ Coach profile updated successfully');
+    } else if (userType.toLowerCase() === 'student') {
+      await prisma.student.update({
+        where: { userId: req.user.id },
+        data: {
+          paymentStatus: 'SUCCESS',
+          isActive: true,
+          subscriptionType: 'MONTHLY',
+          subscriptionExpiresAt: subscriptionExpiresAt
+        }
+      });
+      console.log('✅ Student profile updated successfully');
+    } else if (userType.toLowerCase() === 'club') {
+      await prisma.club.update({
+        where: { userId: req.user.id },
+        data: {
+          paymentStatus: 'SUCCESS',
+          isActive: true,
+          subscriptionType: 'MONTHLY',
+          subscriptionExpiresAt: subscriptionExpiresAt
+        }
+      });
+      console.log('✅ Club profile updated successfully');
+    } else if (userType.toLowerCase() === 'institute') {
+      await prisma.institute.update({
+        where: { userId: req.user.id },
+        data: {
+          paymentStatus: 'SUCCESS',
+          isActive: true,
+          subscriptionType: 'MONTHLY',
+          subscriptionExpiresAt: subscriptionExpiresAt
+        }
+      });
+      console.log('✅ Institute profile updated successfully');
     }
+
+    console.log('✅ Payment verification completed successfully');
 
     res.json(successResponse({
       paymentId: razorpay_payment_id,
       status: 'SUCCESS'
-    }, 'Payment verified and subscription updated successfully.'));
+    }, 'Payment verified successfully.'));
 
   } catch (error) {
-    console.error('Verify payment error:', error);
+    console.error('❌ Verify payment error:', error);
     res.status(500).json(errorResponse('Payment verification failed.', 500));
   }
 });

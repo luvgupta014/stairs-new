@@ -3,6 +3,7 @@ export const paymentPlans = {
   coach: {
     defaultPlan: 'professional',
     redirectPath: '/dashboard/coach',
+    userDisplayName: 'Coach',
     plans: [
       {
         id: 'basic',
@@ -74,7 +75,8 @@ export const paymentPlans = {
   
   club: {
     defaultPlan: 'standard',
-    redirectPath: '/club/dashboard',
+    redirectPath: '/dashboard/club',
+    userDisplayName: 'Club',
     plans: [
       {
         id: 'standard',
@@ -126,7 +128,8 @@ export const paymentPlans = {
   
   institute: {
     defaultPlan: 'standard',
-    redirectPath: '/institute/dashboard',
+    redirectPath: '/dashboard/institute',
+    userDisplayName: 'Institute',
     plans: [
       {
         id: 'standard',
@@ -179,7 +182,8 @@ export const paymentPlans = {
   
   student: {
     defaultPlan: 'basic',
-    redirectPath: '/dashboard',
+    redirectPath: '/dashboard/student',
+    userDisplayName: 'Student',
     plans: [
       {
         id: 'basic',

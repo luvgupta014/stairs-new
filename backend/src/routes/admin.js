@@ -166,16 +166,24 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
           isVerified: true,
           createdAt: true,
           studentProfile: {
-            select: { name: true }
+            select: { 
+              name: true
+            }
           },
           coachProfile: {
-            select: { name: true }
+            select: { 
+              name: true
+            }
           },
           instituteProfile: {
-            select: { name: true }
+            select: { 
+              name: true
+            }
           },
           clubProfile: {
-            select: { name: true }
+            select: { 
+              name: true
+            }
           },
           adminProfile: {
             select: { name: true }
@@ -257,20 +265,18 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
     stats.monthlyGrowth = monthlyGrowth;
 
     // Format recent registrations
-    const formattedRecentRegistrations = recentRegistrations.map(user => ({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      isActive: user.isActive,
-      isVerified: user.isVerified,
-      createdAt: user.createdAt,
-      name: user.studentProfile?.name || 
-            user.coachProfile?.name || 
-            user.instituteProfile?.name || 
-            user.clubProfile?.name || 
-            user.adminProfile?.name || 
-            'Unknown'
-    }));
+    const formattedRecentRegistrations = recentRegistrations.map(user => {
+      const profile = user.studentProfile || user.coachProfile || user.instituteProfile || user.clubProfile || user.adminProfile;
+      return {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        isVerified: user.isVerified,
+        createdAt: user.createdAt,
+        name: profile?.name || 'Unknown'
+      };
+    });
 
     // ADDED: Format recent events
     const formattedRecentEvents = recentEvents.map(event => ({
@@ -834,7 +840,7 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
       prisma.event.findMany({
         where,
         include: {
-          coach: {                                                   // FIXED: coach instead of createdBy
+          coach: {
             include: {
               user: {
                 select: {
@@ -1949,6 +1955,84 @@ router.get('/event-results/:fileId/download', authenticate, requireAdmin, async 
   } catch (error) {
     console.error('❌ Download result file error:', error);
     res.status(500).json(errorResponse('Failed to download file.', 500));
+  }
+});
+
+// Get user payment status (lightweight endpoint)
+router.get('/users/:userId/payment-status', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    console.log(`🔍 Getting payment status for user ${userId}`);
+    
+    // Get user role first
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true }
+    });
+    
+    if (!user) {
+      return res.status(404).json(errorResponse('User not found.', 404));
+    }
+    
+    let paymentStatus = null;
+    let subscriptionType = null;
+    let subscriptionExpiresAt = null;
+    
+    // Get payment status based on user role
+    if (user.role === 'COACH') {
+      const coach = await prisma.coach.findUnique({
+        where: { userId },
+        select: {
+          paymentStatus: true,
+          subscriptionType: true,
+          subscriptionExpiresAt: true
+        }
+      });
+      if (coach) {
+        paymentStatus = coach.paymentStatus;
+        subscriptionType = coach.subscriptionType;
+        subscriptionExpiresAt = coach.subscriptionExpiresAt;
+      }
+    } else if (user.role === 'CLUB') {
+      const club = await prisma.club.findUnique({
+        where: { userId },
+        select: {
+          paymentStatus: true,
+          subscriptionType: true,
+          subscriptionExpiresAt: true
+        }
+      });
+      if (club) {
+        paymentStatus = club.paymentStatus;
+        subscriptionType = club.subscriptionType;
+        subscriptionExpiresAt = club.subscriptionExpiresAt;
+      }
+    } else if (user.role === 'INSTITUTE') {
+      const institute = await prisma.institute.findUnique({
+        where: { userId },
+        select: {
+          paymentStatus: true,
+          subscriptionType: true,
+          subscriptionExpiresAt: true
+        }
+      });
+      if (institute) {
+        paymentStatus = institute.paymentStatus;
+        subscriptionType = institute.subscriptionType;
+        subscriptionExpiresAt = institute.subscriptionExpiresAt;
+      }
+    }
+    
+    res.json(successResponse({
+      paymentStatus,
+      subscriptionType,
+      subscriptionExpiresAt
+    }, 'Payment status retrieved successfully.'));
+    
+  } catch (error) {
+    console.error('Get user payment status error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve payment status.', 500));
   }
 });
 

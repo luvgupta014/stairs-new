@@ -253,7 +253,9 @@ export const getClubMembers = async () => {
 export const getAdminDashboard = async () => {
   try {
     // TODO: Integrate with backend admin dashboard
-    const response = await api.get('/api/admin/dashboard');
+    const response = await api.get('/api/admin/dashboard', {
+      timeout: 30000 // 30 seconds timeout for admin dashboard
+    });
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;

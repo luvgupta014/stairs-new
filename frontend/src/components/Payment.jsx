@@ -9,7 +9,9 @@ const Payment = ({ userType = 'student' }) => {
   const [selectedPlan, setSelectedPlan] = useState('');
   const [loading, setLoading] = useState(true);
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [authError, setAuthError] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -21,54 +23,40 @@ const Payment = ({ userType = 'student' }) => {
     student: FaCrown
   };
 
-  useEffect(() => {
-    loadPaymentPlans();
-  }, [userType]);
-
+  // Load payment plans
   const loadPaymentPlans = async () => {
     try {
       setLoading(true);
+      setAuthError(false);
+      
+      // Check authentication first
+      const authToken = localStorage.getItem('authToken');
+      if (!authToken) {
+        setAuthError(true);
+        setError('Please login to view payment plans.');
+        return;
+      }
+      
       const plans = await getPaymentPlans(userType);
       setPlanConfig(plans);
       setSelectedPlan(plans.defaultPlan);
     } catch (err) {
       console.error('Failed to load payment plans:', err);
-      setError('Failed to load payment plans. Please try again.');
+      if (err.message && err.message.includes('401')) {
+        setAuthError(true);
+        setError('Your session has expired. Please login again.');
+      } else {
+        setError('Failed to load payment plans. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading payment plans...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!planConfig) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">{error || 'Failed to load payment plans'}</p>
-          <button 
-            onClick={loadPaymentPlans}
-            className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const redirectPath = location.state?.from || planConfig.redirectPath;
-  const userDisplayName = planConfig.userDisplayName;
-  const UserIcon = iconMap[userType] || FaCrown;
+  // ALL HOOKS MUST BE CALLED FIRST - before any conditional returns
+  useEffect(() => {
+    loadPaymentPlans();
+  }, [userType]);
 
   useEffect(() => {
     // Load Razorpay script
@@ -84,40 +72,183 @@ const Payment = ({ userType = 'student' }) => {
     };
   }, []);
 
+  // Compute derived values
+  const redirectPath = location.state?.from || planConfig?.redirectPath;
+  const userDisplayName = planConfig?.userDisplayName;
+  const UserIcon = iconMap[userType] || FaCrown;
+  const selectedPlanData = planConfig?.plans?.find(plan => plan.id === selectedPlan);
+
+  // NOW we can have conditional returns after all hooks are called
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading payment plans...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (authError || !planConfig) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="bg-white rounded-lg shadow-lg p-8">
+            <FaCrown className="text-4xl text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Authentication Required</h2>
+            <p className="text-red-600 mb-6">{error || 'Please login to view payment plans.'}</p>
+            <div className="space-y-3">
+              <button 
+                onClick={() => navigate('/login/coach')}
+                className="w-full bg-emerald-600 text-white py-2 px-4 rounded-lg hover:bg-emerald-700 transition-colors"
+              >
+                Login as Coach
+              </button>
+              <button 
+                onClick={() => navigate('/login/student')}
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Login as Student
+              </button>
+              <button 
+                onClick={loadPaymentPlans}
+                className="w-full bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (paymentSuccess) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="bg-white rounded-lg shadow-lg p-8">
+            <FaCheck className="text-6xl text-green-500 mx-auto mb-6" />
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Payment Successful!</h2>
+            <p className="text-gray-600 mb-6">
+              Your payment has been processed successfully. You will be redirected to your dashboard shortly.
+            </p>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const handlePayment = async (plan) => {
     setPaymentLoading(true);
     setError('');
 
     try {
-      // In a real implementation, you would:
-      // 1. Create order on backend
-      // 2. Get order_id and other details
-      // 3. Initialize Razorpay with actual data
+      // Check if user is authenticated
+      const authToken = localStorage.getItem('authToken');
+      if (!authToken) {
+        throw new Error('Please login first to make a payment.');
+      }
 
+      console.log('Auth token present:', authToken ? 'Yes' : 'No');
+      console.log('Making payment for:', { planId: plan.id, userType });
+
+      // Create payment order on backend
+      const createOrderResponse = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/payment/create-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          planId: plan.id,
+          userType: userType
+        })
+      });
+
+      const orderData = await createOrderResponse.json();
+      
+      // Log the full response for debugging
+      console.log('Payment order response status:', createOrderResponse.status);
+      console.log('Payment order response:', orderData);
+      
+      if (!createOrderResponse.ok || !orderData.success) {
+        if (createOrderResponse.status === 401) {
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('userRole');
+          throw new Error('Your session has expired. Please login again.');
+        }
+        throw new Error(orderData.message || `Server error: ${createOrderResponse.status}`);
+      }
+
+      const { orderId, amount, currency, planName, razorpayKeyId } = orderData.data;
+
+      // Configure Razorpay options
       const options = {
-        key: process.env.REACT_APP_RAZORPAY_KEY_ID || 'rzp_test_your_key_id',
-        amount: plan.price * 100, // Amount in paise
-        currency: 'INR',
+        key: razorpayKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount: amount,
+        currency: currency,
         name: 'STAIRS Talent Hub',
-        description: `${plan.name} - ${userDisplayName} Membership`,
+        description: `${planName} - ${userDisplayName} Membership`,
         image: '/logo.png',
-        order_id: 'order_' + Date.now(), // This should come from backend
-        handler: function (response) {
-          console.log('Payment successful:', response);
-          // Handle successful payment
-          // Update user subscription status on backend
-          navigate(redirectPath, { 
-            state: { 
-              paymentSuccess: true, 
-              plan: plan.name,
-              amount: plan.price 
-            } 
-          });
+        order_id: orderId,
+        handler: async function (response) {
+          try {
+            // Verify payment on backend
+            const verifyResponse = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/payment/verify`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+              },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                userType: userType
+              })
+            });
+
+            const verifyData = await verifyResponse.json();
+            
+            if (verifyData.success) {
+              console.log('Payment verified successfully:', verifyData);
+              console.log('Navigating to:', redirectPath);
+              
+              // Show success state
+              setPaymentSuccess(true);
+              setPaymentLoading(false);
+              
+              // After successful payment, always redirect to dashboard (ignore 'from' state)
+              const dashboardPath = planConfig?.redirectPath;
+              console.log('Redirecting to dashboard:', dashboardPath);
+              
+              // Add a small delay to ensure state updates and show success message
+              setTimeout(() => {
+                navigate(dashboardPath, { 
+                  state: { 
+                    paymentSuccess: true, 
+                    plan: plan.name,
+                    amount: plan.price 
+                  } 
+                });
+              }, 2000);
+            } else {
+              throw new Error(verifyData.message || 'Payment verification failed');
+            }
+          } catch (verifyError) {
+            console.error('Payment verification error:', verifyError);
+            setError('Payment verification failed. Please contact support.');
+          } finally {
+            setPaymentLoading(false);
+          }
         },
         prefill: {
-          name: 'User Name', // Get from user context
-          email: 'user@example.com', // Get from user context
-          contact: '9999999999' // Get from user context
+          name: 'User Name', // TODO: Get from user context
+          email: 'user@example.com', // TODO: Get from user context
+          contact: '9999999999' // TODO: Get from user context
         },
         notes: {
           user_type: userType,
@@ -133,29 +264,30 @@ const Payment = ({ userType = 'student' }) => {
         }
       };
 
+      // Check if Razorpay script is loaded
       if (window.Razorpay) {
         const rzp = new window.Razorpay(options);
         rzp.open();
       } else {
-        throw new Error('Razorpay SDK not loaded');
+        throw new Error('Razorpay SDK not loaded. Please refresh and try again.');
       }
+
     } catch (err) {
       console.error('Payment error:', err);
-      setError('Payment initialization failed. Please try again.');
+      setError(err.message || 'Payment initialization failed. Please try again.');
       setPaymentLoading(false);
     }
   };
 
   const handleSkipPayment = () => {
     // Navigate to dashboard without payment
-    navigate(redirectPath, { 
+    const dashboardPath = planConfig?.redirectPath;
+    navigate(dashboardPath, { 
       state: { 
         paymentSkipped: true 
       } 
     });
   };
-
-  const selectedPlanData = planConfig.plans.find(plan => plan.id === selectedPlan);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center p-4">
