@@ -2210,6 +2210,7 @@ router.get('/event-results', authenticate, requireAdmin, async (req, res) => {
       originalName: file.originalName,
       mimeType: file.mimeType,
       size: file.size,
+      description: file.description,
       uploadedAt: file.uploadedAt,
       downloadUrl: `/uploads/event-results/${file.filename}`,
       isExcel: file.mimeType.includes('spreadsheet') || file.originalName.toLowerCase().endsWith('.xlsx') || file.originalName.toLowerCase().endsWith('.xls'),

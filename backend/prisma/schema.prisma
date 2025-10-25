@@ -441,6 +441,7 @@ model EventResultFile {
   originalName String   // Original uploaded filename
   mimeType     String   // File type
   size         Int      // File size in bytes
+  description  String?  // File description
   uploadedAt   DateTime @default(now())
   
   // Relations

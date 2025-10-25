@@ -1068,6 +1068,7 @@ class EventService {
         originalName: file.originalname, // Schema field name
         mimeType: file.mimetype,         // Schema field name
         size: file.size,                 // Schema field name
+        description: description,        // Include description
       };
 
       // Only set coachId if uploader is a coach

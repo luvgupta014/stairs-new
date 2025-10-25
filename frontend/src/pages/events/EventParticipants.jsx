@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { getEventRegistrations } from '../../api';
 import Spinner from '../../components/Spinner';
-import { FaArrowLeft, FaDownload, FaEnvelope, FaPhone, FaUser } from 'react-icons/fa';
+import BackButton from '../../components/BackButton';
+import { FaDownload, FaEnvelope, FaPhone, FaUser } from 'react-icons/fa';
 
 const EventParticipants = () => {
   const { eventId } = useParams();
@@ -78,13 +79,13 @@ const EventParticipants = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
       <div className="mb-8">
-        <button
-          onClick={() => navigate('/dashboard/coach', { state: { activeTab: 'events' } })}
-          className="flex items-center text-blue-600 hover:text-blue-700 mb-4"
-        >
-          <FaArrowLeft className="mr-2" />
-          Back to Events
-        </button>
+        <div className="mb-4">
+          <BackButton 
+            to="/dashboard/coach" 
+            label="Back to Events"
+            onClick={() => navigate('/dashboard/coach', { state: { activeTab: 'events' } })}
+          />
+        </div>
         
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex justify-between items-start">

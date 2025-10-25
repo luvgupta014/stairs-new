@@ -2278,6 +2278,7 @@ router.get('/event-results', authenticate, requireCoach, async (req, res) => {
       originalName: file.originalName,
       mimeType: file.mimeType,
       size: file.size,
+      description: file.description,
       uploadedAt: file.uploadedAt,
       downloadUrl: `/uploads/event-results/${file.filename}`,
       event: {

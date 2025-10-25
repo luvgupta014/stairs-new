@@ -5,9 +5,7 @@ import {
   moderateEvent, 
   getAdminEvents, 
   getEventRegistrations, 
-  getEventParticipants,
-  getOrphanedRegistrationsReport,
-  cleanupOrphanedRegistrations
+  getEventParticipants
 } from '../../api';
 import InfoModal from '../../components/InfoModal';
 import DetailModal from '../../components/DetailModal';
@@ -81,8 +79,7 @@ const AdminDashboard = () => {
   });
 
   // Cleanup states
-  const [cleanupLoading, setCleanupLoading] = useState(false);
-  const [orphanedReport, setOrphanedReport] = useState(null);
+  // Removed database maintenance functionality
 
   // Modal helper functions
   const showInfoModal = (title, content, type = 'info', data = null) => {
@@ -386,99 +383,7 @@ const AdminDashboard = () => {
     }));
   };
 
-  // Cleanup functions
-  const handleCheckOrphanedRegistrations = async () => {
-    try {
-      setCleanupLoading(true);
-      console.log('🔍 Checking for orphaned registrations...');
-      
-      const response = await getOrphanedRegistrationsReport();
-      
-      if (response.success) {
-        setOrphanedReport(response.data);
-        const totalOrphaned = response.data.summary.grandTotal;
-        
-        if (totalOrphaned === 0) {
-          showInfoModal(
-            'Database Clean',
-            'No orphaned registrations found. Your database is clean!',
-            'success'
-          );
-        } else {
-          showInfoModal(
-            'Orphaned Registrations Found',
-            `Found ${totalOrphaned} orphaned registrations:\n` +
-            `• Students: ${response.data.summary.totalOrphanedStudents}\n` +
-            `• Coaches: ${response.data.summary.totalOrphanedCoaches}\n` +
-            `• Institutes: ${response.data.summary.totalOrphanedInstitutes}\n` +
-            `• Clubs: ${response.data.summary.totalOrphanedClubs}\n` +
-            `• Admins: ${response.data.summary.totalOrphanedAdmins}\n\n` +
-            'These are profile records without corresponding user accounts. Would you like to clean them up?',
-            'warning',
-            response.data
-          );
-        }
-      }
-    } catch (error) {
-      console.error('❌ Failed to check orphaned registrations:', error);
-      showInfoModal(
-        'Error',
-        `Failed to check orphaned registrations: ${error.message}`,
-        'error'
-      );
-    } finally {
-      setCleanupLoading(false);
-    }
-  };
-
-  const handleCleanupOrphanedRegistrations = async () => {
-    try {
-      if (!orphanedReport || orphanedReport.summary.grandTotal === 0) {
-        showInfoModal('Nothing to Clean', 'No orphaned registrations to clean up.', 'info');
-        return;
-      }
-
-      const confirmed = window.confirm(
-        `Are you sure you want to delete ${orphanedReport.summary.grandTotal} orphaned registrations? This action cannot be undone.`
-      );
-
-      if (!confirmed) return;
-
-      setCleanupLoading(true);
-      console.log('🧹 Cleaning up orphaned registrations...');
-      
-      const response = await cleanupOrphanedRegistrations();
-      
-      if (response.success) {
-        const cleaned = response.data.summary.totalOrphanedRecords;
-        showInfoModal(
-          'Cleanup Completed',
-          `Successfully cleaned up ${cleaned} orphaned registrations:\n` +
-          `• Students: ${response.data.summary.studentsDeleted}\n` +
-          `• Coaches: ${response.data.summary.coachesDeleted}\n` +
-          `• Institutes: ${response.data.summary.institutesDeleted}\n` +
-          `• Clubs: ${response.data.summary.clubsDeleted}\n` +
-          `• Admins: ${response.data.summary.adminsDeleted}`,
-          'success'
-        );
-        
-        // Reset orphaned report
-        setOrphanedReport(null);
-        
-        // Refresh dashboard data
-        fetchDashboardData();
-      }
-    } catch (error) {
-      console.error('❌ Failed to cleanup orphaned registrations:', error);
-      showInfoModal(
-        'Cleanup Failed',
-        `Failed to cleanup orphaned registrations: ${error.message}`,
-        'error'
-      );
-    } finally {
-      setCleanupLoading(false);
-    }
-  };
+  // Cleanup functions - Removed database maintenance functionality
 
   // Helper function to get user name from various profile types
   const getUserName = (user) => {
@@ -640,109 +545,6 @@ const AdminDashboard = () => {
             icon="🏟️"
             color="teal"
           />
-        </div>
-
-        {/* Database Cleanup Section */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-xl font-semibold text-gray-900">Database Maintenance</h3>
-              <p className="text-gray-600 text-sm mt-1">Clean up orphaned registrations and maintain data integrity</p>
-            </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={handleCheckOrphanedRegistrations}
-                disabled={cleanupLoading}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium inline-flex items-center transition-colors disabled:opacity-50"
-              >
-                {cleanupLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Checking...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                    </svg>
-                    Check Database
-                  </>
-                )}
-              </button>
-              
-              {orphanedReport && orphanedReport.summary.grandTotal > 0 && (
-                <button
-                  onClick={handleCleanupOrphanedRegistrations}
-                  disabled={cleanupLoading}
-                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium inline-flex items-center transition-colors disabled:opacity-50"
-                >
-                  {cleanupLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Cleaning...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                      Clean Up ({orphanedReport.summary.grandTotal})
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
-          
-          {orphanedReport && (
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h4 className="font-medium text-gray-900 mb-3">Database Status</h4>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">{orphanedReport.summary.totalOrphanedStudents}</div>
-                  <div className="text-sm text-gray-600">Students</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-600">{orphanedReport.summary.totalOrphanedCoaches}</div>
-                  <div className="text-sm text-gray-600">Coaches</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-indigo-600">{orphanedReport.summary.totalOrphanedInstitutes}</div>
-                  <div className="text-sm text-gray-600">Institutes</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-pink-600">{orphanedReport.summary.totalOrphanedClubs}</div>
-                  <div className="text-sm text-gray-600">Clubs</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red-600">{orphanedReport.summary.grandTotal}</div>
-                  <div className="text-sm text-gray-600">Total Orphaned</div>
-                </div>
-              </div>
-              
-              {orphanedReport.summary.grandTotal === 0 ? (
-                <div className="mt-4 p-3 bg-green-100 border border-green-300 rounded-md">
-                  <div className="flex items-center">
-                    <svg className="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span className="text-green-800 font-medium">Database is clean - no orphaned registrations found!</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-4 p-3 bg-yellow-100 border border-yellow-300 rounded-md">
-                  <div className="flex items-center">
-                    <svg className="w-5 h-5 text-yellow-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.98-.833-2.75 0L3.056 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                    </svg>
-                    <span className="text-yellow-800 font-medium">
-                      Found {orphanedReport.summary.grandTotal} orphaned registrations that can be safely removed.
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Events Management Section */}

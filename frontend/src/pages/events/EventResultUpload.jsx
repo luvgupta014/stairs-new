@@ -10,11 +10,11 @@ import {
   FaCalendarAlt, 
   FaTrophy,
   FaFilter,
-  FaSearch,
-  FaArrowLeft
+  FaSearch
 } from 'react-icons/fa';
 import { useParams, useNavigate } from 'react-router-dom';
 import Spinner from '../../components/Spinner';
+import BackButton from '../../components/BackButton';
 
 const EventResultUpload = () => {
   const { eventId } = useParams();
@@ -186,12 +186,14 @@ const EventResultUpload = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <button
-                onClick={() => navigate('/dashboard/coach')}
-                className="mr-4 text-white hover:text-green-200 transition-colors"
-              >
-                <FaArrowLeft className="text-xl" />
-              </button>
+              <div className="mr-4">
+                <BackButton 
+                  to="/dashboard/coach" 
+                  label="Back to Dashboard" 
+                  variant="minimal"
+                  className="text-white hover:text-green-200"
+                />
+              </div>
               <div className="text-white">
                 <h1 className="text-3xl font-bold mb-2">Event Result Files</h1>
                 <p className="text-green-100 text-lg">
@@ -357,6 +359,11 @@ const EventResultUpload = () => {
                           <h3 className="text-sm font-medium text-gray-900">
                             {file.originalName}
                           </h3>
+                          {file.description && (
+                            <p className="text-sm text-gray-600 mt-1">
+                              {file.description}
+                            </p>
+                          )}
                           <div className="mt-1 flex items-center space-x-4 text-xs text-gray-500">
                             <span>Size: {formatFileSize(file.size)}</span>
                             <span>Uploaded: {formatDate(file.uploadedAt)}</span>

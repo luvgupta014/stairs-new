@@ -123,8 +123,9 @@ const GoogleMapsPlacesAutocomplete = ({
       const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
       if (!apiKey) {
-        console.warn("Google Maps API key not found");
-        setLoadError("Google Maps API key not configured");
+        console.error("Google Maps API key not found. Manual input mode enabled.");
+        console.info("To fix: Set VITE_GOOGLE_MAPS_API_KEY environment variable and rebuild the application.");
+        setLoadError("Google Maps API not available. Please enter address manually.");
         setIsManualMode(true);
         setIsLoaded(true);
         return;

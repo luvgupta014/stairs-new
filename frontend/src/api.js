@@ -1,5 +1,34 @@
 import axios from 'axios';
 
+// Debug function to help diagnose connection issues
+window.debugBackendConnection = () => {
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+  console.log('🔍 Backend Connection Debug Info:');
+  console.log('  Backend URL:', backendUrl);
+  console.log('  Environment:', import.meta.env.MODE);
+  console.log('  All VITE env vars:', Object.keys(import.meta.env).filter(key => key.startsWith('VITE_')));
+  
+  // Test basic connectivity
+  fetch(`${backendUrl}/health`)
+    .then(response => {
+      if (response.ok) {
+        console.log('✅ Backend health check passed');
+        return response.text();
+      } else {
+        console.log('❌ Backend responded with error:', response.status);
+      }
+    })
+    .then(data => console.log('Backend response:', data))
+    .catch(error => {
+      console.log('❌ Backend health check failed:', error.message);
+      console.log('💡 Common solutions:');
+      console.log('  1. Check if backend server is running');
+      console.log('  2. Verify VITE_BACKEND_URL environment variable');
+      console.log('  3. Check firewall/network settings');
+      console.log('  4. Try different ports (3001, 8000, 8080)');
+    });
+};
+
 // Create axios instance with base configuration
 const api = axios.create({
   baseURL: import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000',
@@ -34,7 +63,16 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Handle different types of errors
+    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+      console.error('🔌 Connection timeout to backend server');
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      error.userMessage = `Connection timeout. Backend server at ${backendUrl} is not responding.`;
+    } else if (error.code === 'ERR_NETWORK' || error.message.includes('Network Error')) {
+      console.error('🚫 Network error - cannot reach backend server');
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      error.userMessage = `Cannot connect to backend server at ${backendUrl}. Please check if the server is running.`;
+    } else if (error.response?.status === 401) {
       // Handle unauthorized access
       localStorage.removeItem('authToken');
       localStorage.removeItem('userRole');
@@ -78,11 +116,22 @@ export const registerStudent = async (data) => {
 // General Login API for Coach, Club, Institute
 export const login = async (data, role) => {
   try {
-    // TODO: Integrate with backend login service
+    console.log(`🔐 Attempting login for ${role} at ${api.defaults.baseURL}`);
     const response = await api.post(`/api/auth/${role}/login`, data);
     return response.data;
   } catch (error) {
-    throw error.response?.data || error.message;
+    console.error(`❌ Login failed for ${role}:`, error.message);
+    
+    // Provide user-friendly error messages
+    if (error.userMessage) {
+      throw { message: error.userMessage };
+    } else if (error.response?.data) {
+      throw error.response.data;
+    } else if (error.message.includes('ERR_CONNECTION_TIMED_OUT')) {
+      throw { message: `Cannot connect to server. Please check if the backend server is running at ${api.defaults.baseURL}` };
+    } else {
+      throw { message: error.message || 'Login failed. Please try again.' };
+    }
   }
 };
 
@@ -354,11 +403,22 @@ export const unregisterFromEvent = async (eventId) => {
 // Admin APIs
 export const adminLogin = async (credentials) => {
   try {
-    // TODO: Integrate with backend admin authentication
+    console.log(`🔐 Attempting admin login at ${api.defaults.baseURL}`);
     const response = await api.post('/api/auth/admin/login', credentials);
     return response.data;
   } catch (error) {
-    throw error.response?.data || error.message;
+    console.error('❌ Admin login failed:', error.message);
+    
+    // Provide user-friendly error messages
+    if (error.userMessage) {
+      throw { message: error.userMessage };
+    } else if (error.response?.data) {
+      throw error.response.data;
+    } else if (error.message.includes('ERR_CONNECTION_TIMED_OUT')) {
+      throw { message: `Cannot connect to server. Please check if the backend server is running at ${api.defaults.baseURL}` };
+    } else {
+      throw { message: error.message || 'Admin login failed. Please try again.' };
+    }
   }
 };
 

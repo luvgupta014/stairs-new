@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { bulkUploadStudents } from '../api';
 import Spinner from '../components/Spinner';
+import BackButton from '../components/BackButton';
 import { useNavigate } from 'react-router-dom';
 
 const BulkUpload = () => {
@@ -284,6 +285,10 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom J
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mb-6">
+        <BackButton to="/dashboard/coach" label="Back to Dashboard" />
+      </div>
+      
       <div className="bg-white rounded-lg shadow-md p-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Bulk Student Upload</h1>

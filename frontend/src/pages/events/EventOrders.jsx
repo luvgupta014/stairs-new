@@ -16,7 +16,6 @@ import {
   FaCertificate,
   FaMedal,
   FaTrophy,
-  FaArrowLeft,
   FaExclamationTriangle,
   FaClock,
   FaCheck,
@@ -25,6 +24,7 @@ import {
   FaMoneyBillWave
 } from 'react-icons/fa';
 import Spinner from '../../components/Spinner';
+import BackButton from '../../components/BackButton';
 
 const EventOrders = () => {
   const { eventId } = useParams();
@@ -281,12 +281,14 @@ const EventOrders = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <button
-                onClick={() => navigate('/dashboard/coach')}
-                className="mr-4 text-white hover:text-blue-200 transition-colors"
-              >
-                <FaArrowLeft className="text-xl" />
-              </button>
+              <div className="mr-4">
+                <BackButton 
+                  to="/dashboard/coach" 
+                  label="Back to Dashboard" 
+                  variant="minimal"
+                  className="text-white hover:text-blue-200"
+                />
+              </div>
               <div className="text-white">
                 <h1 className="text-3xl font-bold mb-2">Event Orders</h1>
                 <p className="text-blue-100 text-lg">

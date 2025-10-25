@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getStudentEventDetails, getEvents, registerForEvent, unregisterFromEvent } from '../../api';
 import Spinner from '../../components/Spinner';
 import Button from '../../components/Button';
+import BackButton from '../../components/BackButton';
 
 /**
  * EventDetails Page
@@ -209,6 +210,11 @@ const EventDetails = () => {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Back Button */}
+        <div className="mb-6">
+          <BackButton to="/events" label="Back to Events" />
+        </div>
+
         {/* Breadcrumb */}
         <nav className="flex mb-8" aria-label="Breadcrumb">
           <ol className="flex items-center space-x-4">
