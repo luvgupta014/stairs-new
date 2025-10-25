@@ -48,116 +48,47 @@ router.get('/profile', authenticate, requireAdmin, async (req, res) => {
 router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
   try {
     console.log('🔍 Fetching admin dashboard data...');
+    const startTime = Date.now();
 
-    // Get basic stats with individual error handling
-    const stats = {};
-
-    try {
-      stats.totalUsers = await prisma.user.count();
-    } catch (error) {
-      console.error('Error counting total users:', error);
-      stats.totalUsers = 0;
-    }
-
-    try {
-      stats.totalStudents = await prisma.user.count({ where: { role: 'STUDENT' } });
-    } catch (error) {
-      console.error('Error counting students:', error);
-      stats.totalStudents = 0;
-    }
-
-    try {
-      stats.totalCoaches = await prisma.user.count({ where: { role: 'COACH' } });
-    } catch (error) {
-      console.error('Error counting coaches:', error);
-      stats.totalCoaches = 0;
-    }
-
-    try {
-      stats.totalInstitutes = await prisma.user.count({ where: { role: 'INSTITUTE' } });
-    } catch (error) {
-      console.error('Error counting institutes:', error);
-      stats.totalInstitutes = 0;
-    }
-
-    try {
-      stats.totalClubs = await prisma.user.count({ where: { role: 'CLUB' } });
-    } catch (error) {
-      console.error('Error counting clubs:', error);
-      stats.totalClubs = 0;
-    }
-
-    // Get pending approvals with error handling
-    try {
-      stats.pendingCoachApprovals = await prisma.user.count({
-        where: { 
-          role: 'COACH',
-          isVerified: true,
-          isActive: false
-        }
-      });
-    } catch (error) {
-      console.error('Error counting pending coach approvals:', error);
-      stats.pendingCoachApprovals = 0;
-    }
-
-    try {
-      stats.pendingInstituteApprovals = await prisma.user.count({
-        where: { 
-          role: 'INSTITUTE',
-          isVerified: true,
-          isActive: false
-        }
-      });
-    } catch (error) {
-      console.error('Error counting pending institute approvals:', error);
-      stats.pendingInstituteApprovals = 0;
-    }
-
-    // ADDED: Get event statistics
-    try {
-      stats.totalEvents = await prisma.event.count();
-      console.log(`📊 Total events: ${stats.totalEvents}`);
-    } catch (error) {
-      console.error('Error counting total events:', error);
-      stats.totalEvents = 0;
-    }
-
-    try {
-      stats.pendingEvents = await prisma.event.count({
-        where: { status: 'PENDING' }
-      });
-      console.log(`⏳ Pending events: ${stats.pendingEvents}`);
-    } catch (error) {
-      console.error('Error counting pending events:', error);
-      stats.pendingEvents = 0;
-    }
-
-    try {
-      stats.approvedEvents = await prisma.event.count({
-        where: { status: 'APPROVED' }
-      });
-    } catch (error) {
-      console.error('Error counting approved events:', error);
-      stats.approvedEvents = 0;
-    }
-
-    try {
-      stats.activeEvents = await prisma.event.count({
-        where: { status: 'ACTIVE' }
-      });
-    } catch (error) {
-      console.error('Error counting active events:', error);
-      stats.activeEvents = 0;
-    }
-
-    // Set default values for features not yet implemented
-    stats.totalConnections = 0;
-
-    // Get recent registrations with error handling
-    let recentRegistrations = [];
-    try {
-      recentRegistrations = await prisma.user.findMany({
+    // Use Promise.allSettled to handle errors gracefully and run queries in parallel
+    const [
+      totalUsersResult,
+      totalStudentsResult,
+      totalCoachesResult,
+      totalInstitutesResult,
+      totalClubsResult,
+      pendingCoachApprovalsResult,
+      pendingInstituteApprovalsResult,
+      totalEventsResult,
+      pendingEventsResult,
+      approvedEventsResult,
+      activeEventsResult,
+      recentRegistrationsResult,
+      recentEventsResult,
+      monthlyGrowthResult
+    ] = await Promise.allSettled([
+      prisma.user.count(),
+      prisma.user.count({ where: { role: 'STUDENT' } }),
+      prisma.user.count({ where: { role: 'COACH' } }),
+      prisma.user.count({ where: { role: 'INSTITUTE' } }),
+      prisma.user.count({ where: { role: 'CLUB' } }),
+      prisma.user.count({ where: { role: 'COACH', isVerified: true, isActive: false } }),
+      prisma.user.count({ where: { role: 'INSTITUTE', isVerified: true, isActive: false } }),
+      prisma.event.count(),
+      prisma.event.count({ where: { status: 'PENDING' } }),
+      prisma.event.count({ where: { status: 'APPROVED' } }),
+      prisma.event.count({ where: { status: 'ACTIVE' } }),
+      // Recent registrations with reduced data - only users with valid profiles
+      prisma.user.findMany({
+        where: {
+          OR: [
+            { AND: [{ role: 'STUDENT' }, { studentProfile: { isNot: null } }] },
+            { AND: [{ role: 'COACH' }, { coachProfile: { isNot: null } }] },
+            { AND: [{ role: 'INSTITUTE' }, { instituteProfile: { isNot: null } }] },
+            { AND: [{ role: 'CLUB' }, { clubProfile: { isNot: null } }] },
+            { AND: [{ role: 'ADMIN' }, { adminProfile: { isNot: null } }] }
+          ]
+        },
         select: {
           id: true,
           email: true,
@@ -165,104 +96,75 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
           isActive: true,
           isVerified: true,
           createdAt: true,
-          studentProfile: {
-            select: { 
-              name: true
-            }
-          },
-          coachProfile: {
-            select: { 
-              name: true
-            }
-          },
-          instituteProfile: {
-            select: { 
-              name: true
-            }
-          },
-          clubProfile: {
-            select: { 
-              name: true
-            }
-          },
-          adminProfile: {
-            select: { name: true }
-          }
+          studentProfile: { select: { name: true } },
+          coachProfile: { select: { name: true } },
+          instituteProfile: { select: { name: true } },
+          clubProfile: { select: { name: true } },
+          adminProfile: { select: { name: true } }
         },
         orderBy: { createdAt: 'desc' },
         take: 10
-      });
-    } catch (error) {
-      console.error('Error fetching recent registrations:', error);
-      recentRegistrations = [];
-    }
-
-    // ADDED: Get recent events for approval
-    let recentEvents = [];
-    try {
-      recentEvents = await prisma.event.findMany({
-        where: {
-          status: 'PENDING'
-        },
+      }),
+      // Recent pending events with reduced data
+      prisma.event.findMany({
+        where: { status: 'PENDING' },
         include: {
           coach: {
-            include: {
-              user: {
-                select: {
-                  email: true
-                }
-              }
+            select: {
+              id: true,
+              name: true,
+              user: { select: { email: true } }
             }
           }
         },
         orderBy: { createdAt: 'desc' },
         take: 10
-      });
-      console.log(`📋 Recent pending events found: ${recentEvents.length}`);
-    } catch (error) {
-      console.error('Error fetching recent events:', error);
-      recentEvents = [];
-    }
+      }),
+      // Monthly growth calculation
+      (async () => {
+        try {
+          const thisMonth = new Date();
+          thisMonth.setDate(1);
+          thisMonth.setHours(0, 0, 0, 0);
 
-    // Calculate monthly growth with error handling
-    let monthlyGrowth = 0;
-    try {
-      const thisMonth = new Date();
-      thisMonth.setDate(1);
-      thisMonth.setHours(0, 0, 0, 0);
+          const lastMonth = new Date(thisMonth);
+          lastMonth.setMonth(lastMonth.getMonth() - 1);
 
-      const lastMonth = new Date(thisMonth);
-      lastMonth.setMonth(lastMonth.getMonth() - 1);
+          const [thisMonthUsers, lastMonthUsers] = await Promise.all([
+            prisma.user.count({ where: { createdAt: { gte: thisMonth } } }),
+            prisma.user.count({ where: { createdAt: { gte: lastMonth, lt: thisMonth } } })
+          ]);
 
-      const thisMonthUsers = await prisma.user.count({
-        where: {
-          createdAt: {
-            gte: thisMonth
+          if (lastMonthUsers > 0) {
+            return Math.round(((thisMonthUsers - lastMonthUsers) / lastMonthUsers) * 100 * 100) / 100;
+          } else {
+            return thisMonthUsers > 0 ? 100 : 0;
           }
+        } catch (error) {
+          console.error('Error calculating monthly growth:', error);
+          return 0;
         }
-      });
+      })()
+    ]);
 
-      const lastMonthUsers = await prisma.user.count({
-        where: {
-          createdAt: {
-            gte: lastMonth,
-            lt: thisMonth
-          }
-        }
-      });
+    // Extract results with fallbacks
+    const stats = {
+      totalUsers: totalUsersResult.status === 'fulfilled' ? totalUsersResult.value : 0,
+      totalStudents: totalStudentsResult.status === 'fulfilled' ? totalStudentsResult.value : 0,
+      totalCoaches: totalCoachesResult.status === 'fulfilled' ? totalCoachesResult.value : 0,
+      totalInstitutes: totalInstitutesResult.status === 'fulfilled' ? totalInstitutesResult.value : 0,
+      totalClubs: totalClubsResult.status === 'fulfilled' ? totalClubsResult.value : 0,
+      pendingCoachApprovals: pendingCoachApprovalsResult.status === 'fulfilled' ? pendingCoachApprovalsResult.value : 0,
+      pendingInstituteApprovals: pendingInstituteApprovalsResult.status === 'fulfilled' ? pendingInstituteApprovalsResult.value : 0,
+      totalEvents: totalEventsResult.status === 'fulfilled' ? totalEventsResult.value : 0,
+      pendingEvents: pendingEventsResult.status === 'fulfilled' ? pendingEventsResult.value : 0,
+      approvedEvents: approvedEventsResult.status === 'fulfilled' ? approvedEventsResult.value : 0,
+      activeEvents: activeEventsResult.status === 'fulfilled' ? activeEventsResult.value : 0,
+      monthlyGrowth: monthlyGrowthResult.status === 'fulfilled' ? monthlyGrowthResult.value : 0
+    };
 
-      if (lastMonthUsers > 0) {
-        monthlyGrowth = ((thisMonthUsers - lastMonthUsers) / lastMonthUsers) * 100;
-      } else {
-        monthlyGrowth = thisMonthUsers > 0 ? 100 : 0;
-      }
-      monthlyGrowth = Math.round(monthlyGrowth * 100) / 100;
-    } catch (error) {
-      console.error('Error calculating monthly growth:', error);
-      monthlyGrowth = 0;
-    }
-
-    stats.monthlyGrowth = monthlyGrowth;
+    const recentRegistrations = recentRegistrationsResult.status === 'fulfilled' ? recentRegistrationsResult.value : [];
+    const recentEvents = recentEventsResult.status === 'fulfilled' ? recentEventsResult.value : [];
 
     // Format recent registrations
     const formattedRecentRegistrations = recentRegistrations.map(user => {
@@ -278,7 +180,7 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
       };
     });
 
-    // ADDED: Format recent events
+    // Format recent events
     const formattedRecentEvents = recentEvents.map(event => ({
       id: event.id,
       name: event.name,
@@ -301,12 +203,13 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
     const dashboardData = {
       stats,
       recentUsers: formattedRecentRegistrations,
-      recentEvents: formattedRecentEvents,          // ADDED: Include recent events
-      pendingEvents: formattedRecentEvents,         // ADDED: Include pending events
-      monthlyRegistrations: [] // Placeholder for now
+      recentEvents: formattedRecentEvents,
+      pendingEvents: formattedRecentEvents,
+      monthlyRegistrations: []
     };
 
-    console.log('✅ Admin dashboard data fetched successfully');
+    const elapsed = Date.now() - startTime;
+    console.log(`✅ Admin dashboard data fetched successfully in ${elapsed}ms`);
     console.log(`📊 Dashboard summary: ${stats.totalUsers} users, ${stats.totalEvents} events, ${stats.pendingEvents} pending`);
     
     res.json(successResponse(dashboardData, 'Dashboard data retrieved successfully.'));
@@ -314,6 +217,454 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('❌ Get admin dashboard error:', error);
     res.status(500).json(errorResponse('Failed to retrieve dashboard data.', 500));
+  }
+});
+
+// Clean up invalid and test user registrations
+router.post('/cleanup-invalid-registrations', authenticate, requireAdmin, async (req, res) => {
+  try {
+    console.log('🧹 Starting cleanup of invalid user registrations...');
+    
+    const cleanupReport = {
+      orphanedProfiles: [],
+      testUsers: [],
+      incompleteProfiles: [],
+      totalCleaned: 0
+    };
+
+    // Find users with test/fake data patterns
+    const testUserPatterns = [
+      'john.doe@email.com',
+      'jane.smith@email.com', 
+      'mike.johnson@email.com',
+      'lg@email.com',
+      'lg2@email.com'
+    ];
+
+    const testNames = ['MJ', 'John Doe', 'Jane Smith', 'Mike Johnson'];
+
+    // Find test users by email pattern
+    const testUsers = await prisma.user.findMany({
+      where: {
+        OR: [
+          { email: { in: testUserPatterns } },
+          {
+            AND: [
+              { role: 'STUDENT' },
+              { studentProfile: { name: { in: testNames } } }
+            ]
+          },
+          {
+            AND: [
+              { role: 'COACH' },
+              { coachProfile: { name: { in: testNames } } }
+            ]
+          }
+        ]
+      },
+      include: {
+        studentProfile: true,
+        coachProfile: true,
+        instituteProfile: true,
+        clubProfile: true,
+        adminProfile: true
+      }
+    });
+
+    // Find orphaned profiles (profiles without users)
+    const [orphanedStudents, orphanedCoaches, orphanedInstitutes, orphanedClubs, orphanedAdmins] = await Promise.allSettled([
+      prisma.student.findMany({
+        where: { user: null },
+        select: { id: true, userId: true, name: true, createdAt: true }
+      }),
+      prisma.coach.findMany({
+        where: { user: null },
+        select: { id: true, userId: true, name: true, createdAt: true }
+      }),
+      prisma.institute.findMany({
+        where: { user: null },
+        select: { id: true, userId: true, name: true, createdAt: true }
+      }),
+      prisma.club.findMany({
+        where: { user: null },
+        select: { id: true, userId: true, name: true, createdAt: true }
+      }),
+      prisma.admin.findMany({
+        where: { user: null },
+        select: { id: true, userId: true, name: true, createdAt: true }
+      })
+    ]);
+
+    const orphanedProfiles = [
+      ...(orphanedStudents.status === 'fulfilled' ? orphanedStudents.value : []),
+      ...(orphanedCoaches.status === 'fulfilled' ? orphanedCoaches.value : []),
+      ...(orphanedInstitutes.status === 'fulfilled' ? orphanedInstitutes.value : []),
+      ...(orphanedClubs.status === 'fulfilled' ? orphanedClubs.value : []),
+      ...(orphanedAdmins.status === 'fulfilled' ? orphanedAdmins.value : [])
+    ];
+
+    console.log(`🔍 Found invalid registrations:`, {
+      testUsers: testUsers.length,
+      orphanedProfiles: orphanedProfiles.length
+    });
+
+    cleanupReport.testUsers = testUsers.map(user => ({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.studentProfile?.name || user.coachProfile?.name || user.instituteProfile?.name || user.clubProfile?.name || 'Unknown',
+      createdAt: user.createdAt
+    }));
+
+    cleanupReport.orphanedProfiles = orphanedProfiles;
+
+    // Delete invalid data in a transaction
+    const deleteResults = await prisma.$transaction(async (tx) => {
+      const results = { deletedUsers: 0, deletedProfiles: 0 };
+
+      // Delete test users and their profiles
+      if (testUsers.length > 0) {
+        const deletedUsers = await tx.user.deleteMany({
+          where: { id: { in: testUsers.map(u => u.id) } }
+        });
+        results.deletedUsers = deletedUsers.count;
+      }
+
+      // Delete orphaned profiles
+      if (orphanedStudents.status === 'fulfilled' && orphanedStudents.value.length > 0) {
+        const deleted = await tx.student.deleteMany({
+          where: { id: { in: orphanedStudents.value.map(s => s.id) } }
+        });
+        results.deletedProfiles += deleted.count;
+      }
+
+      if (orphanedCoaches.status === 'fulfilled' && orphanedCoaches.value.length > 0) {
+        const deleted = await tx.coach.deleteMany({
+          where: { id: { in: orphanedCoaches.value.map(c => c.id) } }
+        });
+        results.deletedProfiles += deleted.count;
+      }
+
+      if (orphanedInstitutes.status === 'fulfilled' && orphanedInstitutes.value.length > 0) {
+        const deleted = await tx.institute.deleteMany({
+          where: { id: { in: orphanedInstitutes.value.map(i => i.id) } }
+        });
+        results.deletedProfiles += deleted.count;
+      }
+
+      if (orphanedClubs.status === 'fulfilled' && orphanedClubs.value.length > 0) {
+        const deleted = await tx.club.deleteMany({
+          where: { id: { in: orphanedClubs.value.map(c => c.id) } }
+        });
+        results.deletedProfiles += deleted.count;
+      }
+
+      if (orphanedAdmins.status === 'fulfilled' && orphanedAdmins.value.length > 0) {
+        const deleted = await tx.admin.deleteMany({
+          where: { id: { in: orphanedAdmins.value.map(a => a.id) } }
+        });
+        results.deletedProfiles += deleted.count;
+      }
+
+      return results;
+    });
+
+    cleanupReport.totalCleaned = deleteResults.deletedUsers + deleteResults.deletedProfiles;
+
+    console.log(`✅ Cleanup completed:`, {
+      usersDeleted: deleteResults.deletedUsers,
+      profilesDeleted: deleteResults.deletedProfiles,
+      totalCleaned: cleanupReport.totalCleaned
+    });
+
+    res.json(successResponse({
+      cleanupReport,
+      deleteResults,
+      summary: {
+        totalInvalidRecords: cleanupReport.totalCleaned,
+        testUsersDeleted: deleteResults.deletedUsers,
+        orphanedProfilesDeleted: deleteResults.deletedProfiles
+      }
+    }, `Successfully cleaned up ${cleanupReport.totalCleaned} invalid registrations.`));
+
+  } catch (error) {
+    console.error('❌ Cleanup invalid registrations error:', error);
+    res.status(500).json(errorResponse('Failed to cleanup invalid registrations.', 500));
+  }
+});
+
+// Clean up orphaned user registrations
+router.post('/cleanup-orphaned-registrations', authenticate, requireAdmin, async (req, res) => {
+  try {
+    console.log('🧹 Starting cleanup of orphaned user registrations...');
+    
+    const cleanupReport = {
+      orphanedStudents: [],
+      orphanedCoaches: [],
+      orphanedInstitutes: [],
+      orphanedClubs: [],
+      orphanedAdmins: [],
+      totalCleaned: 0
+    };
+
+    // Find orphaned student profiles (student profile exists but user doesn't)
+    const orphanedStudents = await prisma.student.findMany({
+      where: {
+        user: null
+      },
+      select: {
+        id: true,
+        userId: true,
+        name: true,
+        createdAt: true
+      }
+    });
+
+    // Find orphaned coach profiles
+    const orphanedCoaches = await prisma.coach.findMany({
+      where: {
+        user: null
+      },
+      select: {
+        id: true,
+        userId: true,
+        name: true,
+        createdAt: true
+      }
+    });
+
+    // Find orphaned institute profiles
+    const orphanedInstitutes = await prisma.institute.findMany({
+      where: {
+        user: null
+      },
+      select: {
+        id: true,
+        userId: true,
+        name: true,
+        createdAt: true
+      }
+    });
+
+    // Find orphaned club profiles
+    const orphanedClubs = await prisma.club.findMany({
+      where: {
+        user: null
+      },
+      select: {
+        id: true,
+        userId: true,
+        name: true,
+        createdAt: true
+      }
+    });
+
+    // Find orphaned admin profiles
+    const orphanedAdmins = await prisma.admin.findMany({
+      where: {
+        user: null
+      },
+      select: {
+        id: true,
+        userId: true,
+        name: true,
+        createdAt: true
+      }
+    });
+
+    console.log(`🔍 Found orphaned records:`, {
+      students: orphanedStudents.length,
+      coaches: orphanedCoaches.length,
+      institutes: orphanedInstitutes.length,
+      clubs: orphanedClubs.length,
+      admins: orphanedAdmins.length
+    });
+
+    // Store the records before deletion for reporting
+    cleanupReport.orphanedStudents = orphanedStudents;
+    cleanupReport.orphanedCoaches = orphanedCoaches;
+    cleanupReport.orphanedInstitutes = orphanedInstitutes;
+    cleanupReport.orphanedClubs = orphanedClubs;
+    cleanupReport.orphanedAdmins = orphanedAdmins;
+
+    // Delete orphaned records in a transaction
+    const deleteResults = await prisma.$transaction(async (tx) => {
+      const results = {};
+
+      if (orphanedStudents.length > 0) {
+        results.deletedStudents = await tx.student.deleteMany({
+          where: {
+            id: { in: orphanedStudents.map(s => s.id) }
+          }
+        });
+      }
+
+      if (orphanedCoaches.length > 0) {
+        results.deletedCoaches = await tx.coach.deleteMany({
+          where: {
+            id: { in: orphanedCoaches.map(c => c.id) }
+          }
+        });
+      }
+
+      if (orphanedInstitutes.length > 0) {
+        results.deletedInstitutes = await tx.institute.deleteMany({
+          where: {
+            id: { in: orphanedInstitutes.map(i => i.id) }
+          }
+        });
+      }
+
+      if (orphanedClubs.length > 0) {
+        results.deletedClubs = await tx.club.deleteMany({
+          where: {
+            id: { in: orphanedClubs.map(c => c.id) }
+          }
+        });
+      }
+
+      if (orphanedAdmins.length > 0) {
+        results.deletedAdmins = await tx.admin.deleteMany({
+          where: {
+            id: { in: orphanedAdmins.map(a => a.id) }
+          }
+        });
+      }
+
+      return results;
+    });
+
+    cleanupReport.totalCleaned = 
+      (deleteResults.deletedStudents?.count || 0) +
+      (deleteResults.deletedCoaches?.count || 0) +
+      (deleteResults.deletedInstitutes?.count || 0) +
+      (deleteResults.deletedClubs?.count || 0) +
+      (deleteResults.deletedAdmins?.count || 0);
+
+    console.log(`✅ Cleanup completed:`, {
+      studentsDeleted: deleteResults.deletedStudents?.count || 0,
+      coachesDeleted: deleteResults.deletedCoaches?.count || 0,
+      institutesDeleted: deleteResults.deletedInstitutes?.count || 0,
+      clubsDeleted: deleteResults.deletedClubs?.count || 0,
+      adminsDeleted: deleteResults.deletedAdmins?.count || 0,
+      totalCleaned: cleanupReport.totalCleaned
+    });
+
+    res.json(successResponse({
+      cleanupReport,
+      deleteResults,
+      summary: {
+        totalOrphanedRecords: cleanupReport.totalCleaned,
+        studentsDeleted: deleteResults.deletedStudents?.count || 0,
+        coachesDeleted: deleteResults.deletedCoaches?.count || 0,
+        institutesDeleted: deleteResults.deletedInstitutes?.count || 0,
+        clubsDeleted: deleteResults.deletedClubs?.count || 0,
+        adminsDeleted: deleteResults.deletedAdmins?.count || 0
+      }
+    }, `Successfully cleaned up ${cleanupReport.totalCleaned} orphaned registrations.`));
+
+  } catch (error) {
+    console.error('❌ Cleanup orphaned registrations error:', error);
+    res.status(500).json(errorResponse('Failed to cleanup orphaned registrations.', 500));
+  }
+});
+
+// Get orphaned registrations report (without deleting)
+router.get('/orphaned-registrations-report', authenticate, requireAdmin, async (req, res) => {
+  try {
+    console.log('📊 Generating orphaned registrations report...');
+    
+    // Find profiles without corresponding users
+    const [orphanedStudents, orphanedCoaches, orphanedInstitutes, orphanedClubs, orphanedAdmins] = await Promise.allSettled([
+      prisma.student.findMany({
+        where: {
+          user: null
+        },
+        select: {
+          id: true,
+          userId: true,
+          name: true,
+          createdAt: true,
+          sport: true
+        }
+      }),
+      prisma.coach.findMany({
+        where: {
+          user: null
+        },
+        select: {
+          id: true,
+          userId: true,
+          name: true,
+          createdAt: true,
+          primarySport: true
+        }
+      }),
+      prisma.institute.findMany({
+        where: {
+          user: null
+        },
+        select: {
+          id: true,
+          userId: true,
+          name: true,
+          createdAt: true,
+          type: true
+        }
+      }),
+      prisma.club.findMany({
+        where: {
+          user: null
+        },
+        select: {
+          id: true,
+          userId: true,
+          name: true,
+          createdAt: true,
+          type: true
+        }
+      }),
+      prisma.admin.findMany({
+        where: {
+          user: null
+        },
+        select: {
+          id: true,
+          userId: true,
+          name: true,
+          createdAt: true,
+          role: true
+        }
+      })
+    ]);
+
+    const report = {
+      orphanedStudents: orphanedStudents.status === 'fulfilled' ? orphanedStudents.value : [],
+      orphanedCoaches: orphanedCoaches.status === 'fulfilled' ? orphanedCoaches.value : [],
+      orphanedInstitutes: orphanedInstitutes.status === 'fulfilled' ? orphanedInstitutes.value : [],
+      orphanedClubs: orphanedClubs.status === 'fulfilled' ? orphanedClubs.value : [],
+      orphanedAdmins: orphanedAdmins.status === 'fulfilled' ? orphanedAdmins.value : [],
+      summary: {
+        totalOrphanedStudents: orphanedStudents.status === 'fulfilled' ? orphanedStudents.value.length : 0,
+        totalOrphanedCoaches: orphanedCoaches.status === 'fulfilled' ? orphanedCoaches.value.length : 0,
+        totalOrphanedInstitutes: orphanedInstitutes.status === 'fulfilled' ? orphanedInstitutes.value.length : 0,
+        totalOrphanedClubs: orphanedClubs.status === 'fulfilled' ? orphanedClubs.value.length : 0,
+        totalOrphanedAdmins: orphanedAdmins.status === 'fulfilled' ? orphanedAdmins.value.length : 0,
+        grandTotal: (orphanedStudents.status === 'fulfilled' ? orphanedStudents.value.length : 0) +
+                   (orphanedCoaches.status === 'fulfilled' ? orphanedCoaches.value.length : 0) +
+                   (orphanedInstitutes.status === 'fulfilled' ? orphanedInstitutes.value.length : 0) +
+                   (orphanedClubs.status === 'fulfilled' ? orphanedClubs.value.length : 0) +
+                   (orphanedAdmins.status === 'fulfilled' ? orphanedAdmins.value.length : 0)
+      }
+    };
+
+    console.log(`📊 Orphaned registrations report:`, report.summary);
+
+    res.json(successResponse(report, 'Orphaned registrations report generated successfully.'));
+
+  } catch (error) {
+    console.error('❌ Generate orphaned registrations report error:', error);
+    res.status(500).json(errorResponse('Failed to generate orphaned registrations report.', 500));
   }
 });
 

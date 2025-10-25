@@ -3,7 +3,7 @@ import axios from 'axios';
 // Create axios instance with base configuration
 const api = axios.create({
   baseURL: import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000',
-  timeout: 10000,
+  timeout: 60000, // Increased to 60 seconds for all requests
   headers: {
     'Content-Type': 'application/json',
   },
@@ -213,7 +213,9 @@ export const getStudentDashboard = async () => {
 
 export const getCoachDashboard = async () => {
   try {
-    const response = await api.get('/api/coach/dashboard');
+    const response = await api.get('/api/coach/dashboard', {
+      timeout: 60000 // 60 seconds timeout for coach dashboard
+    });
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;
@@ -223,7 +225,9 @@ export const getCoachDashboard = async () => {
 export const getInstituteDashboard = async () => {
   try {
     // TODO: Integrate with backend dashboard data
-    const response = await api.get('/api/institute/dashboard');
+    const response = await api.get('/api/institute/dashboard', {
+      timeout: 60000 // 60 seconds timeout for institute dashboard
+    });
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;
@@ -233,7 +237,9 @@ export const getInstituteDashboard = async () => {
 export const getClubDashboard = async () => {
   try {
     // TODO: Integrate with backend dashboard data
-    const response = await api.get('/api/club/dashboard');
+    const response = await api.get('/api/club/dashboard', {
+      timeout: 60000 // 60 seconds timeout for club dashboard
+    });
     return response.data.data; // Extract data from response
   } catch (error) {
     throw error.response?.data || error.message;
@@ -254,7 +260,7 @@ export const getAdminDashboard = async () => {
   try {
     // TODO: Integrate with backend admin dashboard
     const response = await api.get('/api/admin/dashboard', {
-      timeout: 30000 // 30 seconds timeout for admin dashboard
+      timeout: 120000 // 2 minutes timeout for admin dashboard
     });
     return response.data;
   } catch (error) {
@@ -761,6 +767,25 @@ export const createOrderPayment = async (orderId) => {
 export const verifyOrderPayment = async (orderId, paymentData) => {
   try {
     const response = await api.post(`/api/coach/orders/${orderId}/verify-payment`, paymentData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Admin Data Cleanup APIs
+export const getOrphanedRegistrationsReport = async () => {
+  try {
+    const response = await api.get('/api/admin/orphaned-registrations-report');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const cleanupOrphanedRegistrations = async () => {
+  try {
+    const response = await api.post('/api/admin/cleanup-orphaned-registrations');
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;
