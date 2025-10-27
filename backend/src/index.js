@@ -64,11 +64,11 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // File upload middleware - DISABLED to avoid conflict with multer
-// app.use(fileUpload({
-//   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
-//   useTempFiles: true,
-//   tempFileDir: '/tmp/'
-// }));
+app.use(fileUpload({
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  useTempFiles: true,
+  tempFileDir: '/tmp/'
+}));
 
 // Serve uploaded tournament result files publicly with proper MIME types
 app.use('/uploads', (req, res, next) => {

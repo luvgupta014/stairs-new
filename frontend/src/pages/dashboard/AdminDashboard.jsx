@@ -984,7 +984,7 @@ const AdminDashboard = () => {
                           >
                             View
                           </button>
-                          {!user.isActive && (
+                          {/* {!user.isActive && (
                             <button
                               onClick={() => {
                                 if (confirm(`Are you sure you want to activate ${getUserName(user)}?`)) {
@@ -999,7 +999,7 @@ const AdminDashboard = () => {
                             >
                               Activate
                             </button>
-                          )}
+                          )} */}
                         </div>
                       </td>
                     </tr>

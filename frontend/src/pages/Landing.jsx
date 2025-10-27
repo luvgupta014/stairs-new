@@ -130,12 +130,12 @@ const Landing = () => {
                   >
                     Admin Login
                   </Link>
-                  <Link
+                  {/*<Link
                     to="/register/student"
                     className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
                   >
                     Get Started
-                  </Link>
+                  </Link>*/}
                 </div>
               )}
             </div>

@@ -11,6 +11,7 @@ const StudentRegister = () => {
   const [modalMessage, setModalMessage] = useState('');
   const [apiError, setApiError] = useState('');
   const [currentStep, setCurrentStep] = useState(1);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState({
     fullName: '',
     fatherName: '',
@@ -37,12 +38,202 @@ const StudentRegister = () => {
 
   const totalSteps = 5;
 
+  // Validator functions
+  const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const validateAadhaar = (aadhaar) => /^\d{12}$/.test(aadhaar);
+  const validateMobile = (mobile) => /^\d{10}$/.test(mobile);
+  const validatePincode = (pincode) => /^\d{6}$/.test(pincode);
+  const validatePassword = (password) => password.length >= 6;
+
+  // Real-time field validation
+  const validateField = (fieldName, value) => {
+    const errors = { ...fieldErrors };
+
+    switch (fieldName) {
+      case 'fullName':
+        if (!value.trim()) {
+          errors.fullName = 'Full name is required';
+        } else if (value.trim().length < 3) {
+          errors.fullName = 'Full name must be at least 3 characters';
+        } else {
+          delete errors.fullName;
+        }
+        break;
+
+      case 'fatherName':
+        if (!value.trim()) {
+          errors.fatherName = 'Father\'s name is required';
+        } else if (value.trim().length < 3) {
+          errors.fatherName = 'Father\'s name must be at least 3 characters';
+        } else {
+          delete errors.fatherName;
+        }
+        break;
+
+      case 'aadhaar':
+        if (!value) {
+          errors.aadhaar = 'Aadhaar number is required';
+        } else if (!/^\d*$/.test(value)) {
+          errors.aadhaar = 'Aadhaar must contain only numbers';
+        } else if (value.length < 12) {
+          errors.aadhaar = `Aadhaar must be 12 digits (${value.length}/12)`;
+        } else if (value.length > 12) {
+          errors.aadhaar = 'Aadhaar cannot exceed 12 digits';
+        } else {
+          delete errors.aadhaar;
+        }
+        break;
+
+      case 'gender':
+        if (!value) {
+          errors.gender = 'Please select your gender';
+        } else {
+          delete errors.gender;
+        }
+        break;
+
+      case 'dateOfBirth':
+        if (!value) {
+          errors.dateOfBirth = 'Date of birth is required';
+        } else {
+          delete errors.dateOfBirth;
+        }
+        break;
+
+      case 'state':
+        if (!value) {
+          errors.state = 'Please select your state';
+        } else {
+          delete errors.state;
+        }
+        break;
+
+      case 'district':
+        if (!value.trim()) {
+          errors.district = 'District is required';
+        } else if (value.trim().length < 2) {
+          errors.district = 'District name must be at least 2 characters';
+        } else {
+          delete errors.district;
+        }
+        break;
+
+      case 'address':
+        if (!value.trim()) {
+          errors.address = 'Address is required';
+        } else if (value.trim().length < 5) {
+          errors.address = 'Address must be at least 5 characters';
+        } else {
+          delete errors.address;
+        }
+        break;
+
+      case 'pincode':
+        if (!value) {
+          errors.pincode = 'Pin code is required';
+        } else if (!/^\d*$/.test(value)) {
+          errors.pincode = 'Pin code must contain only numbers';
+        } else if (value.length < 6) {
+          errors.pincode = `Pin code must be 6 digits (${value.length}/6)`;
+        } else if (value.length > 6) {
+          errors.pincode = 'Pin code cannot exceed 6 digits';
+        } else {
+          delete errors.pincode;
+        }
+        break;
+
+      case 'mobileNumber':
+        if (!value) {
+          errors.mobileNumber = 'Mobile number is required';
+        } else if (!/^\d*$/.test(value)) {
+          errors.mobileNumber = 'Mobile number must contain only numbers';
+        } else if (value.length < 10) {
+          errors.mobileNumber = `Mobile number must be 10 digits (${value.length}/10)`;
+        } else if (value.length > 10) {
+          errors.mobileNumber = 'Mobile number cannot exceed 10 digits';
+        } else {
+          delete errors.mobileNumber;
+        }
+        break;
+
+      case 'emailId':
+        if (!value) {
+          errors.emailId = 'Email is required';
+        } else if (!validateEmail(value)) {
+          errors.emailId = 'Please enter a valid email address';
+        } else {
+          delete errors.emailId;
+        }
+        break;
+
+      case 'game':
+        if (!value) {
+          errors.game = 'Primary sport is required';
+        } else {
+          delete errors.game;
+        }
+        break;
+
+      case 'school':
+        if (!value.trim()) {
+          errors.school = 'School/College name is required';
+        } else if (value.trim().length < 2) {
+          errors.school = 'School/College name must be at least 2 characters';
+        } else {
+          delete errors.school;
+        }
+        break;
+
+      case 'coachMobile':
+        if (value && !/^\d*$/.test(value)) {
+          errors.coachMobile = 'Coach mobile must contain only numbers';
+        } else if (value && value.length < 10) {
+          errors.coachMobile = `Coach mobile must be 10 digits (${value.length}/10)`;
+        } else if (value && value.length > 10) {
+          errors.coachMobile = 'Coach mobile cannot exceed 10 digits';
+        } else {
+          delete errors.coachMobile;
+        }
+        break;
+
+      case 'password':
+        if (!value) {
+          errors.password = 'Password is required';
+        } else if (value.length < 6) {
+          errors.password = `Password must be at least 6 characters (${value.length}/6)`;
+        } else if (!/[a-zA-Z]/.test(value)) {
+          errors.password = 'Password must contain at least one letter';
+        } else {
+          delete errors.password;
+        }
+        break;
+
+      case 'confirmPassword':
+        if (!value) {
+          errors.confirmPassword = 'Please confirm your password';
+        } else if (value !== formData.password) {
+          errors.confirmPassword = 'Passwords do not match';
+        } else {
+          delete errors.confirmPassword;
+        }
+        break;
+
+      default:
+        break;
+    }
+
+    setFieldErrors(errors);
+  };
+
   const handleChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     });
     setApiError('');
+    // Real-time validation
+    validateField(name, value);
   };
 
   const nextStep = () => {
@@ -56,48 +247,51 @@ const StudentRegister = () => {
   };
 
   const validateCurrentStep = () => {
+    const stepErrors = {};
+
     switch (currentStep) {
       case 1:
-        if (!formData.fullName || !formData.fatherName || !formData.aadhaar || !formData.gender || !formData.dateOfBirth) {
-          setModalMessage('Please fill in all personal information fields.');
-          setShowModal(true);
-          return false;
-        }
+        if (!formData.fullName.trim()) stepErrors.fullName = 'Full name is required';
+        if (!formData.fatherName.trim()) stepErrors.fatherName = 'Father\'s name is required';
+        if (!validateAadhaar(formData.aadhaar)) stepErrors.aadhaar = 'Aadhaar must be 12 digits';
+        if (!formData.gender) stepErrors.gender = 'Gender is required';
+        if (!formData.dateOfBirth) stepErrors.dateOfBirth = 'Date of birth is required';
         break;
+
       case 2:
-        if (!formData.state || !formData.district || !formData.address || !formData.pincode) {
-          setModalMessage('Please fill in all location details.');
-          setShowModal(true);
-          return false;
-        }
+        if (!formData.state) stepErrors.state = 'State is required';
+        if (!formData.district.trim()) stepErrors.district = 'District is required';
+        if (!formData.address.trim()) stepErrors.address = 'Address is required';
+        if (!validatePincode(formData.pincode)) stepErrors.pincode = 'Pin code must be 6 digits';
         break;
+
       case 3:
-        if (!formData.mobileNumber || !formData.emailId) {
-          setModalMessage('Please provide your contact information.');
-          setShowModal(true);
-          return false;
-        }
+        if (!validateMobile(formData.mobileNumber)) stepErrors.mobileNumber = 'Mobile number must be 10 digits';
+        if (!validateEmail(formData.emailId)) stepErrors.emailId = 'Valid email is required';
         break;
+
       case 4:
-        if (!formData.game || !formData.school) {
-          setModalMessage('Please fill in your sports and training information.');
-          setShowModal(true);
-          return false;
-        }
+        if (!formData.game) stepErrors.game = 'Primary sport is required';
+        if (!formData.school.trim()) stepErrors.school = 'School/College is required';
         break;
+
       case 5:
-        if (!formData.password || formData.password !== formData.confirmPassword) {
-          setModalMessage('Please set up your password correctly.');
-          setShowModal(true);
-          return false;
-        }
-        if (formData.password.length < 6) {
-          setModalMessage('Password must be at least 6 characters long.');
-          setShowModal(true);
-          return false;
-        }
+        if (!validatePassword(formData.password)) stepErrors.password = 'Password must be at least 6 characters';
+        if (formData.password !== formData.confirmPassword) stepErrors.confirmPassword = 'Passwords do not match';
+        break;
+
+      default:
         break;
     }
+
+    if (Object.keys(stepErrors).length > 0) {
+      setFieldErrors(stepErrors);
+      setModalMessage('Please fix the errors before continuing.');
+      setShowModal(true);
+      return false;
+    }
+
+    setFieldErrors({});
     return true;
   };
 
@@ -171,6 +365,16 @@ const StudentRegister = () => {
     }
   };
 
+  // Helper component for field error display
+  const FieldError = ({ fieldName }) => {
+    return fieldErrors[fieldName] ? (
+      <p className="text-sm text-red-500 mt-1 flex items-center space-x-1">
+        <span>⚠️</span>
+        <span>{fieldErrors[fieldName]}</span>
+      </p>
+    ) : null;
+  };
+
   const sports = [
     'Football', 'Cricket', 'Basketball', 'Volleyball', 'Tennis', 'Badminton',
     'Athletics', 'Swimming', 'Wrestling', 'Boxing', 'Hockey', 'Table Tennis',
@@ -204,9 +408,12 @@ const StudentRegister = () => {
                   type="text"
                   value={formData.fullName}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    fieldErrors.fullName ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   placeholder="Enter your full name"
                 />
+                <FieldError fieldName="fullName" />
               </div>
               
               <div>
@@ -218,26 +425,32 @@ const StudentRegister = () => {
                   type="text"
                   value={formData.fatherName}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    fieldErrors.fatherName ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   placeholder="Enter your father's name"
                 />
+                <FieldError fieldName="fatherName" />
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Aadhaar Number *
+                  Aadhaar Number * (12 digits)
                 </label>
                 <input
                   name="aadhaar"
                   type="text"
                   value={formData.aadhaar}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  placeholder="Enter your Aadhaar number"
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    fieldErrors.aadhaar ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  placeholder="Enter your 12-digit Aadhaar number"
                   maxLength="12"
                 />
+                <FieldError fieldName="aadhaar" />
               </div>
               
               <div>
@@ -248,13 +461,16 @@ const StudentRegister = () => {
                   name="gender"
                   value={formData.gender}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    fieldErrors.gender ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 >
                   <option value="">Select gender...</option>
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
                   <option value="Other">Other</option>
                 </select>
+                <FieldError fieldName="gender" />
               </div>
             </div>
 
@@ -267,8 +483,11 @@ const StudentRegister = () => {
                 type="date"
                 value={formData.dateOfBirth}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                  fieldErrors.dateOfBirth ? 'border-red-500' : 'border-gray-300'
+                }`}
               />
+              <FieldError fieldName="dateOfBirth" />
             </div>
           </div>
         );
@@ -290,7 +509,9 @@ const StudentRegister = () => {
                   name="state"
                   value={formData.state}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    fieldErrors.state ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 >
                   <option value="">Select State...</option>
                   <option value="Andhra Pradesh">Andhra Pradesh</option>
@@ -323,6 +544,7 @@ const StudentRegister = () => {
                   <option value="West Bengal">West Bengal</option>
                   <option value="Delhi">Delhi</option>
                 </select>
+                <FieldError fieldName="state" />
               </div>
               
               <div>
@@ -334,9 +556,12 @@ const StudentRegister = () => {
                   type="text"
                   value={formData.district}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    fieldErrors.district ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   placeholder="Enter your district"
                 />
+                <FieldError fieldName="district" />
               </div>
             </div>
 
@@ -349,24 +574,30 @@ const StudentRegister = () => {
                 value={formData.address}
                 onChange={handleChange}
                 rows="3"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                  fieldErrors.address ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="Enter your complete address"
               />
+              <FieldError fieldName="address" />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Pin Code *
+                Pin Code * (6 digits)
               </label>
               <input
                 name="pincode"
                 type="text"
                 value={formData.pincode}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                placeholder="Enter your pin code"
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                  fieldErrors.pincode ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="Enter your 6-digit pin code"
                 maxLength="6"
               />
+              <FieldError fieldName="pincode" />
             </div>
           </div>
         );
@@ -381,17 +612,20 @@ const StudentRegister = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Mobile Number *
+                Mobile Number * (10 digits)
               </label>
               <input
                 name="mobileNumber"
                 type="tel"
                 value={formData.mobileNumber}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                placeholder="Enter your mobile number"
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                  fieldErrors.mobileNumber ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="Enter your 10-digit mobile number"
                 maxLength="10"
               />
+              <FieldError fieldName="mobileNumber" />
             </div>
 
             <div>
@@ -403,9 +637,12 @@ const StudentRegister = () => {
                 type="email"
                 value={formData.emailId}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                  fieldErrors.emailId ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="Enter your email address"
               />
+              <FieldError fieldName="emailId" />
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -444,13 +681,16 @@ const StudentRegister = () => {
                   name="game"
                   value={formData.game}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    fieldErrors.game ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 >
                   <option value="">Select your main sport...</option>
                   {sports.map((sport) => (
                     <option key={sport} value={sport}>{sport}</option>
                   ))}
                 </select>
+                <FieldError fieldName="game" />
               </div>
 
               <div>
@@ -461,7 +701,9 @@ const StudentRegister = () => {
                   name="level"
                   value={formData.level}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    fieldErrors.level ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 >
                   {levels.map((level) => (
                     <option key={level.value} value={level.value}>{level.label}</option>
@@ -515,9 +757,12 @@ const StudentRegister = () => {
                 type="text"
                 value={formData.school}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                  fieldErrors.school ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="Enter your school or college name"
               />
+              <FieldError fieldName="school" />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -553,17 +798,20 @@ const StudentRegister = () => {
             {formData.coachName && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Coach Mobile (Optional)
+                  Coach Mobile (10 digits)
                 </label>
                 <input
                   name="coachMobile"
                   type="tel"
                   value={formData.coachMobile}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  placeholder="Enter your coach's mobile number"
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                    fieldErrors.coachMobile ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  placeholder="Enter your coach's 10-digit mobile number"
                   maxLength="10"
                 />
+                <FieldError fieldName="coachMobile" />
               </div>
             )}
           </div>
@@ -579,18 +827,21 @@ const StudentRegister = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Password *
+                Password * (min 6 characters)
               </label>
               <input
                 name="password"
                 type="password"
                 value={formData.password}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                  fieldErrors.password ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="Create a strong password"
               />
+              <FieldError fieldName="password" />
               <p className="text-sm text-gray-500 mt-1">
-                At least 6 characters with a mix of letters and numbers
+                Must be at least 6 characters with letters and numbers
               </p>
             </div>
 
@@ -603,12 +854,12 @@ const StudentRegister = () => {
                 type="password"
                 value={formData.confirmPassword}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                  fieldErrors.confirmPassword ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="Confirm your password"
               />
-              {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-                <p className="text-sm text-red-500 mt-1">Passwords do not match</p>
-              )}
+              <FieldError fieldName="confirmPassword" />
             </div>
 
             <div className="bg-green-50 border border-green-200 rounded-lg p-6">
@@ -751,16 +1002,6 @@ const StudentRegister = () => {
           </div>
         </div>
       </div>
-
-      {/* Modal */}
-      {showModal && (
-        <Modal
-          isOpen={showModal}
-          onClose={() => setShowModal(false)}
-          title="Registration Status"
-          message={modalMessage}
-        />
-      )}
 
       <style jsx>{`
         @keyframes fadeIn {

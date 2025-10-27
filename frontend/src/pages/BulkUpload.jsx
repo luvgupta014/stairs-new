@@ -33,7 +33,7 @@ const BulkUpload = () => {
       const response = await fetch('/api/coach/students/test-csv', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         },
         body: formData
       });
@@ -443,7 +443,7 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom J
             Cancel
           </button>
           <div className="flex space-x-3">
-            {file && (
+            {/*file && (
               <button
                 onClick={handleTestUpload}
                 disabled={loading}
@@ -451,7 +451,7 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom J
               >
                 Test File
               </button>
-            )}
+            )*/}
             <button
               onClick={handleUpload}
               disabled={!file || loading}
