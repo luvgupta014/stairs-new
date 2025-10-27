@@ -1,45 +1,48 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import api from '../api';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import api from "../api";
 
 const CoachRegisterPremium = () => {
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState({
-    fullName: '',
-    fatherName: '',
-    motherName: '',
-    aadhaar: '',
-    gender: '',
-    dateOfBirth: '',
-    state: '',
-    district: '',
-    address: '',
-    pinCode: '',
-    mobileNumber: '',
-    emailId: '',
-    panNumber: '',
-    utrNumber: '',
-    password: '',
-    confirmPassword: '',
-    membershipStatus: 'NEW',
-    applyingAs: 'Chief District coordinator',
-    primarySports: '',
-    otherSports: '',
-    payLater: false
+    fullName: "",
+    fatherName: "",
+    motherName: "",
+    aadhaar: "",
+    gender: "",
+    dateOfBirth: "",
+    state: "",
+    district: "",
+    address: "",
+    pinCode: "",
+    mobileNumber: "",
+    emailId: "",
+    panNumber: "",
+    utrNumber: "",
+    password: "",
+    confirmPassword: "",
+    membershipStatus: "NEW",
+    applyingAs: "Chief District coordinator",
+    primarySports: "",
+    otherSports: "",
+    payLater: false,
   });
-  
+
   const navigate = useNavigate();
   const totalSteps = 6;
 
   // Validator functions
-  const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '');
-  const validateAadhaar = (aadhaar) => /^\d{12}$/.test((aadhaar || '').replace(/\D/g, ''));
-  const validateMobile = (mobile) => /^\d{10}$/.test((mobile || '').replace(/\D/g, ''));
-  const validatePincode = (pincode) => /^\d{6}$/.test(pincode || '');
-  const validatePAN = (pan) => /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan || '');
+  const validateEmail = (email) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || "");
+  const validateAadhaar = (aadhaar) =>
+    /^\d{12}$/.test((aadhaar || "").replace(/\D/g, ""));
+  const validateMobile = (mobile) =>
+    /^\d{10}$/.test((mobile || "").replace(/\D/g, ""));
+  const validatePincode = (pincode) => /^\d{6}$/.test(pincode || "");
+  const validatePAN = (pan) => /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan || "");
   const validatePassword = (password) => password.length >= 6;
 
   // Real-time field validation
@@ -47,99 +50,110 @@ const CoachRegisterPremium = () => {
     const errors = { ...fieldErrors };
 
     switch (fieldName) {
-      case 'fullName':
+      case "fullName":
         if (!value.trim()) {
-          errors.fullName = 'Full name is required';
+          errors.fullName = "Full name is required";
         } else if (value.trim().length < 3) {
-          errors.fullName = 'Name must be at least 3 characters';
+          errors.fullName = "Name must be at least 3 characters";
         } else {
           delete errors.fullName;
         }
         break;
 
-      case 'fatherName':
+      case "fatherName":
         if (!value.trim()) {
-          errors.fatherName = 'Father name is required';
+          errors.fatherName = "Father name is required";
         } else if (value.trim().length < 3) {
-          errors.fatherName = 'Name must be at least 3 characters';
+          errors.fatherName = "Name must be at least 3 characters";
         } else {
           delete errors.fatherName;
         }
         break;
 
-      case 'aadhaar':
+      case "motherName":
+        if (!value.trim()) {
+          errors.motherName = "Mother name is required";
+        } else if (value.trim().length < 3) {
+          errors.motherName = "Name must be at least 3 characters";
+        } else {
+          delete errors.motherName;
+        }
+        break;
+
+      case "aadhaar":
         if (!value) {
-          errors.aadhaar = 'Aadhaar number is required';
+          errors.aadhaar = "Aadhaar number is required";
         } else if (!/^\d*$/.test(value)) {
-          errors.aadhaar = 'Aadhaar must contain only numbers';
+          errors.aadhaar = "Aadhaar must contain only numbers";
         } else if (value.length < 12) {
           errors.aadhaar = `Aadhaar must be 12 digits (${value.length}/12)`;
         } else if (value.length > 12) {
-          errors.aadhaar = 'Aadhaar cannot exceed 12 digits';
+          errors.aadhaar = "Aadhaar cannot exceed 12 digits";
         } else {
           delete errors.aadhaar;
         }
         break;
 
-      case 'emailId':
+      case "emailId":
         if (!value) {
-          errors.emailId = 'Email is required';
+          errors.emailId = "Email is required";
         } else if (!validateEmail(value)) {
-          errors.emailId = 'Please enter a valid email address';
+          errors.emailId = "Please enter a valid email address";
         } else {
           delete errors.emailId;
         }
         break;
 
-      case 'mobileNumber':
+      case "mobileNumber":
         if (!value) {
-          errors.mobileNumber = 'Mobile number is required';
+          errors.mobileNumber = "Mobile number is required";
         } else if (!/^\d*$/.test(value)) {
-          errors.mobileNumber = 'Mobile must contain only numbers';
+          errors.mobileNumber = "Mobile must contain only numbers";
         } else if (value.length < 10) {
           errors.mobileNumber = `Mobile must be 10 digits (${value.length}/10)`;
         } else if (value.length > 10) {
-          errors.mobileNumber = 'Mobile cannot exceed 10 digits';
+          errors.mobileNumber = "Mobile cannot exceed 10 digits";
         } else {
           delete errors.mobileNumber;
         }
         break;
 
-      case 'pinCode':
+      case "pinCode":
         if (!value) {
-          errors.pinCode = 'Pincode is required';
+          errors.pinCode = "Pincode is required";
         } else if (!/^\d*$/.test(value)) {
-          errors.pinCode = 'Pincode must contain only numbers';
+          errors.pinCode = "Pincode must contain only numbers";
         } else if (value.length < 6) {
           errors.pinCode = `Pincode must be 6 digits (${value.length}/6)`;
         } else if (value.length > 6) {
-          errors.pinCode = 'Pincode cannot exceed 6 digits';
+          errors.pinCode = "Pincode cannot exceed 6 digits";
         } else {
           delete errors.pinCode;
         }
         break;
 
-      case 'panNumber':
+      case "panNumber":
         if (!value) {
-          errors.panNumber = 'PAN number is required';
+          errors.panNumber = "PAN number is required";
         } else if (!validatePAN(value.toUpperCase())) {
-          errors.panNumber = 'Please enter a valid PAN number (format: AAAAA0000A)';
+          errors.panNumber =
+            "Please enter a valid PAN number (format: AAAAA0000A)";
         } else {
           delete errors.panNumber;
         }
         break;
 
-      case 'utrNumber':
+      case "utrNumber":
         if (value && !/^\d{12}$/.test(value)) {
-          errors.utrNumber = 'UTR must be 12 digits';
+          errors.utrNumber = "UTR must be 12 digits";
         } else {
           delete errors.utrNumber;
         }
         break;
 
-      case 'password':
+      case "password":
         if (!value) {
-          errors.password = 'Password is required';
+          errors.password = "Password is required";
         } else if (value.length < 6) {
           errors.password = `Password must be at least 6 characters (${value.length}/6)`;
         } else {
@@ -147,11 +161,11 @@ const CoachRegisterPremium = () => {
         }
         break;
 
-      case 'confirmPassword':
+      case "confirmPassword":
         if (!value) {
-          errors.confirmPassword = 'Please confirm your password';
+          errors.confirmPassword = "Please confirm your password";
         } else if (value !== formData.password) {
-          errors.confirmPassword = 'Passwords do not match';
+          errors.confirmPassword = "Passwords do not match";
         } else {
           delete errors.confirmPassword;
         }
@@ -175,99 +189,122 @@ const CoachRegisterPremium = () => {
   };
 
   const handleInputChange = (field, value) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
     validateField(field, value);
-    setError('');
+    setError("");
   };
 
   const nextStep = () => {
     if (validateCurrentStep()) {
-      setCurrentStep(prev => Math.min(prev + 1, totalSteps));
+      setCurrentStep((prev) => Math.min(prev + 1, totalSteps));
     }
   };
 
   const prevStep = () => {
-    setCurrentStep(prev => Math.max(prev - 1, 1));
+    setCurrentStep((prev) => Math.max(prev - 1, 1));
   };
 
   const validateCurrentStep = () => {
     // First check for any field-level validation errors
     if (Object.keys(fieldErrors).length > 0) {
-      setError('Please fix the errors in the form before continuing.');
+      setError("Please fix the errors in the form before continuing.");
       return false;
     }
 
     switch (currentStep) {
       case 1: // Role & Sports
-        if (!formData.membershipStatus || !formData.applyingAs || !formData.primarySports) {
-          setError('Please complete your role and sports information.');
+        if (
+          !formData.membershipStatus ||
+          !formData.applyingAs ||
+          !formData.primarySports
+        ) {
+          setError("Please complete your role and sports information.");
           return false;
         }
         break;
       case 2: // Personal Info
-        if (!formData.fullName || !formData.fatherName || !formData.aadhaar || !formData.gender || !formData.dateOfBirth) {
-          setError('Please fill in all personal information fields.');
+        if (
+          !formData.fullName ||
+          !formData.fatherName ||
+          !formData.motherName ||
+          !formData.aadhaar ||
+          !formData.gender ||
+          !formData.dateOfBirth
+        ) {
+          setError("Please fill in all personal information fields.");
           return false;
         }
         // Validate aadhaar is exactly 12 digits
         if (!validateAadhaar(formData.aadhaar)) {
-          setError('Aadhaar number must be exactly 12 digits.');
+          setError("Aadhaar number must be exactly 12 digits.");
           return false;
         }
         break;
       case 3: // Location
-        if (!formData.state || !formData.district || !formData.address || !formData.pinCode) {
-          setError('Please provide your complete location details.');
+        if (
+          !formData.state ||
+          !formData.district ||
+          !formData.address ||
+          !formData.pinCode
+        ) {
+          setError("Please provide your complete location details.");
           return false;
         }
         // Validate pincode is exactly 6 digits
         if (!validatePincode(formData.pinCode)) {
-          setError('PIN Code must be exactly 6 digits.');
+          setError("PIN Code must be exactly 6 digits.");
           return false;
         }
         break;
       case 4: // Contact & Documents
-        if (!formData.mobileNumber || !formData.emailId || !formData.panNumber) {
-          setError('Please provide your contact and document information.');
+        if (
+          !formData.mobileNumber ||
+          !formData.emailId ||
+          !formData.panNumber
+        ) {
+          setError("Please provide your contact and document information.");
           return false;
         }
         // Validate mobile is exactly 10 digits
         if (!validateMobile(formData.mobileNumber)) {
-          setError('Mobile number must be exactly 10 digits.');
+          setError("Mobile number must be exactly 10 digits.");
           return false;
         }
         // Validate email format
         if (!validateEmail(formData.emailId)) {
-          setError('Please enter a valid email address.');
+          setError("Please enter a valid email address.");
           return false;
         }
         // Validate PAN format
         if (!validatePAN(formData.panNumber)) {
-          setError('Please enter a valid PAN number.');
+          setError("Please enter a valid PAN number.");
           return false;
         }
         break;
       case 5: // Payment & Security
-        if (!formData.password || formData.password !== formData.confirmPassword) {
-          setError('Please set up your password correctly.');
+        if (
+          !formData.password ||
+          formData.password !== formData.confirmPassword
+        ) {
+          setError("Please set up your password correctly.");
           return false;
         }
         if (!validatePassword(formData.password)) {
-          setError('Password must be at least 6 characters long.');
+          setError("Password must be at least 6 characters long.");
           return false;
         }
         if (!formData.payLater && !formData.utrNumber) {
-          setError('Please provide UTR number or select pay later option.');
+          setError("Please provide UTR number or select pay later option.");
           return false;
         }
         break;
     }
-    
+
     // Clear error if validation passes
-    setError('');
+    setError("");
     return true;
   };
 
@@ -278,7 +315,7 @@ const CoachRegisterPremium = () => {
       3: "Your Location & Address 📍",
       4: "Contact & Documentation 📋",
       5: "Payment & Security 💳",
-      6: "Review & Confirm ✅"
+      6: "Review & Confirm ✅",
     };
     return titles[currentStep];
   };
@@ -290,7 +327,7 @@ const CoachRegisterPremium = () => {
       3: "Where are you based? This helps us assign you to the right region.",
       4: "Your contact details and necessary documents for verification.",
       5: "Secure your account and complete the membership payment process.",
-      6: "Almost there! Review your information before submitting."
+      6: "Almost there! Review your information before submitting.",
     };
     return subtitles[currentStep];
   };
@@ -298,7 +335,7 @@ const CoachRegisterPremium = () => {
   const handleSubmit = async () => {
     try {
       setLoading(true);
-      
+
       if (!validateCurrentStep()) {
         setLoading(false);
         return;
@@ -326,33 +363,39 @@ const CoachRegisterPremium = () => {
         otherSports: formData.otherSports,
         password: formData.password,
         specialization: formData.primarySports,
-        experience: '0-1',
-        certifications: '',
-        bio: '',
+        experience: "0-1",
+        certifications: "",
+        bio: "",
         location: formData.address,
-        payLater: formData.payLater
+        payLater: formData.payLater,
       };
 
-      console.log('Registering coach:', registrationData);
+      console.log("Registering coach:", registrationData);
 
       // Call API
-      const response = await api.post('/api/auth/coach/register', registrationData);
+      const response = await api.post(
+        "/api/auth/coach/register",
+        registrationData
+      );
 
       if (response.data.success) {
         // Navigate to OTP verification
-        navigate('/verify-otp-premium', {
+        navigate("/verify-otp-premium", {
           state: {
             userId: response.data.data.userId,
             email: formData.emailId,
-            role: 'COACH',
+            role: "COACH",
             name: formData.fullName,
-            payLater: formData.payLater
-          }
+            payLater: formData.payLater,
+          },
         });
       }
     } catch (error) {
-      console.error('Registration error:', error);
-      setError(error.response?.data?.message || 'Registration failed. Please try again.');
+      console.error("Registration error:", error);
+      setError(
+        error.response?.data?.message ||
+          "Registration failed. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -365,7 +408,10 @@ const CoachRegisterPremium = () => {
           <div className="space-y-6 animate-fade-in">
             <div className="text-center mb-6">
               <div className="text-6xl mb-4">🎯</div>
-              <p className="text-gray-600">Welcome to the STAIRS coordinator program! Let's define your role and expertise.</p>
+              <p className="text-gray-600">
+                Welcome to the STAIRS coordinator program! Let's define your
+                role and expertise.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -375,25 +421,33 @@ const CoachRegisterPremium = () => {
                 </label>
                 <select
                   value={formData.membershipStatus}
-                  onChange={(e) => handleInputChange('membershipStatus', e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("membershipStatus", e.target.value)
+                  }
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
                 >
                   <option value="NEW">NEW Member</option>
                   <option value="RENEWAL">RENEWAL Member</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Applying As *
                 </label>
                 <select
                   value={formData.applyingAs}
-                  onChange={(e) => handleInputChange('applyingAs', e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("applyingAs", e.target.value)
+                  }
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
                 >
-                  <option value="Chief District coordinator">Chief District Coordinator</option>
-                  <option value="District coordinator">District Coordinator</option>
+                  <option value="Chief District coordinator">
+                    Chief District Coordinator
+                  </option>
+                  <option value="District coordinator">
+                    District Coordinator
+                  </option>
                   <option value="Coach">Coach</option>
                   <option value="Trainer">Trainer</option>
                 </select>
@@ -407,7 +461,9 @@ const CoachRegisterPremium = () => {
                 </label>
                 <select
                   value={formData.primarySports}
-                  onChange={(e) => handleInputChange('primarySports', e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("primarySports", e.target.value)
+                  }
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
                 >
                   <option value="">Choose your main expertise...</option>
@@ -423,14 +479,16 @@ const CoachRegisterPremium = () => {
                   <option value="Other">Other</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Additional Sports (Optional)
                 </label>
                 <select
                   value={formData.otherSports}
-                  onChange={(e) => handleInputChange('otherSports', e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("otherSports", e.target.value)
+                  }
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
                 >
                   <option value="">Choose additional expertise...</option>
@@ -452,12 +510,19 @@ const CoachRegisterPremium = () => {
               <div className="flex items-start space-x-3">
                 <div className="text-purple-500 text-xl">💼</div>
                 <div>
-                  <h4 className="font-medium text-purple-900 mb-1">Coordinator Benefits</h4>
+                  <h4 className="font-medium text-purple-900 mb-1">
+                    Coordinator Benefits
+                  </h4>
                   <ul className="text-sm text-purple-700 space-y-1">
                     <li>• Lead and mentor young athletes in your region</li>
                     <li>• Organize local tournaments and training programs</li>
-                    <li>• Access to exclusive coaching resources and certifications</li>
-                    <li>• Network with sports professionals across the country</li>
+                    <li>
+                      • Access to exclusive coaching resources and
+                      certifications
+                    </li>
+                    <li>
+                      • Network with sports professionals across the country
+                    </li>
                   </ul>
                 </div>
               </div>
@@ -470,7 +535,10 @@ const CoachRegisterPremium = () => {
           <div className="space-y-6 animate-slide-in-right">
             <div className="text-center mb-6">
               <div className="text-6xl mb-4">👨‍🏫</div>
-              <p className="text-gray-600">Tell us about yourself so we can create your coordinator profile.</p>
+              <p className="text-gray-600">
+                Tell us about yourself so we can create your coordinator
+                profile.
+              </p>
             </div>
 
             <div>
@@ -480,8 +548,10 @@ const CoachRegisterPremium = () => {
               <input
                 type="text"
                 value={formData.fullName}
-                onChange={(e) => handleInputChange('fullName', e.target.value)}
-                className={`w-full px-4 py-3 border ${fieldErrors.fullName ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
+                onChange={(e) => handleInputChange("fullName", e.target.value)}
+                className={`w-full px-4 py-3 border ${
+                  fieldErrors.fullName ? "border-red-500" : "border-gray-300"
+                } rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                 placeholder="Enter your full name"
               />
               <FieldError fieldName="fullName" />
@@ -495,24 +565,37 @@ const CoachRegisterPremium = () => {
                 <input
                   type="text"
                   value={formData.fatherName}
-                  onChange={(e) => handleInputChange('fatherName', e.target.value)}
-                  className={`w-full px-4 py-3 border ${fieldErrors.fatherName ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
+                  onChange={(e) =>
+                    handleInputChange("fatherName", e.target.value)
+                  }
+                  className={`w-full px-4 py-3 border ${
+                    fieldErrors.fatherName
+                      ? "border-red-500"
+                      : "border-gray-300"
+                  } rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                   placeholder="Enter father's name"
                 />
                 <FieldError fieldName="fatherName" />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Mother's Name
+                  Mother's Name *
                 </label>
                 <input
                   type="text"
                   value={formData.motherName}
-                  onChange={(e) => handleInputChange('motherName', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                  onChange={(e) =>
+                    handleInputChange("motherName", e.target.value)
+                  }
+                  className={`w-full px-4 py-3 border ${
+                    fieldErrors.motherName
+                      ? "border-red-500"
+                      : "border-gray-300"
+                  } rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                   placeholder="Enter mother's name"
                 />
+                <FieldError fieldName="motherName" />
               </div>
             </div>
 
@@ -524,21 +607,23 @@ const CoachRegisterPremium = () => {
                 <input
                   type="text"
                   value={formData.aadhaar}
-                  onChange={(e) => handleInputChange('aadhaar', e.target.value)}
-                  className={`w-full px-4 py-3 border ${fieldErrors.aadhaar ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
+                  onChange={(e) => handleInputChange("aadhaar", e.target.value)}
+                  className={`w-full px-4 py-3 border ${
+                    fieldErrors.aadhaar ? "border-red-500" : "border-gray-300"
+                  } rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                   placeholder="Enter Aadhaar number"
                   maxLength="12"
                 />
                 <FieldError fieldName="aadhaar" />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Gender *
                 </label>
                 <select
                   value={formData.gender}
-                  onChange={(e) => handleInputChange('gender', e.target.value)}
+                  onChange={(e) => handleInputChange("gender", e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
                 >
                   <option value="">Select gender...</option>
@@ -556,7 +641,9 @@ const CoachRegisterPremium = () => {
               <input
                 type="date"
                 value={formData.dateOfBirth}
-                onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
+                onChange={(e) =>
+                  handleInputChange("dateOfBirth", e.target.value)
+                }
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
               />
             </div>
@@ -568,7 +655,10 @@ const CoachRegisterPremium = () => {
           <div className="space-y-6 animate-slide-in-right">
             <div className="text-center mb-6">
               <div className="text-6xl mb-4">🏠</div>
-              <p className="text-gray-600">Your location helps us assign you to the appropriate district and region.</p>
+              <p className="text-gray-600">
+                Your location helps us assign you to the appropriate district
+                and region.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -578,7 +668,7 @@ const CoachRegisterPremium = () => {
                 </label>
                 <select
                   value={formData.state}
-                  onChange={(e) => handleInputChange('state', e.target.value)}
+                  onChange={(e) => handleInputChange("state", e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
                 >
                   <option value="">Select State...</option>
@@ -613,7 +703,7 @@ const CoachRegisterPremium = () => {
                   <option value="Delhi">Delhi</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   District *
@@ -621,7 +711,9 @@ const CoachRegisterPremium = () => {
                 <input
                   type="text"
                   value={formData.district}
-                  onChange={(e) => handleInputChange('district', e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("district", e.target.value)
+                  }
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
                   placeholder="Enter your district"
                 />
@@ -634,7 +726,7 @@ const CoachRegisterPremium = () => {
               </label>
               <textarea
                 value={formData.address}
-                onChange={(e) => handleInputChange('address', e.target.value)}
+                onChange={(e) => handleInputChange("address", e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
                 placeholder="Enter your complete address"
                 rows="3"
@@ -648,8 +740,10 @@ const CoachRegisterPremium = () => {
               <input
                 type="text"
                 value={formData.pinCode}
-                onChange={(e) => handleInputChange('pinCode', e.target.value)}
-                className={`w-full px-4 py-3 border ${fieldErrors.pinCode ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
+                onChange={(e) => handleInputChange("pinCode", e.target.value)}
+                className={`w-full px-4 py-3 border ${
+                  fieldErrors.pinCode ? "border-red-500" : "border-gray-300"
+                } rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                 placeholder="Enter pin code"
                 maxLength="6"
               />
@@ -663,7 +757,10 @@ const CoachRegisterPremium = () => {
           <div className="space-y-6 animate-slide-in-right">
             <div className="text-center mb-6">
               <div className="text-6xl mb-4">📋</div>
-              <p className="text-gray-600">Your contact information and documents for verification purposes.</p>
+              <p className="text-gray-600">
+                Your contact information and documents for verification
+                purposes.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -674,14 +771,20 @@ const CoachRegisterPremium = () => {
                 <input
                   type="tel"
                   value={formData.mobileNumber}
-                  onChange={(e) => handleInputChange('mobileNumber', e.target.value)}
-                  className={`w-full px-4 py-3 border ${fieldErrors.mobileNumber ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
+                  onChange={(e) =>
+                    handleInputChange("mobileNumber", e.target.value)
+                  }
+                  className={`w-full px-4 py-3 border ${
+                    fieldErrors.mobileNumber
+                      ? "border-red-500"
+                      : "border-gray-300"
+                  } rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                   placeholder="Enter mobile number"
                   maxLength="10"
                 />
                 <FieldError fieldName="mobileNumber" />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email Address *
@@ -689,8 +792,10 @@ const CoachRegisterPremium = () => {
                 <input
                   type="email"
                   value={formData.emailId}
-                  onChange={(e) => handleInputChange('emailId', e.target.value)}
-                  className={`w-full px-4 py-3 border ${fieldErrors.emailId ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
+                  onChange={(e) => handleInputChange("emailId", e.target.value)}
+                  className={`w-full px-4 py-3 border ${
+                    fieldErrors.emailId ? "border-red-500" : "border-gray-300"
+                  } rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                   placeholder="Enter email address"
                 />
                 <FieldError fieldName="emailId" />
@@ -704,8 +809,12 @@ const CoachRegisterPremium = () => {
               <input
                 type="text"
                 value={formData.panNumber}
-                onChange={(e) => handleInputChange('panNumber', e.target.value.toUpperCase())}
-                className={`w-full px-4 py-3 border ${fieldErrors.panNumber ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
+                onChange={(e) =>
+                  handleInputChange("panNumber", e.target.value.toUpperCase())
+                }
+                className={`w-full px-4 py-3 border ${
+                  fieldErrors.panNumber ? "border-red-500" : "border-gray-300"
+                } rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                 placeholder="Enter PAN number"
                 maxLength="10"
               />
@@ -716,10 +825,13 @@ const CoachRegisterPremium = () => {
               <div className="flex items-start space-x-3">
                 <div className="text-blue-500 text-xl">🔐</div>
                 <div>
-                  <h4 className="font-medium text-blue-900 mb-1">Document Verification</h4>
+                  <h4 className="font-medium text-blue-900 mb-1">
+                    Document Verification
+                  </h4>
                   <p className="text-sm text-blue-700">
-                    Your PAN number is required for coordinator verification and will be kept secure. 
-                    This helps us maintain the integrity of our coaching network.
+                    Your PAN number is required for coordinator verification and
+                    will be kept secure. This helps us maintain the integrity of
+                    our coaching network.
                   </p>
                 </div>
               </div>
@@ -732,7 +844,9 @@ const CoachRegisterPremium = () => {
           <div className="space-y-6 animate-slide-in-right">
             <div className="text-center mb-6">
               <div className="text-6xl mb-4">🔐</div>
-              <p className="text-gray-600">Secure your account and complete the membership process.</p>
+              <p className="text-gray-600">
+                Secure your account and complete the membership process.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -743,13 +857,17 @@ const CoachRegisterPremium = () => {
                 <input
                   type="password"
                   value={formData.password}
-                  onChange={(e) => handleInputChange('password', e.target.value)}
-                  className={`w-full px-4 py-3 border ${fieldErrors.password ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
+                  onChange={(e) =>
+                    handleInputChange("password", e.target.value)
+                  }
+                  className={`w-full px-4 py-3 border ${
+                    fieldErrors.password ? "border-red-500" : "border-gray-300"
+                  } rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                   placeholder="Create a strong password"
                 />
                 <FieldError fieldName="password" />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Confirm Password *
@@ -757,15 +875,21 @@ const CoachRegisterPremium = () => {
                 <input
                   type="password"
                   value={formData.confirmPassword}
-                  onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                  className={`w-full px-4 py-3 border ${fieldErrors.confirmPassword ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
+                  onChange={(e) =>
+                    handleInputChange("confirmPassword", e.target.value)
+                  }
+                  className={`w-full px-4 py-3 border ${
+                    fieldErrors.confirmPassword
+                      ? "border-red-500"
+                      : "border-gray-300"
+                  } rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                   placeholder="Confirm your password"
                 />
                 <FieldError fieldName="confirmPassword" />
               </div>
             </div>
 
-            {!formData.payLater && (
+            {/* {!formData.payLater && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   UTR Number (Transaction Reference) {!formData.payLater ? '*' : ''}
@@ -783,7 +907,7 @@ const CoachRegisterPremium = () => {
                   Enter the UTR number from your payment transaction
                 </p>
               </div>
-            )}
+            )} */}
 
             {/* Pay Later Option */}
             <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
@@ -792,28 +916,39 @@ const CoachRegisterPremium = () => {
                   type="checkbox"
                   id="payLater"
                   checked={formData.payLater}
-                  onChange={(e) => handleInputChange('payLater', e.target.checked)}
+                  onChange={(e) =>
+                    handleInputChange("payLater", e.target.checked)
+                  }
                   className="mt-1 w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
                 />
                 <div className="flex-1">
-                  <label htmlFor="payLater" className="font-semibold text-gray-900 cursor-pointer flex items-center space-x-2">
+                  <label
+                    htmlFor="payLater"
+                    className="font-semibold text-gray-900 cursor-pointer flex items-center space-x-2"
+                  >
                     <span>💳 Pay Later Option</span>
                   </label>
                   <p className="text-sm text-gray-600 mt-2">
-                    Skip payment for now and complete it later from your dashboard. Start setting up your coordinator profile immediately.
+                    Skip payment for now and complete it later from your
+                    dashboard. Start setting up your coordinator profile
+                    immediately.
                   </p>
                   <div className="mt-3 bg-orange-50 border-l-4 border-orange-400 p-3 rounded">
                     <p className="text-xs text-orange-800 font-medium">
-                      ⚠️ <strong>Note:</strong> With "Pay Later", some coordinator features will be restricted:
+                      ⚠️ <strong>Note:</strong> With "Pay Later", some
+                      coordinator features will be restricted:
                     </p>
                     <ul className="text-xs text-orange-700 mt-2 space-y-1 ml-4">
                       <li>• Cannot register or manage athletes</li>
                       <li>• Cannot create tournaments or events</li>
                       <li>• Limited coordinator dashboard access</li>
-                      <li>• Cannot issue certificates or conduct evaluations</li>
+                      <li>
+                        • Cannot issue certificates or conduct evaluations
+                      </li>
                     </ul>
                     <p className="text-xs text-orange-800 mt-2">
-                      Complete payment anytime to unlock all coordinator privileges!
+                      Complete payment anytime to unlock all coordinator
+                      privileges!
                     </p>
                   </div>
                 </div>
@@ -827,19 +962,39 @@ const CoachRegisterPremium = () => {
           <div className="space-y-6 animate-slide-in-right">
             <div className="text-center mb-6">
               <div className="text-6xl mb-4">✅</div>
-              <p className="text-gray-600">Please review your information before submitting your coordinator application.</p>
+              <p className="text-gray-600">
+                Please review your information before submitting your
+                coordinator application.
+              </p>
             </div>
 
             <div className="bg-gray-50 rounded-lg p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div><strong>Role:</strong> {formData.applyingAs}</div>
-                <div><strong>Primary Sport:</strong> {formData.primarySports}</div>
-                <div><strong>Name:</strong> {formData.fullName}</div>
-                <div><strong>Email:</strong> {formData.emailId}</div>
-                <div><strong>Mobile:</strong> {formData.mobileNumber}</div>
-                <div><strong>State:</strong> {formData.state}</div>
-                <div><strong>District:</strong> {formData.district}</div>
-                <div><strong>Payment:</strong> {formData.payLater ? 'Pay Later' : 'Immediate Payment'}</div>
+                <div>
+                  <strong>Role:</strong> {formData.applyingAs}
+                </div>
+                <div>
+                  <strong>Primary Sport:</strong> {formData.primarySports}
+                </div>
+                <div>
+                  <strong>Name:</strong> {formData.fullName}
+                </div>
+                <div>
+                  <strong>Email:</strong> {formData.emailId}
+                </div>
+                <div>
+                  <strong>Mobile:</strong> {formData.mobileNumber}
+                </div>
+                <div>
+                  <strong>State:</strong> {formData.state}
+                </div>
+                <div>
+                  <strong>District:</strong> {formData.district}
+                </div>
+                <div>
+                  <strong>Payment:</strong>{" "}
+                  {formData.payLater ? "Pay Later" : "Immediate Payment"}
+                </div>
               </div>
             </div>
 
@@ -847,7 +1002,9 @@ const CoachRegisterPremium = () => {
               <div className="flex items-start space-x-3">
                 <div className="text-green-500 text-2xl">🎉</div>
                 <div>
-                  <h4 className="font-bold text-green-900 mb-2">Ready to Launch Your Coordinator Journey!</h4>
+                  <h4 className="font-bold text-green-900 mb-2">
+                    Ready to Launch Your Coordinator Journey!
+                  </h4>
                   <p className="text-sm text-green-700 mb-3">
                     After registration, you'll have access to:
                   </p>
@@ -878,17 +1035,23 @@ const CoachRegisterPremium = () => {
           <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-4">
             🏆 STAIRS Coordinator Registration
           </h1>
-          <p className="text-gray-600 text-lg">Join the elite community of verified coordinators</p>
+          <p className="text-gray-600 text-lg">
+            Join the elite community of verified coordinators
+          </p>
         </div>
 
         {/* Progress Bar */}
         <div className="max-w-3xl mx-auto mb-8">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-purple-600">Step {currentStep} of {totalSteps}</span>
-            <span className="text-sm text-gray-500">{Math.round((currentStep / totalSteps) * 100)}% Complete</span>
+            <span className="text-sm font-medium text-purple-600">
+              Step {currentStep} of {totalSteps}
+            </span>
+            <span className="text-sm text-gray-500">
+              {Math.round((currentStep / totalSteps) * 100)}% Complete
+            </span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
+            <div
               className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-500 ease-out"
               style={{ width: `${(currentStep / totalSteps) * 100}%` }}
             ></div>
@@ -914,11 +1077,21 @@ const CoachRegisterPremium = () => {
                 </div>
               )}
 
-              <form onSubmit={currentStep === totalSteps ? (e) => { e.preventDefault(); handleSubmit(); } : (e) => { e.preventDefault(); nextStep(); }}>
+              <form
+                onSubmit={
+                  currentStep === totalSteps
+                    ? (e) => {
+                        e.preventDefault();
+                        handleSubmit();
+                      }
+                    : (e) => {
+                        e.preventDefault();
+                        nextStep();
+                      }
+                }
+              >
                 {/* Step Content */}
-                <div className="min-h-[500px]">
-                  {renderStepContent()}
-                </div>
+                <div className="min-h-[500px]">{renderStepContent()}</div>
 
                 {/* Navigation Buttons */}
                 <div className="flex justify-between items-center pt-8 border-t mt-8">
@@ -945,22 +1118,24 @@ const CoachRegisterPremium = () => {
                     </button>
                   ) : (
                     <button
-                                            type="submit"
-                                            disabled={loading}
-                                            className="flex items-center space-x-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-8 py-3 rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                                          >
-                                            <span>{loading ? 'Submitting...' : 'Complete Registration'}</span>
-                                            <span>✓</span>
-                                          </button>
-                                        )}
-                                      </div>
-                                    </form>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      };
-                      
-                      export default CoachRegisterPremium;
+                      type="submit"
+                      disabled={loading}
+                      className="flex items-center space-x-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-8 py-3 rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span>
+                        {loading ? "Submitting..." : "Complete Registration"}
+                      </span>
+                      <span>✓</span>
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CoachRegisterPremium;

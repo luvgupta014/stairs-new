@@ -16,7 +16,6 @@ const clubRoutes = require('./routes/club');
 const adminRoutes = require('./routes/admin');
 const eventRoutes = require('./routes/event');
 const paymentRoutes = require('./routes/payment');
-const mapsRoutes = require('./routes/maps');
 
 // Import middleware
 const { errorResponse } = require('./utils/helpers');
@@ -32,43 +31,44 @@ app.use(helmet({
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Increased limit for production - 1000 requests per 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
   message: errorResponse('Too many requests from this IP, please try again later.', 429),
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => {
-    // Skip rate limiting for health checks
-    return req.path === '/health';
-  }
 });
 
 app.use(limiter);
 
 // CORS configuration
-app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:5173', 
-    'http://localhost:5174',
-    'http://160.187.22.41:3008',  // Production frontend
-    'http://160.187.22.41:5173',  // Development on production server
-    process.env.FRONTEND_URL || 'http://localhost:5173'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+//app.use(cors({
+  //origin: '*',
+  //credentials: true,
+  //methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  //allowedHeaders: ['*']
+//}));
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
+
+  // Handle preflight (OPTIONS) requests quickly
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // File upload middleware - DISABLED to avoid conflict with multer
-app.use(fileUpload({
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
-  useTempFiles: true,
-  tempFileDir: '/tmp/'
-}));
+// app.use(fileUpload({
+//   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+//   useTempFiles: true,
+//   tempFileDir: '/tmp/'
+// }));
 
 // Serve uploaded tournament result files publicly with proper MIME types
 app.use('/uploads', (req, res, next) => {
@@ -82,7 +82,7 @@ app.use('/uploads', (req, res, next) => {
   } else if (req.path.endsWith('.pdf')) {
     res.setHeader('Content-Type', 'application/pdf');
   }
-  
+
   next();
 }, express.static(path.join(__dirname, '../uploads')));
 
@@ -124,7 +124,6 @@ app.use('/api/club', clubRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/payment', paymentRoutes);
-app.use('/api/maps', mapsRoutes);
 
 // Static file serving (for uploaded files)
 app.use('/uploads', express.static('uploads'));
@@ -153,7 +152,7 @@ app.use((error, req, res, next) => {
   if (error.code === 'P2002') {
     return res.status(409).json(errorResponse('A record with this data already exists.', 409));
   }
-  
+
   if (error.code === 'P2025') {
     return res.status(404).json(errorResponse('Record not found.', 404));
   }
@@ -201,11 +200,12 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`🚀 STAIRS Talent Hub API Server running on port ${PORT}`);
-  console.log(`� Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
   console.log(`📚 API Documentation: http://localhost:${PORT}/api/docs`);
-  
+
   if (process.env.NODE_ENV !== 'production') {
+    'http://160.187.22.41:3008',
     console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
   }
 });
