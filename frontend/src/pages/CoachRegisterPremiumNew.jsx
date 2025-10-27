@@ -6,6 +6,7 @@ const CoachRegisterPremiumNew = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState({
     fullName: '',
     fatherName: '',
@@ -33,11 +34,150 @@ const CoachRegisterPremiumNew = () => {
   const navigate = useNavigate();
   const totalSteps = 6;
 
+  // Validator functions
+  const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '');
+  const validateAadhaar = (aadhaar) => /^\d{12}$/.test((aadhaar || '').replace(/\D/g, ''));
+  const validateMobile = (mobile) => /^\d{10}$/.test((mobile || '').replace(/\D/g, ''));
+  const validatePincode = (pincode) => /^\d{6}$/.test(pincode || '');
+  const validatePAN = (pan) => /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan || '');
+  const validatePassword = (password) => password.length >= 6;
+
+  // Real-time field validation
+  const validateField = (fieldName, value) => {
+    const errors = { ...fieldErrors };
+
+    switch (fieldName) {
+      case 'fullName':
+        if (!value.trim()) {
+          errors.fullName = 'Full name is required';
+        } else if (value.trim().length < 3) {
+          errors.fullName = 'Name must be at least 3 characters';
+        } else {
+          delete errors.fullName;
+        }
+        break;
+
+      case 'fatherName':
+        if (!value.trim()) {
+          errors.fatherName = 'Father name is required';
+        } else if (value.trim().length < 3) {
+          errors.fatherName = 'Name must be at least 3 characters';
+        } else {
+          delete errors.fatherName;
+        }
+        break;
+
+      case 'aadhaar':
+        if (!value) {
+          errors.aadhaar = 'Aadhaar number is required';
+        } else if (!/^\d*$/.test(value)) {
+          errors.aadhaar = 'Aadhaar must contain only numbers';
+        } else if (value.length < 12) {
+          errors.aadhaar = `Aadhaar must be 12 digits (${value.length}/12)`;
+        } else if (value.length > 12) {
+          errors.aadhaar = 'Aadhaar cannot exceed 12 digits';
+        } else {
+          delete errors.aadhaar;
+        }
+        break;
+
+      case 'emailId':
+        if (!value) {
+          errors.emailId = 'Email is required';
+        } else if (!validateEmail(value)) {
+          errors.emailId = 'Please enter a valid email address';
+        } else {
+          delete errors.emailId;
+        }
+        break;
+
+      case 'mobileNumber':
+        if (!value) {
+          errors.mobileNumber = 'Mobile number is required';
+        } else if (!/^\d*$/.test(value)) {
+          errors.mobileNumber = 'Mobile must contain only numbers';
+        } else if (value.length < 10) {
+          errors.mobileNumber = `Mobile must be 10 digits (${value.length}/10)`;
+        } else if (value.length > 10) {
+          errors.mobileNumber = 'Mobile cannot exceed 10 digits';
+        } else {
+          delete errors.mobileNumber;
+        }
+        break;
+
+      case 'pinCode':
+        if (!value) {
+          errors.pinCode = 'Pincode is required';
+        } else if (!/^\d*$/.test(value)) {
+          errors.pinCode = 'Pincode must contain only numbers';
+        } else if (value.length < 6) {
+          errors.pinCode = `Pincode must be 6 digits (${value.length}/6)`;
+        } else if (value.length > 6) {
+          errors.pinCode = 'Pincode cannot exceed 6 digits';
+        } else {
+          delete errors.pinCode;
+        }
+        break;
+
+      case 'panNumber':
+        if (value && !validatePAN(value.toUpperCase())) {
+          errors.panNumber = 'Please enter a valid PAN number (format: AAAAA0000A)';
+        } else {
+          delete errors.panNumber;
+        }
+        break;
+
+      case 'utrNumber':
+        if (value && !/^\d{12}$/.test(value)) {
+          errors.utrNumber = 'UTR must be 12 digits';
+        } else {
+          delete errors.utrNumber;
+        }
+        break;
+
+      case 'password':
+        if (!value) {
+          errors.password = 'Password is required';
+        } else if (value.length < 6) {
+          errors.password = `Password must be at least 6 characters (${value.length}/6)`;
+        } else {
+          delete errors.password;
+        }
+        break;
+
+      case 'confirmPassword':
+        if (!value) {
+          errors.confirmPassword = 'Please confirm your password';
+        } else if (value !== formData.password) {
+          errors.confirmPassword = 'Passwords do not match';
+        } else {
+          delete errors.confirmPassword;
+        }
+        break;
+
+      default:
+        break;
+    }
+
+    setFieldErrors(errors);
+  };
+
+  // Helper component for field error display
+  const FieldError = ({ fieldName }) => {
+    return fieldErrors[fieldName] ? (
+      <p className="text-sm text-red-500 mt-1 flex items-center space-x-1">
+        <span>⚠️</span>
+        <span>{fieldErrors[fieldName]}</span>
+      </p>
+    ) : null;
+  };
+
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
+    validateField(field, value);
     setError('');
   };
 
@@ -52,6 +192,12 @@ const CoachRegisterPremiumNew = () => {
   };
 
   const validateCurrentStep = () => {
+    // First check for any field-level validation errors
+    if (Object.keys(fieldErrors).length > 0) {
+      setError('Please fix the errors in the form before continuing.');
+      return false;
+    }
+
     switch (currentStep) {
       case 1: // Role & Sports
         if (!formData.membershipStatus || !formData.applyingAs || !formData.primarySports) {
@@ -64,10 +210,20 @@ const CoachRegisterPremiumNew = () => {
           setError('Please fill in all personal information fields.');
           return false;
         }
+        // Validate aadhaar is exactly 12 digits
+        if (formData.aadhaar.length !== 12) {
+          setError('Aadhaar number must be exactly 12 digits.');
+          return false;
+        }
         break;
       case 3: // Location
         if (!formData.state || !formData.district || !formData.address || !formData.pinCode) {
           setError('Please provide your complete location details.');
+          return false;
+        }
+        // Validate pincode is exactly 6 digits
+        if (formData.pinCode.length !== 6) {
+          setError('PIN Code must be exactly 6 digits.');
           return false;
         }
         break;
@@ -76,14 +232,19 @@ const CoachRegisterPremiumNew = () => {
           setError('Please provide your contact and document information.');
           return false;
         }
+        // Validate mobile is exactly 10 digits
+        if (formData.mobileNumber.length !== 10) {
+          setError('Mobile number must be exactly 10 digits.');
+          return false;
+        }
         break;
       case 5: // Payment & Security
         if (!formData.password || formData.password !== formData.confirmPassword) {
           setError('Please set up your password correctly.');
           return false;
         }
-        if (formData.password.length < 8) {
-          setError('Password must be at least 8 characters long.');
+        if (formData.password.length < 6) {
+          setError('Password must be at least 6 characters long.');
           return false;
         }
         if (!formData.payLater && !formData.utrNumber) {
@@ -92,6 +253,9 @@ const CoachRegisterPremiumNew = () => {
         }
         break;
     }
+    
+    // Clear error if validation passes
+    setError('');
     return true;
   };
 
@@ -305,9 +469,10 @@ const CoachRegisterPremiumNew = () => {
                 type="text"
                 value={formData.fullName}
                 onChange={(e) => handleInputChange('fullName', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                className={`w-full px-4 py-3 border ${fieldErrors.fullName ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                 placeholder="Enter your full name"
               />
+              <FieldError fieldName="fullName" />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -319,9 +484,10 @@ const CoachRegisterPremiumNew = () => {
                   type="text"
                   value={formData.fatherName}
                   onChange={(e) => handleInputChange('fatherName', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                  className={`w-full px-4 py-3 border ${fieldErrors.fatherName ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                   placeholder="Enter father's name"
                 />
+                <FieldError fieldName="fatherName" />
               </div>
               
               <div>
@@ -341,16 +507,17 @@ const CoachRegisterPremiumNew = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Aadhaar Number *
+                  Aadhaar Number * (12 digits)
                 </label>
                 <input
                   type="text"
                   value={formData.aadhaar}
                   onChange={(e) => handleInputChange('aadhaar', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                  className={`w-full px-4 py-3 border ${fieldErrors.aadhaar ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                   placeholder="Enter Aadhaar number"
                   maxLength="12"
                 />
+                <FieldError fieldName="aadhaar" />
               </div>
               
               <div>
@@ -464,16 +631,17 @@ const CoachRegisterPremiumNew = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Pin Code *
+                Pin Code * (6 digits)
               </label>
               <input
                 type="text"
                 value={formData.pinCode}
                 onChange={(e) => handleInputChange('pinCode', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                className={`w-full px-4 py-3 border ${fieldErrors.pinCode ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                 placeholder="Enter pin code"
                 maxLength="6"
               />
+              <FieldError fieldName="pinCode" />
             </div>
           </div>
         );
@@ -489,16 +657,17 @@ const CoachRegisterPremiumNew = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Mobile Number *
+                  Mobile Number * (10 digits)
                 </label>
                 <input
                   type="tel"
                   value={formData.mobileNumber}
                   onChange={(e) => handleInputChange('mobileNumber', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                  className={`w-full px-4 py-3 border ${fieldErrors.mobileNumber ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                   placeholder="Enter mobile number"
                   maxLength="10"
                 />
+                <FieldError fieldName="mobileNumber" />
               </div>
               
               <div>
@@ -509,24 +678,26 @@ const CoachRegisterPremiumNew = () => {
                   type="email"
                   value={formData.emailId}
                   onChange={(e) => handleInputChange('emailId', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                  className={`w-full px-4 py-3 border ${fieldErrors.emailId ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                   placeholder="Enter email address"
                 />
+                <FieldError fieldName="emailId" />
               </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                PAN Number *
+                PAN Number * (format: AAAAA0000A)
               </label>
               <input
                 type="text"
                 value={formData.panNumber}
                 onChange={(e) => handleInputChange('panNumber', e.target.value.toUpperCase())}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                className={`w-full px-4 py-3 border ${fieldErrors.panNumber ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                 placeholder="Enter PAN number"
                 maxLength="10"
               />
+              <FieldError fieldName="panNumber" />
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -555,18 +726,16 @@ const CoachRegisterPremiumNew = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password *
+                  Password * (minimum 6 characters)
                 </label>
                 <input
                   type="password"
                   value={formData.password}
                   onChange={(e) => handleInputChange('password', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                  className={`w-full px-4 py-3 border ${fieldErrors.password ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                   placeholder="Create a strong password"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Min. 8 characters with uppercase, lowercase, and number
-                </p>
+                <FieldError fieldName="password" />
               </div>
               
               <div>
@@ -577,12 +746,10 @@ const CoachRegisterPremiumNew = () => {
                   type="password"
                   value={formData.confirmPassword}
                   onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                  className={`w-full px-4 py-3 border ${fieldErrors.confirmPassword ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                   placeholder="Confirm your password"
                 />
-                {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-                  <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
-                )}
+                <FieldError fieldName="confirmPassword" />
               </div>
             </div>
 
@@ -595,10 +762,11 @@ const CoachRegisterPremiumNew = () => {
                   type="text"
                   value={formData.utrNumber}
                   onChange={(e) => handleInputChange('utrNumber', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                  className={`w-full px-4 py-3 border ${fieldErrors.utrNumber ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors`}
                   placeholder="Enter UTR number from payment"
                   required={!formData.payLater}
                 />
+                <FieldError fieldName="utrNumber" />
                 <p className="text-xs text-gray-500 mt-1">
                   Enter the UTR number from your payment transaction
                 </p>

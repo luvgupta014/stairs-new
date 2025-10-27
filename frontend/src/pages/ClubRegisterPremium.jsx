@@ -23,6 +23,7 @@ const ClubRegisterPremium = () => {
   const [registrationData, setRegistrationData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState({
     // Step 1: Club Info
     clubName: '',
@@ -55,6 +56,111 @@ const ClubRegisterPremium = () => {
   });
   
   const navigate = useNavigate();
+
+  // Validator functions
+  const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '');
+  const validateMobile = (mobile) => /^\d{10}$/.test((mobile || '').replace(/\D/g, ''));
+  const validatePassword = (password) => password.length >= 6;
+
+  // Real-time field validation
+  const validateField = (fieldName, value) => {
+    const errors = { ...fieldErrors };
+
+    switch (fieldName) {
+      case 'clubName':
+        if (!value.trim()) {
+          errors.clubName = 'Club name is required';
+        } else if (value.trim().length < 3) {
+          errors.clubName = 'Name must be at least 3 characters';
+        } else {
+          delete errors.clubName;
+        }
+        break;
+
+      case 'email':
+        if (!value) {
+          errors.email = 'Email is required';
+        } else if (!validateEmail(value)) {
+          errors.email = 'Please enter a valid email address';
+        } else {
+          delete errors.email;
+        }
+        break;
+
+      case 'phone':
+        if (!value) {
+          errors.phone = 'Phone number is required';
+        } else if (!/^\d*$/.test(value)) {
+          errors.phone = 'Phone must contain only numbers';
+        } else if (value.length < 10) {
+          errors.phone = `Phone must be 10 digits (${value.length}/10)`;
+        } else if (value.length > 10) {
+          errors.phone = 'Phone cannot exceed 10 digits';
+        } else {
+          delete errors.phone;
+        }
+        break;
+
+      case 'presidentContact':
+        if (value && !/^\d*$/.test(value)) {
+          errors.presidentContact = 'Phone must contain only numbers';
+        } else if (value && value.length < 10) {
+          errors.presidentContact = `Phone must be 10 digits (${value.length}/10)`;
+        } else if (value && value.length > 10) {
+          errors.presidentContact = 'Phone cannot exceed 10 digits';
+        } else {
+          delete errors.presidentContact;
+        }
+        break;
+
+      case 'secretaryContact':
+        if (value && !/^\d*$/.test(value)) {
+          errors.secretaryContact = 'Phone must contain only numbers';
+        } else if (value && value.length < 10) {
+          errors.secretaryContact = `Phone must be 10 digits (${value.length}/10)`;
+        } else if (value && value.length > 10) {
+          errors.secretaryContact = 'Phone cannot exceed 10 digits';
+        } else {
+          delete errors.secretaryContact;
+        }
+        break;
+
+      case 'password':
+        if (!value) {
+          errors.password = 'Password is required';
+        } else if (value.length < 6) {
+          errors.password = `Password must be at least 6 characters (${value.length}/6)`;
+        } else {
+          delete errors.password;
+        }
+        break;
+
+      case 'confirmPassword':
+        if (!value) {
+          errors.confirmPassword = 'Please confirm your password';
+        } else if (value !== formData.password) {
+          errors.confirmPassword = 'Passwords do not match';
+        } else {
+          delete errors.confirmPassword;
+        }
+        break;
+
+      default:
+        break;
+    }
+
+    setFieldErrors(errors);
+  };
+
+  // Helper component for field error display
+  const FieldError = ({ fieldName }) => {
+    return fieldErrors[fieldName] ? (
+      <p className="text-sm text-red-500 mt-1 flex items-center space-x-1">
+        <span>⚠️</span>
+        <span>{fieldErrors[fieldName]}</span>
+      </p>
+    ) : null;
+  };
 
   const steps = [
     {
@@ -112,6 +218,7 @@ const ClubRegisterPremium = () => {
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    validateField(field, value);
   };
 
   const handleArrayToggle = (field, value) => {
@@ -124,7 +231,34 @@ const ClubRegisterPremium = () => {
   };
 
   const nextStep = () => {
-    if (currentStep < 4) {
+    // Validate current step before proceeding
+    let hasErrors = false;
+    
+    if (currentStep === 1) {
+      // Step 1: Club Information validation
+      if (!formData.clubName || !formData.email || !formData.phone || !formData.password || !formData.confirmPassword || !formData.clubType) {
+        setError('Please fill in all required fields');
+        hasErrors = true;
+      } else if (Object.keys(fieldErrors).length > 0) {
+        setError('Please fix the errors in the form before continuing');
+        hasErrors = true;
+      } else if (formData.password !== formData.confirmPassword) {
+        setError('Passwords do not match');
+        hasErrors = true;
+      }
+    } else if (currentStep === 2) {
+      // Step 2: Management Team validation
+      if (!formData.presidentName || !formData.presidentContact || !formData.secretaryName) {
+        setError('Please fill in all required management information');
+        hasErrors = true;
+      } else if (fieldErrors.presidentContact || fieldErrors.secretaryContact) {
+        setError('Please fix the phone number errors before continuing');
+        hasErrors = true;
+      }
+    }
+    
+    if (!hasErrors && currentStep < 4) {
+      setError('');
       setCurrentStep(currentStep + 1);
     }
   };
@@ -305,9 +439,10 @@ const ClubRegisterPremium = () => {
                         type="text"
                         value={formData.clubName}
                         onChange={(e) => handleInputChange('clubName', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                        className={`w-full px-4 py-3 border ${fieldErrors.clubName ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
                         placeholder="Champions Sports Club"
                       />
+                      <FieldError fieldName="clubName" />
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -319,22 +454,24 @@ const ClubRegisterPremium = () => {
                           type="email"
                           value={formData.email}
                           onChange={(e) => handleInputChange('email', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                          className={`w-full px-4 py-3 border ${fieldErrors.email ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
                           placeholder="info@championsclub.com"
                         />
+                        <FieldError fieldName="email" />
                       </div>
                       
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Contact Number *
+                          Contact Number * (10 digits)
                         </label>
                         <input
                           type="tel"
                           value={formData.phone}
                           onChange={(e) => handleInputChange('phone', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                          className={`w-full px-4 py-3 border ${fieldErrors.phone ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
                           placeholder="+91 9876543210"
                         />
+                        <FieldError fieldName="phone" />
                       </div>
                     </div>
 
@@ -388,18 +525,16 @@ const ClubRegisterPremium = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Password *
+                          Password * (minimum 6 characters)
                         </label>
                         <input
                           type="password"
                           value={formData.password}
                           onChange={(e) => handleInputChange('password', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                          className={`w-full px-4 py-3 border ${fieldErrors.password ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
                           placeholder="••••••••"
                         />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Min. 8 characters with uppercase, lowercase, and number
-                        </p>
+                        <FieldError fieldName="password" />
                       </div>
                       
                       <div>
@@ -410,12 +545,10 @@ const ClubRegisterPremium = () => {
                           type="password"
                           value={formData.confirmPassword}
                           onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                          className={`w-full px-4 py-3 border ${fieldErrors.confirmPassword ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
                           placeholder="••••••••"
                         />
-                        {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-                          <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
-                        )}
+                        <FieldError fieldName="confirmPassword" />
                       </div>
                     </div>
 
@@ -454,15 +587,16 @@ const ClubRegisterPremium = () => {
                       
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          President Contact *
+                          President Contact * (10 digits)
                         </label>
                         <input
                           type="tel"
                           value={formData.presidentContact}
                           onChange={(e) => handleInputChange('presidentContact', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                          className={`w-full px-4 py-3 border ${fieldErrors.presidentContact ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors`}
                           placeholder="+91 9876543210"
                         />
+                        <FieldError fieldName="presidentContact" />
                       </div>
                     </div>
 
@@ -482,15 +616,16 @@ const ClubRegisterPremium = () => {
                       
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Secretary Contact
+                          Secretary Contact (10 digits)
                         </label>
                         <input
                           type="tel"
                           value={formData.secretaryContact}
                           onChange={(e) => handleInputChange('secretaryContact', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                          className={`w-full px-4 py-3 border ${fieldErrors.secretaryContact ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors`}
                           placeholder="+91 9876543210"
                         />
+                        <FieldError fieldName="secretaryContact" />
                       </div>
                     </div>
 

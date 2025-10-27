@@ -10,6 +10,7 @@ const CoachRegister = () => {
   const { register, loading } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -28,20 +29,130 @@ const CoachRegister = () => {
 
   const [paymentStep, setPaymentStep] = useState(false);
 
+  // Validator functions
+  const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '');
+  const validateMobile = (mobile) => /^\d{10}$/.test((mobile || '').replace(/\D/g, ''));
+  const validatePincode = (pincode) => /^\d{6}$/.test(pincode || '');
+  const validatePassword = (password) => password.length >= 6;
+
+  // Real-time field validation
+  const validateField = (fieldName, value) => {
+    const errors = { ...fieldErrors };
+
+    switch (fieldName) {
+      case 'name':
+        if (!value.trim()) {
+          errors.name = 'Full name is required';
+        } else if (value.trim().length < 3) {
+          errors.name = 'Name must be at least 3 characters';
+        } else {
+          delete errors.name;
+        }
+        break;
+
+      case 'email':
+        if (!value) {
+          errors.email = 'Email is required';
+        } else if (!validateEmail(value)) {
+          errors.email = 'Please enter a valid email address';
+        } else {
+          delete errors.email;
+        }
+        break;
+
+      case 'phone':
+        if (!value) {
+          errors.phone = 'Phone number is required';
+        } else if (!/^\d*$/.test(value)) {
+          errors.phone = 'Phone must contain only numbers';
+        } else if (value.length < 10) {
+          errors.phone = `Phone must be 10 digits (${value.length}/10)`;
+        } else if (value.length > 10) {
+          errors.phone = 'Phone cannot exceed 10 digits';
+        } else {
+          delete errors.phone;
+        }
+        break;
+
+      case 'specialization':
+        if (!value) {
+          errors.specialization = 'Specialization is required';
+        } else {
+          delete errors.specialization;
+        }
+        break;
+
+      case 'password':
+        if (!value) {
+          errors.password = 'Password is required';
+        } else if (value.length < 6) {
+          errors.password = `Password must be at least 6 characters (${value.length}/6)`;
+        } else {
+          delete errors.password;
+        }
+        break;
+
+      case 'confirmPassword':
+        if (!value) {
+          errors.confirmPassword = 'Please confirm your password';
+        } else if (value !== formData.password) {
+          errors.confirmPassword = 'Passwords do not match';
+        } else {
+          delete errors.confirmPassword;
+        }
+        break;
+
+      case 'pincode':
+        if (value && !/^\d*$/.test(value)) {
+          errors.pincode = 'Pincode must contain only numbers';
+        } else if (value && value.length < 6) {
+          errors.pincode = `Pincode must be 6 digits (${value.length}/6)`;
+        } else if (value && value.length > 6) {
+          errors.pincode = 'Pincode cannot exceed 6 digits';
+        } else {
+          delete errors.pincode;
+        }
+        break;
+
+      default:
+        break;
+    }
+
+    setFieldErrors(errors);
+  };
+
+  // Helper component for field error display
+  const FieldError = ({ fieldName }) => {
+    return fieldErrors[fieldName] ? (
+      <p className="text-sm text-red-500 mt-1 flex items-center space-x-1">
+        <span>⚠️</span>
+        <span>{fieldErrors[fieldName]}</span>
+      </p>
+    ) : null;
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({
       ...formData,
       [name]: value
     });
+    validateField(name, value);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Basic validation
+    // Validate all required fields
     if (!formData.name || !formData.email || !formData.phone || !formData.password) {
       setModalMessage('Please fill in all required fields.');
+      setShowModal(true);
+      return;
+    }
+
+    // Check for any field errors
+    if (Object.keys(fieldErrors).length > 0) {
+      setModalMessage('Please fix the errors in the form before submitting.');
       setShowModal(true);
       return;
     }
@@ -205,8 +316,9 @@ const CoachRegister = () => {
                   required
                   value={formData.name}
                   onChange={handleChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className={`mt-1 block w-full px-3 py-2 border ${fieldErrors.name ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                 />
+                <FieldError fieldName="name" />
               </div>
 
               <div>
@@ -220,13 +332,14 @@ const CoachRegister = () => {
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className={`mt-1 block w-full px-3 py-2 border ${fieldErrors.email ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                 />
+                <FieldError fieldName="email" />
               </div>
 
               <div>
                 <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                  Phone Number *
+                  Phone Number * (10 digits)
                 </label>
                 <input
                   id="phone"
@@ -235,13 +348,14 @@ const CoachRegister = () => {
                   required
                   value={formData.phone}
                   onChange={handleChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className={`mt-1 block w-full px-3 py-2 border ${fieldErrors.phone ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                 />
+                <FieldError fieldName="phone" />
               </div>
 
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                  Password *
+                  Password * (minimum 6 characters)
                 </label>
                 <input
                   id="password"
@@ -250,8 +364,9 @@ const CoachRegister = () => {
                   required
                   value={formData.password}
                   onChange={handleChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className={`mt-1 block w-full px-3 py-2 border ${fieldErrors.password ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                 />
+                <FieldError fieldName="password" />
               </div>
 
               <div>
@@ -265,8 +380,9 @@ const CoachRegister = () => {
                   required
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className={`mt-1 block w-full px-3 py-2 border ${fieldErrors.confirmPassword ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                 />
+                <FieldError fieldName="confirmPassword" />
               </div>
 
               <div>
@@ -319,7 +435,7 @@ const CoachRegister = () => {
 
               <div>
                 <label htmlFor="pincode" className="block text-sm font-medium text-gray-700">
-                  Pincode
+                  Pincode (6 digits)
                 </label>
                 <input
                   id="pincode"
@@ -327,8 +443,9 @@ const CoachRegister = () => {
                   type="text"
                   value={formData.pincode}
                   onChange={handleChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className={`mt-1 block w-full px-3 py-2 border ${fieldErrors.pincode ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                 />
+                <FieldError fieldName="pincode" />
               </div>
             </div>
 

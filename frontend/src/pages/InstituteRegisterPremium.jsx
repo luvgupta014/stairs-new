@@ -24,6 +24,7 @@ const InstituteRegisterPremium = () => {
   const [registrationData, setRegistrationData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState({
     // Step 1: Basic Info
     instituteName: '',
@@ -63,6 +64,109 @@ const InstituteRegisterPremium = () => {
   });
   
   const navigate = useNavigate();
+
+  // Validator functions
+  const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '');
+  const validateMobile = (mobile) => /^\d{10}$/.test((mobile || '').replace(/\D/g, ''));
+  const validatePincode = (pincode) => /^\d{6}$/.test(pincode || '');
+  const validatePAN = (pan) => /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan || '');
+  const validatePassword = (password) => password.length >= 6;
+
+  // Real-time field validation
+  const validateField = (fieldName, value) => {
+    const errors = { ...fieldErrors };
+
+    switch (fieldName) {
+      case 'instituteName':
+        if (!value.trim()) {
+          errors.instituteName = 'Institute name is required';
+        } else if (value.trim().length < 3) {
+          errors.instituteName = 'Name must be at least 3 characters';
+        } else {
+          delete errors.instituteName;
+        }
+        break;
+
+      case 'email':
+        if (!value) {
+          errors.email = 'Email is required';
+        } else if (!validateEmail(value)) {
+          errors.email = 'Please enter a valid email address';
+        } else {
+          delete errors.email;
+        }
+        break;
+
+      case 'phone':
+        if (!value) {
+          errors.phone = 'Phone number is required';
+        } else if (!/^\d*$/.test(value)) {
+          errors.phone = 'Phone must contain only numbers';
+        } else if (value.length < 10) {
+          errors.phone = `Phone must be 10 digits (${value.length}/10)`;
+        } else if (value.length > 10) {
+          errors.phone = 'Phone cannot exceed 10 digits';
+        } else {
+          delete errors.phone;
+        }
+        break;
+
+      case 'pincode':
+        if (value && !/^\d*$/.test(value)) {
+          errors.pincode = 'Pincode must contain only numbers';
+        } else if (value && value.length < 6) {
+          errors.pincode = `Pincode must be 6 digits (${value.length}/6)`;
+        } else if (value && value.length > 6) {
+          errors.pincode = 'Pincode cannot exceed 6 digits';
+        } else {
+          delete errors.pincode;
+        }
+        break;
+
+      case 'panNumber':
+        if (value && !validatePAN(value.toUpperCase())) {
+          errors.panNumber = 'Please enter a valid PAN number (format: AAAAA0000A)';
+        } else {
+          delete errors.panNumber;
+        }
+        break;
+
+      case 'password':
+        if (!value) {
+          errors.password = 'Password is required';
+        } else if (value.length < 6) {
+          errors.password = `Password must be at least 6 characters (${value.length}/6)`;
+        } else {
+          delete errors.password;
+        }
+        break;
+
+      case 'confirmPassword':
+        if (!value) {
+          errors.confirmPassword = 'Please confirm your password';
+        } else if (value !== formData.password) {
+          errors.confirmPassword = 'Passwords do not match';
+        } else {
+          delete errors.confirmPassword;
+        }
+        break;
+
+      default:
+        break;
+    }
+
+    setFieldErrors(errors);
+  };
+
+  // Helper component for field error display
+  const FieldError = ({ fieldName }) => {
+    return fieldErrors[fieldName] ? (
+      <p className="text-sm text-red-500 mt-1 flex items-center space-x-1">
+        <span>⚠️</span>
+        <span>{fieldErrors[fieldName]}</span>
+      </p>
+    ) : null;
+  };
 
   const steps = [
     {
@@ -130,6 +234,7 @@ const InstituteRegisterPremium = () => {
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    validateField(field, value);
   };
 
   const handleArrayToggle = (field, value) => {
@@ -142,7 +247,46 @@ const InstituteRegisterPremium = () => {
   };
 
   const nextStep = () => {
-    if (currentStep < 5) {
+    // Validate current step before proceeding
+    let hasErrors = false;
+    
+    // Check for field-level validation errors
+    if (Object.keys(fieldErrors).length > 0) {
+      setError('Please fix the errors in the form before continuing');
+      hasErrors = true;
+    }
+    
+    if (currentStep === 1) {
+      // Step 1: Basic Information validation
+      if (!formData.instituteName || !formData.email || !formData.phone || !formData.password || !formData.confirmPassword) {
+        setError('Please fill in all required fields');
+        hasErrors = true;
+      } else if (formData.password !== formData.confirmPassword) {
+        setError('Passwords do not match');
+        hasErrors = true;
+      } else if (formData.phone.length !== 10) {
+        setError('Phone number must be exactly 10 digits');
+        hasErrors = true;
+      }
+    } else if (currentStep === 2) {
+      // Step 2: Institution Details validation
+      if (!formData.address || !formData.city || !formData.state || !formData.pincode || !formData.instituteType) {
+        setError('Please fill in all required institution details');
+        hasErrors = true;
+      } else if (formData.pincode.length !== 6) {
+        setError('PIN code must be exactly 6 digits');
+        hasErrors = true;
+      }
+    } else if (currentStep === 3) {
+      // Step 3: Facilities validation
+      if (formData.sportsOffered.length === 0) {
+        setError('Please select at least one sport offered');
+        hasErrors = true;
+      }
+    }
+    
+    if (!hasErrors && currentStep < 5) {
+      setError('');
       setCurrentStep(currentStep + 1);
     }
   };
@@ -324,9 +468,10 @@ const InstituteRegisterPremium = () => {
                         type="text"
                         value={formData.instituteName}
                         onChange={(e) => handleInputChange('instituteName', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        className={`w-full px-4 py-3 border ${fieldErrors.instituteName ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors`}
                         placeholder="Elite Sports Academy"
                       />
+                      <FieldError fieldName="instituteName" />
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -338,22 +483,24 @@ const InstituteRegisterPremium = () => {
                           type="email"
                           value={formData.email}
                           onChange={(e) => handleInputChange('email', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                          className={`w-full px-4 py-3 border ${fieldErrors.email ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors`}
                           placeholder="admin@elitesports.com"
                         />
+                        <FieldError fieldName="email" />
                       </div>
                       
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Contact Number *
+                          Contact Number * (10 digits)
                         </label>
                         <input
                           type="tel"
                           value={formData.phone}
                           onChange={(e) => handleInputChange('phone', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                          className={`w-full px-4 py-3 border ${fieldErrors.phone ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors`}
                           placeholder="+91 9876543210"
                         />
+                        <FieldError fieldName="phone" />
                       </div>
                     </div>
 
@@ -391,18 +538,16 @@ const InstituteRegisterPremium = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Password *
+                          Password * (minimum 6 characters)
                         </label>
                         <input
                           type="password"
                           value={formData.password}
                           onChange={(e) => handleInputChange('password', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                          className={`w-full px-4 py-3 border ${fieldErrors.password ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors`}
                           placeholder="••••••••"
                         />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Min. 8 characters with uppercase, lowercase, and number
-                        </p>
+                        <FieldError fieldName="password" />
                       </div>
                       
                       <div>
@@ -413,12 +558,10 @@ const InstituteRegisterPremium = () => {
                           type="password"
                           value={formData.confirmPassword}
                           onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                          className={`w-full px-4 py-3 border ${fieldErrors.confirmPassword ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors`}
                           placeholder="••••••••"
                         />
-                        {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-                          <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
-                        )}
+                        <FieldError fieldName="confirmPassword" />
                       </div>
                     </div>
                   </div>
@@ -474,15 +617,16 @@ const InstituteRegisterPremium = () => {
                       
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          PIN Code *
+                          PIN Code * (6 digits)
                         </label>
                         <input
                           type="text"
                           value={formData.pincode}
                           onChange={(e) => handleInputChange('pincode', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
+                          className={`w-full px-4 py-3 border ${fieldErrors.pincode ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors`}
                           placeholder="400001"
                         />
+                        <FieldError fieldName="pincode" />
                       </div>
                     </div>
 
@@ -657,15 +801,16 @@ const InstituteRegisterPremium = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        PAN Number *
+                        PAN Number * (format: AAAAA0000A)
                       </label>
                       <input
                         type="text"
                         value={formData.panNumber}
-                        onChange={(e) => handleInputChange('panNumber', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
+                        onChange={(e) => handleInputChange('panNumber', e.target.value.toUpperCase())}
+                        className={`w-full px-4 py-3 border ${fieldErrors.panNumber ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors`}
                         placeholder="PAN number"
                       />
+                      <FieldError fieldName="panNumber" />
                     </div>
 
                     <div>
