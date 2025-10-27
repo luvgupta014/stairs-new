@@ -395,8 +395,374 @@ const sendWelcomeEmail = async (email, name, role) => {
   }
 };
 
+/**
+ * Send event moderation notification email
+ * @param {string} email - Recipient email
+ * @param {string} name - Coach/Coordinator name
+ * @param {string} action - Action taken (APPROVED, REJECTED, SUSPENDED, RESTARTED)
+ * @param {Object} eventData - Event details
+ * @param {string} adminNotes - Admin remarks (optional)
+ * @returns {Promise<Object>} Email send result
+ */
+const sendEventModerationEmail = async (email, name, action, eventData, adminNotes = '') => {
+  try {
+    // Check if transporter is available
+    if (!transporter) {
+      console.warn('⚠️ Email service not available - Event moderation email not sent');
+      return { success: false, error: 'Email service not configured' };
+    }
+
+    const actionMessages = {
+      APPROVED: {
+        title: 'Event Approved! 🎉',
+        icon: '✅',
+        color: '#10b981',
+        message: 'Your event has been approved and is now live!'
+      },
+      REJECTED: {
+        title: 'Event Update Required',
+        icon: '❌',
+        color: '#ef4444',
+        message: 'Your event requires some changes before it can be approved.'
+      },
+      SUSPENDED: {
+        title: 'Event Temporarily Suspended',
+        icon: '⏸️',
+        color: '#f59e0b',
+        message: 'Your event has been temporarily suspended.'
+      },
+      RESTARTED: {
+        title: 'Event Reactivated! 🔄',
+        icon: '🔄',
+        color: '#3b82f6',
+        message: 'Your event has been reactivated and is now live again!'
+      }
+    };
+
+    const actionInfo = actionMessages[action] || actionMessages.APPROVED;
+
+    const mailOptions = {
+      from: `"STAIRS Talent Hub" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: `${actionInfo.title} - ${eventData.name}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              line-height: 1.6;
+              color: #333;
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+            }
+            .container {
+              background-color: #f9f9f9;
+              border-radius: 10px;
+              padding: 30px;
+              box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            }
+            .header {
+              text-align: center;
+              color: #2563eb;
+              margin-bottom: 30px;
+            }
+            .status-box {
+              background-color: #fff;
+              border-left: 4px solid ${actionInfo.color};
+              border-radius: 8px;
+              padding: 20px;
+              margin: 20px 0;
+            }
+            .event-details {
+              background-color: #f8fafc;
+              border-radius: 8px;
+              padding: 15px;
+              margin: 20px 0;
+            }
+            .footer {
+              margin-top: 30px;
+              text-align: center;
+              font-size: 12px;
+              color: #666;
+            }
+            .admin-notes {
+              background-color: #fef3c7;
+              border-left: 4px solid #f59e0b;
+              padding: 15px;
+              margin: 20px 0;
+              border-radius: 4px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🏃‍♂️ STAIRS Talent Hub</h1>
+            </div>
+            
+            <h2>Hello ${name}!</h2>
+            
+            <div class="status-box">
+              <h3 style="color: ${actionInfo.color}; margin-top: 0;">
+                ${actionInfo.icon} ${actionInfo.title}
+              </h3>
+              <p>${actionInfo.message}</p>
+            </div>
+            
+            <div class="event-details">
+              <h4 style="margin-top: 0;">Event Details:</h4>
+              <p><strong>Event Name:</strong> ${eventData.name}</p>
+              <p><strong>Sport:</strong> ${eventData.sport}</p>
+              <p><strong>Date:</strong> ${new Date(eventData.startDate).toLocaleDateString()}</p>
+              <p><strong>Location:</strong> ${eventData.venue}, ${eventData.city}</p>
+              <p><strong>Max Participants:</strong> ${eventData.maxParticipants}</p>
+            </div>
+            
+            ${adminNotes ? `
+              <div class="admin-notes">
+                <h4 style="margin-top: 0;">Admin Notes:</h4>
+                <p>${adminNotes}</p>
+              </div>
+            ` : ''}
+            
+            <p>You can view and manage your event in your dashboard.</p>
+            
+            <div style="text-align: center;">
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/coach/dashboard" 
+                 style="display: inline-block; padding: 12px 30px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0;">
+                Go to Dashboard
+              </a>
+            </div>
+            
+            <div class="footer">
+              <p>© ${new Date().getFullYear()} STAIRS Talent Hub. All rights reserved.</p>
+              <p>This is an automated message, please do not reply to this email.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `
+        Hello ${name}!
+        
+        ${actionInfo.title}
+        ${actionInfo.message}
+        
+        Event Details:
+        - Name: ${eventData.name}
+        - Sport: ${eventData.sport}
+        - Date: ${new Date(eventData.startDate).toLocaleDateString()}
+        - Location: ${eventData.venue}, ${eventData.city}
+        - Max Participants: ${eventData.maxParticipants}
+        
+        ${adminNotes ? `Admin Notes: ${adminNotes}` : ''}
+        
+        You can view and manage your event in your dashboard.
+        
+        © ${new Date().getFullYear()} STAIRS Talent Hub
+      `
+    };
+
+    console.log(`📧 Sending event moderation email to: ${email} for action: ${action}`);
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Event moderation email sent successfully:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('❌ Error sending event moderation email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Send order status update notification email
+ * @param {string} email - Recipient email
+ * @param {string} name - Coach/Coordinator name
+ * @param {string} status - Order status (CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED)
+ * @param {Object} orderData - Order details
+ * @param {string} adminRemarks - Admin remarks (optional)
+ * @returns {Promise<Object>} Email send result
+ */
+const sendOrderStatusEmail = async (email, name, status, orderData, adminRemarks = '') => {
+  try {
+    // Check if transporter is available
+    if (!transporter) {
+      console.warn('⚠️ Email service not available - Order status email not sent');
+      return { success: false, error: 'Email service not configured' };
+    }
+
+    const statusMessages = {
+      CONFIRMED: {
+        title: 'Order Confirmed! 📋',
+        icon: '✅',
+        color: '#10b981',
+        message: 'Your order has been confirmed and is ready for payment.'
+      },
+      IN_PROGRESS: {
+        title: 'Order In Progress 🔨',
+        icon: '⚙️',
+        color: '#3b82f6',
+        message: 'Your order is currently being prepared.'
+      },
+      COMPLETED: {
+        title: 'Order Completed! 🎉',
+        icon: '🎊',
+        color: '#10b981',
+        message: 'Your order has been completed and is ready for pickup/delivery.'
+      },
+      CANCELLED: {
+        title: 'Order Cancelled',
+        icon: '❌',
+        color: '#ef4444',
+        message: 'Your order has been cancelled.'
+      }
+    };
+
+    const statusInfo = statusMessages[status] || statusMessages.CONFIRMED;
+
+    const mailOptions = {
+      from: `"STAIRS Talent Hub" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: `${statusInfo.title} - Order ${orderData.orderNumber}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              line-height: 1.6;
+              color: #333;
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+            }
+            .container {
+              background-color: #f9f9f9;
+              border-radius: 10px;
+              padding: 30px;
+              box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            }
+            .header {
+              text-align: center;
+              color: #2563eb;
+              margin-bottom: 30px;
+            }
+            .status-box {
+              background-color: #fff;
+              border-left: 4px solid ${statusInfo.color};
+              border-radius: 8px;
+              padding: 20px;
+              margin: 20px 0;
+            }
+            .order-details {
+              background-color: #f8fafc;
+              border-radius: 8px;
+              padding: 15px;
+              margin: 20px 0;
+            }
+            .footer {
+              margin-top: 30px;
+              text-align: center;
+              font-size: 12px;
+              color: #666;
+            }
+            .admin-notes {
+              background-color: #fef3c7;
+              border-left: 4px solid #f59e0b;
+              padding: 15px;
+              margin: 20px 0;
+              border-radius: 4px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🏃‍♂️ STAIRS Talent Hub</h1>
+            </div>
+            
+            <h2>Hello ${name}!</h2>
+            
+            <div class="status-box">
+              <h3 style="color: ${statusInfo.color}; margin-top: 0;">
+                ${statusInfo.icon} ${statusInfo.title}
+              </h3>
+              <p>${statusInfo.message}</p>
+            </div>
+            
+            <div class="order-details">
+              <h4 style="margin-top: 0;">Order Details:</h4>
+              <p><strong>Order Number:</strong> ${orderData.orderNumber}</p>
+              <p><strong>Event:</strong> ${orderData.event?.name || 'N/A'}</p>
+              <p><strong>Certificates:</strong> ${orderData.certificates}</p>
+              <p><strong>Medals:</strong> ${orderData.medals}</p>
+              <p><strong>Trophies:</strong> ${orderData.trophies}</p>
+              ${orderData.totalAmount ? `<p><strong>Total Amount:</strong> ₹${orderData.totalAmount}</p>` : ''}
+            </div>
+            
+            ${adminRemarks ? `
+              <div class="admin-notes">
+                <h4 style="margin-top: 0;">Admin Notes:</h4>
+                <p>${adminRemarks}</p>
+              </div>
+            ` : ''}
+            
+            <p>You can track your order status in your dashboard.</p>
+            
+            <div style="text-align: center;">
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/coach/dashboard" 
+                 style="display: inline-block; padding: 12px 30px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0;">
+                Go to Dashboard
+              </a>
+            </div>
+            
+            <div class="footer">
+              <p>© ${new Date().getFullYear()} STAIRS Talent Hub. All rights reserved.</p>
+              <p>This is an automated message, please do not reply to this email.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `
+        Hello ${name}!
+        
+        ${statusInfo.title}
+        ${statusInfo.message}
+        
+        Order Details:
+        - Order Number: ${orderData.orderNumber}
+        - Event: ${orderData.event?.name || 'N/A'}
+        - Certificates: ${orderData.certificates}
+        - Medals: ${orderData.medals}
+        - Trophies: ${orderData.trophies}
+        ${orderData.totalAmount ? `- Total Amount: ₹${orderData.totalAmount}` : ''}
+        
+        ${adminRemarks ? `Admin Notes: ${adminRemarks}` : ''}
+        
+        You can track your order status in your dashboard.
+        
+        © ${new Date().getFullYear()} STAIRS Talent Hub
+      `
+    };
+
+    console.log(`📧 Sending order status email to: ${email} for order: ${orderData.orderNumber}`);
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Order status email sent successfully:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('❌ Error sending order status email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendOTPEmail,
   sendPasswordResetEmail,
-  sendWelcomeEmail
+  sendWelcomeEmail,
+  sendEventModerationEmail,
+  sendOrderStatusEmail
 };

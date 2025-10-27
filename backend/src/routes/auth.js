@@ -1273,7 +1273,7 @@ router.post('/login', async (req, res) => {
 
     if (!user) {
       console.log('❌ User not found for email:', email);
-      return res.status(401).json(errorResponse('Invalid credentials.', 401));
+      return res.status(401).json(errorResponse('No account found with this email address. Please check your email or register for a new account.', 401));
     }
 
     console.log('✅ User found:', {
@@ -1287,7 +1287,16 @@ router.post('/login', async (req, res) => {
     // Check role if specified
     if (role && user.role !== role) {
       console.log('❌ Role mismatch:', { requestedRole: role, userRole: user.role });
-      return res.status(401).json(errorResponse('Invalid credentials for this role.', 401));
+      const roleNames = {
+        'STUDENT': 'Student',
+        'COACH': 'Coach/Coordinator', 
+        'INSTITUTE': 'Institute',
+        'CLUB': 'Club',
+        'ADMIN': 'Administrator'
+      };
+      const expectedRole = roleNames[role] || role;
+      const actualRole = roleNames[user.role] || user.role;
+      return res.status(401).json(errorResponse(`This account is registered as ${actualRole}, not ${expectedRole}. Please use the correct login portal.`, 401));
     }
 
     // Check password
@@ -1295,17 +1304,25 @@ router.post('/login', async (req, res) => {
     const isPasswordValid = await comparePassword(password, user.password);
     if (!isPasswordValid) {
       console.log('❌ Invalid password for user:', email);
-      return res.status(401).json(errorResponse('Invalid credentials.', 401));
+      return res.status(401).json(errorResponse('Incorrect password. Please check your password and try again.', 401));
     }
     console.log('✅ Password verified');
 
     // Check if user is active and verified
-    if (!user.isActive || !user.isVerified) {
-      console.log('❌ User account not active or verified:', {
+    if (!user.isVerified) {
+      console.log('❌ User account not verified:', {
         isActive: user.isActive,
         isVerified: user.isVerified
       });
-      return res.status(401).json(errorResponse('Account is not active. Please verify your phone number.', 401));
+      return res.status(401).json(errorResponse('Account not verified. Please check your email for verification instructions and complete the verification process.', 401));
+    }
+    
+    if (!user.isActive) {
+      console.log('❌ User account not active:', {
+        isActive: user.isActive,
+        isVerified: user.isVerified
+      });
+      return res.status(401).json(errorResponse('Account is deactivated. Please contact support for assistance.', 401));
     }
 
     // Generate JWT token
@@ -1341,7 +1358,7 @@ router.post('/login', async (req, res) => {
       code: error.code,
       meta: error.meta
     });
-    res.status(500).json(errorResponse('Login failed. Please try again.', 500));
+    res.status(500).json(errorResponse('An unexpected error occurred during login. Please try again.', 500));
   }
 });
 

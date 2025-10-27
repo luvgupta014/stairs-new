@@ -96,10 +96,24 @@ api.interceptors.response.use(
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
       error.userMessage = `Cannot connect to backend server at ${backendUrl}. Please check if the server is running.`;
     } else if (error.response?.status === 401) {
-      // Handle unauthorized access
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('userRole');
-      window.location.href = '/';
+      // FIXED: Only redirect to login if this is NOT a login/register attempt
+      // Don't redirect on login/register endpoints - let the component handle the error
+      const isAuthEndpoint = error.config?.url?.includes('/api/auth/');
+      
+      if (!isAuthEndpoint) {
+        // User's session has expired while accessing protected resources
+        console.warn('🔒 Session expired - redirecting to login');
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
+        localStorage.removeItem('userRole');
+        // Only redirect if not already on a login page
+        if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register')) {
+          window.location.href = '/';
+        }
+      } else {
+        // This is a failed login/register attempt - let component handle the error
+        console.log('❌ Authentication failed:', error.response?.data?.message || 'Invalid credentials');
+      }
     }
     return Promise.reject(error);
   }
@@ -914,6 +928,52 @@ export const healthCheck = async () => {
   } catch (error) {
     console.error('❌ Backend health check failed:', error.message);
     throw error;
+  }
+};
+
+// Notification API functions
+export const getNotifications = async (params = {}) => {
+  try {
+    const response = await api.get('/api/admin/notifications', { params });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const markNotificationAsRead = async (notificationId) => {
+  try {
+    const response = await api.patch(`/api/admin/notifications/${notificationId}/read`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const markAllNotificationsAsRead = async () => {
+  try {
+    const response = await api.patch('/api/admin/notifications/mark-all-read');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const deleteNotification = async (notificationId) => {
+  try {
+    const response = await api.delete(`/api/admin/notifications/${notificationId}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getNotificationCount = async () => {
+  try {
+    const response = await api.get('/api/admin/notifications/count');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
   }
 };
 

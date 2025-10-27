@@ -324,6 +324,7 @@ const Payment = ({ userType = 'student' }) => {
 
         {/* Plans Grid */}
         <div className={`grid gap-8 mb-12 ${
+          planConfig.plans.length === 1 ? 'max-w-md mx-auto' :
           planConfig.plans.length === 2 ? 'md:grid-cols-2 max-w-4xl mx-auto' : 
           planConfig.plans.length === 3 ? 'md:grid-cols-3' : 'md:grid-cols-2 lg:grid-cols-4'
         }`}>

@@ -3,6 +3,8 @@ import { createEvent, getCoachDashboard } from '../../api';
 import Spinner from '../../components/Spinner';
 import BackButton from '../../components/BackButton';
 import GoogleMapsPlacesAutocomplete from '../../components/GoogleMapsPlacesAutocomplete';
+import PaymentPopup from '../../components/PaymentPopup';
+import usePaymentStatus from '../../hooks/usePaymentStatus';
 import { useNavigate, Link } from 'react-router-dom';
 import { FaExclamationTriangle, FaCreditCard, FaMapMarkerAlt } from 'react-icons/fa';
 
@@ -26,6 +28,16 @@ const EventCreate = () => {
   const [success, setSuccess] = useState(false);
   const [coachData, setCoachData] = useState(null);
   const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(true);
+  
+  // Payment status hook
+  const {
+    isPending,
+    showPaymentPopup,
+    dismissPaymentPopup,
+    onPaymentSuccess,
+    showPaymentPopupManually
+  } = usePaymentStatus();
+  
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -49,8 +61,8 @@ const EventCreate = () => {
     e.preventDefault();
 
     // Check payment status before allowing event creation
-    if (coachData?.paymentStatus === 'PENDING' && !coachData?.isActive) {
-      setError('Please complete your payment to create events. You can add events after payment completion.');
+    if (isPending) {
+      showPaymentPopupManually();
       return;
     }
 
@@ -184,7 +196,7 @@ const EventCreate = () => {
         )}
 
         {/* Payment Status Alert */}
-        {coachData?.paymentStatus === 'PENDING' && !coachData?.isActive && (
+        {isPending && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-6">
             <div className="flex items-start">
               <FaExclamationTriangle className="text-amber-500 mt-1 mr-3 flex-shrink-0" />
@@ -195,14 +207,23 @@ const EventCreate = () => {
                 <p className="text-amber-700 mb-4">
                   You need to complete your subscription payment to create events. Complete your payment to unlock full access to student management and event creation.
                 </p>
-                <Link
-                  to="/coach/payment"
-                  state={{ from: '/coach/event/create' }}
-                  className="inline-flex items-center bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors"
-                >
-                  <FaCreditCard className="mr-2" />
-                  Complete Payment
-                </Link>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={showPaymentPopupManually}
+                    type="button"
+                    className="inline-flex items-center bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors"
+                  >
+                    <FaCreditCard className="mr-2" />
+                    Pay Now (₹2,000)
+                  </button>
+                  <Link
+                    to="/coach/payment"
+                    state={{ from: '/coach/event/create' }}
+                    className="inline-flex items-center border border-amber-600 text-amber-600 px-4 py-2 rounded-lg hover:bg-amber-50 transition-colors"
+                  >
+                    View Details
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
@@ -456,6 +477,15 @@ const EventCreate = () => {
           </div>
         </form>
       </div>
+
+      {/* Payment Popup */}
+      <PaymentPopup
+        isOpen={showPaymentPopup}
+        onClose={() => dismissPaymentPopup(false)}
+        userType="coach"
+        userProfile={coachData}
+        onPaymentSuccess={onPaymentSuccess}
+      />
     </div>
   );
 };

@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
-import { getCoachDashboard, getCoachEvents, updateEvent, deleteEvent, getEventRegistrations } from '../../api';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { getCoachDashboard, getCoachEvents, updateEvent, deleteEvent, getEventRegistrations, getNotifications, markNotificationAsRead } from '../../api';
 import StudentCard from '../../components/StudentCard';
 import Spinner from '../../components/Spinner';
 import CoachParticipantsModal from '../../components/CoachParticipantsModal';
+import PaymentPopup from '../../components/PaymentPopup';
+import usePaymentStatus from '../../hooks/usePaymentStatus';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FaExclamationTriangle, FaCreditCard, FaCheckCircle, FaEdit, FaTrash, FaEye, FaUsers, FaCalendar, FaMapMarkerAlt } from 'react-icons/fa';
+import { FaExclamationTriangle, FaCreditCard, FaCheckCircle, FaEdit, FaTrash, FaEye, FaUsers, FaCalendar, FaMapMarkerAlt, FaBell } from 'react-icons/fa';
 
 const CoachDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -24,6 +26,12 @@ const CoachDashboard = () => {
   const [eventToDelete, setEventToDelete] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   
+  // Notification state
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  
   // Participants modal state
   const [participantsModal, setParticipantsModal] = useState({
     isOpen: false,
@@ -32,26 +40,39 @@ const CoachDashboard = () => {
     loading: false
   });
   
+  // Payment status hook
+  const {
+    paymentStatus,
+    isPending,
+    showPaymentPopup,
+    dismissPaymentPopup,
+    onPaymentSuccess,
+    showPaymentPopupManually
+  } = usePaymentStatus();
+  
   const location = useLocation();
   const navigate = useNavigate();
+  
+  // Use ref to track if initial load is done
+  const initialLoadDone = useRef(false);
 
-  useEffect(() => {
-    loadDashboardData();
-    
-    // Check if redirected from payment success
-    if (location.state?.paymentSuccess) {
-      setPaymentSuccess(true);
-      setTimeout(() => setPaymentSuccess(false), 5000);
+  // Memoize loadNotifications to prevent infinite re-renders
+  const loadNotifications = useCallback(async () => {
+    try {
+      setLoadingNotifications(true);
+      const response = await getNotifications({ limit: 10 });
+      if (response.success) {
+        setNotifications(response.data.notifications || []);
+        setUnreadCount(response.data.unreadCount || 0);
+      }
+    } catch (error) {
+      console.error('Failed to load notifications:', error);
+    } finally {
+      setLoadingNotifications(false);
     }
-  }, [location]);
+  }, []);
 
-  useEffect(() => {
-    if (activeTab === 'events') {
-      loadCoachEvents();
-    }
-  }, [activeTab, eventFilters]);
-
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     try {
       const response = await getCoachDashboard();
       console.log('Dashboard response:', response);
@@ -120,7 +141,36 @@ const CoachDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Initial data load - only runs once on mount
+  useEffect(() => {
+    if (!initialLoadDone.current) {
+      initialLoadDone.current = true;
+      loadDashboardData();
+      loadNotifications();
+    }
+    
+    // Check if redirected from payment success
+    if (location.state?.paymentSuccess) {
+      setPaymentSuccess(true);
+      setTimeout(() => setPaymentSuccess(false), 5000);
+    }
+  }, [location.state?.paymentSuccess, loadDashboardData, loadNotifications]);
+
+  // Set up polling for notifications - separate effect
+  useEffect(() => {
+    const interval = setInterval(loadNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [loadNotifications]);
+
+  // Load events when tab changes
+  useEffect(() => {
+    if (activeTab === 'events') {
+      loadCoachEvents();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, eventFilters]);
 
   const loadCoachEvents = async () => {
     try {
@@ -289,6 +339,72 @@ const CoachDashboard = () => {
     }
   };
 
+  // Notification functions - moved to useCallback above
+
+  const handleNotificationClick = async (notification) => {
+    if (!notification.isRead) {
+      try {
+        await markNotificationAsRead(notification.id);
+        setNotifications(prev => 
+          prev.map(n => 
+            n.id === notification.id 
+              ? { ...n, isRead: true, readAt: new Date() }
+              : n
+          )
+        );
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      } catch (error) {
+        console.error('Failed to mark notification as read:', error);
+      }
+    }
+    setShowNotifications(false);
+  };
+
+  const getNotificationIcon = (type) => {
+    const icons = {
+      EVENT_APPROVED: '✅',
+      EVENT_REJECTED: '❌',
+      EVENT_SUSPENDED: '⏸️',
+      EVENT_RESTARTED: '🔄',
+      ORDER_CONFIRMED: '📋',
+      ORDER_IN_PROGRESS: '⚙️',
+      ORDER_COMPLETED: '🎉',
+      ORDER_CANCELLED: '❌',
+      PAYMENT_RECEIVED: '💰',
+      PAYMENT_FAILED: '💳',
+      GENERAL: '📢'
+    };
+    return icons[type] || '📢';
+  };
+
+  const getNotificationColor = (type) => {
+    const colors = {
+      EVENT_APPROVED: 'text-green-600',
+      EVENT_REJECTED: 'text-red-600',
+      EVENT_SUSPENDED: 'text-orange-600',
+      EVENT_RESTARTED: 'text-blue-600',
+      ORDER_CONFIRMED: 'text-green-600',
+      ORDER_IN_PROGRESS: 'text-blue-600',
+      ORDER_COMPLETED: 'text-green-600',
+      ORDER_CANCELLED: 'text-red-600',
+      PAYMENT_RECEIVED: 'text-green-600',
+      PAYMENT_FAILED: 'text-red-600',
+      GENERAL: 'text-gray-600'
+    };
+    return colors[type] || 'text-gray-600';
+  };
+
+  const formatNotificationTime = (createdAt) => {
+    const now = new Date();
+    const notificationTime = new Date(createdAt);
+    const diffInMinutes = Math.floor((now - notificationTime) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+    return `${Math.floor(diffInMinutes / 1440)}d ago`;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -347,8 +463,99 @@ const CoachDashboard = () => {
           </div>
         )}
 
+        {/* Notifications Section */}
+        {notifications.length > 0 && (
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                <FaBell className="mr-2 text-blue-600" />
+                Recent Notifications
+                {unreadCount > 0 && (
+                  <span className="ml-2 bg-red-500 text-white text-xs rounded-full px-2 py-1">
+                    {unreadCount} new
+                  </span>
+                )}
+              </h3>
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+              >
+                {showNotifications ? 'Hide' : 'View All'}
+              </button>
+            </div>
+            
+            {showNotifications && (
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {notifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    onClick={() => handleNotificationClick(notification)}
+                    className={`p-4 rounded-lg border-l-4 cursor-pointer hover:bg-gray-50 transition-colors ${
+                      notification.isRead 
+                        ? 'border-gray-300 bg-gray-50' 
+                        : 'border-blue-500 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start space-x-3">
+                      <span className="text-lg flex-shrink-0">
+                        {getNotificationIcon(notification.type)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium ${getNotificationColor(notification.type)}`}>
+                          {notification.title}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {notification.message}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {formatNotificationTime(notification.createdAt)}
+                        </p>
+                      </div>
+                      {!notification.isRead && (
+                        <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2"></div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {!showNotifications && notifications.slice(0, 3).map((notification) => (
+              <div
+                key={notification.id}
+                onClick={() => handleNotificationClick(notification)}
+                className={`p-3 rounded-lg border-l-4 cursor-pointer hover:bg-gray-50 transition-colors mb-2 ${
+                  notification.isRead 
+                    ? 'border-gray-300 bg-gray-50' 
+                    : 'border-blue-500 bg-white'
+                }`}
+              >
+                <div className="flex items-start space-x-3">
+                  <span className="text-lg flex-shrink-0">
+                    {getNotificationIcon(notification.type)}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium ${getNotificationColor(notification.type)}`}>
+                      {notification.title}
+                    </p>
+                    <p className="text-sm text-gray-600 mt-1 line-clamp-1">
+                      {notification.message}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {formatNotificationTime(notification.createdAt)}
+                    </p>
+                  </div>
+                  {!notification.isRead && (
+                    <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2"></div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Payment Status Alert */}
-        {dashboardData?.coach?.paymentStatus === 'PENDING' && !dashboardData?.coach?.isActive && (
+        {isPending && dashboardData?.coach && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-6">
             <div className="flex items-start">
               <FaExclamationTriangle className="text-amber-500 mt-1 mr-3 flex-shrink-0" />
@@ -359,14 +566,22 @@ const CoachDashboard = () => {
                 <p className="text-amber-700 mb-4">
                   Your account has limited access. Complete your subscription payment to unlock student management, event creation, and advanced analytics.
                 </p>
-                <Link
-                  to="/coach/payment"
-                  state={{ from: '/dashboard/coach' }}
-                  className="inline-flex items-center bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors"
-                >
-                  <FaCreditCard className="mr-2" />
-                  Complete Payment
-                </Link>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={showPaymentPopupManually}
+                    className="inline-flex items-center bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors"
+                  >
+                    <FaCreditCard className="mr-2" />
+                    Pay Now (₹2,000)
+                  </button>
+                  <Link
+                    to="/coach/payment"
+                    state={{ from: '/dashboard/coach' }}
+                    className="inline-flex items-center border border-amber-600 text-amber-600 px-4 py-2 rounded-lg hover:bg-amber-50 transition-colors"
+                  >
+                    View Details
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
@@ -1173,6 +1388,15 @@ const CoachDashboard = () => {
         eventData={participantsModal.eventData}
         participants={participantsModal.participants}
         loading={participantsModal.loading}
+      />
+
+      {/* Payment Popup */}
+      <PaymentPopup
+        isOpen={showPaymentPopup}
+        onClose={() => dismissPaymentPopup(false)}
+        userType="coach"
+        userProfile={dashboardData?.coach}
+        onPaymentSuccess={onPaymentSuccess}
       />
     </div>
   );

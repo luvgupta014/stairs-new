@@ -190,9 +190,13 @@ export const AuthProvider = ({ children }) => {
           data: error.config?.data
         }
       });
+      
+      // Extract the error message from the response
+      const errorMessage = error.response?.data?.message || error.message || 'Login failed. Please try again.';
+      
       return { 
         success: false, 
-        message: error.response?.data?.message || 'Login failed. Please try again.' 
+        message: errorMessage
       };
     } finally {
       setLoading(false);

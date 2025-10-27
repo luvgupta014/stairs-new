@@ -9,6 +9,7 @@ const {
   getPaginationMeta,
   hashPassword
 } = require('../utils/helpers');
+const { sendEventModerationEmail, sendOrderStatusEmail } = require('../utils/emailService');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -1330,26 +1331,60 @@ router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, 
 
     console.log(`✅ Event ${eventId} ${action.toLowerCase()}d successfully`);
 
-    // Create notification for coach
+    // Send email and create notification for coach
     try {
       if (event.coach?.user?.id) {
-        await prisma.notification.create({
-          data: {
-            userId: event.coach.user.id,
-            type: 'EVENT_MODERATED',
-            title: `Event ${action.charAt(0) + action.slice(1).toLowerCase()}d`,
-            message: `Your event "${event.name}" has been ${action.toLowerCase()}d by an administrator.${adminNotes || remarks ? ` Reason: ${adminNotes || remarks}` : ''}`,
+        const notificationType = `EVENT_${action}`;
+        const notificationTitle = `Event ${action.charAt(0) + action.slice(1).toLowerCase()}d`;
+        const notificationMessage = `Your event "${event.name}" has been ${action.toLowerCase()}d by an administrator.${adminNotes || remarks ? ` Reason: ${adminNotes || remarks}` : ''}`;
+        
+        // Create notification in database only if notification model exists
+        if (prisma.notification) {
+          await prisma.notification.create({
             data: {
-              eventId: event.id,
-              eventName: event.name,
-              action: action,
-              adminNotes: adminNotes || remarks
+              userId: event.coach.user.id,
+              type: notificationType,
+              title: notificationTitle,
+              message: notificationMessage,
+              data: JSON.stringify({
+                eventId: event.id,
+                eventName: event.name,
+                action: action,
+                adminNotes: adminNotes || remarks
+              })
             }
+          });
+          console.log(`🔔 Notification created for user ${event.coach.user.id}`);
+        } else {
+          console.log('⚠️ Notification model not available, skipping notification creation');
+        }
+
+        // Send email notification
+        if (event.coach?.user?.email && event.coach?.name) {
+          const emailResult = await sendEventModerationEmail(
+            event.coach.user.email,
+            event.coach.name,
+            action,
+            {
+              name: event.name,
+              sport: event.sport,
+              startDate: event.startDate,
+              venue: event.venue,
+              city: event.city,
+              maxParticipants: event.maxParticipants
+            },
+            adminNotes || remarks
+          );
+          
+          if (emailResult.success) {
+            console.log(`📧 Event moderation email sent to ${event.coach.user.email}`);
+          } else {
+            console.error('⚠️ Failed to send event moderation email:', emailResult.error);
           }
-        });
+        }
       }
     } catch (notificationError) {
-      console.error('⚠️ Failed to create notification:', notificationError);
+      console.error('⚠️ Failed to create notification or send email:', notificationError);
       // Don't fail the request if notification creation fails
     }
 
@@ -1916,7 +1951,17 @@ router.put('/orders/:orderId', authenticate, requireAdmin, async (req, res) => {
       where: { id: orderId },
       include: {
         event: { select: { name: true } },
-        coach: { select: { name: true } }
+        coach: { 
+          select: { 
+            name: true,
+            user: {
+              select: {
+                id: true,
+                email: true
+              }
+            }
+          } 
+        }
       }
     });
 
@@ -1971,6 +2016,74 @@ router.put('/orders/:orderId', authenticate, requireAdmin, async (req, res) => {
     });
 
     console.log(`✅ Order ${order.orderNumber} updated to ${updatedOrder.status}`);
+
+    // Send email and create notification for coach
+    try {
+      if (order.coach?.user?.id) {
+        // Map order status to valid notification types
+        const statusToNotificationType = {
+          'PENDING': 'ORDER_CONFIRMED',
+          'CONFIRMED': 'ORDER_CONFIRMED',
+          'PAYMENT_PENDING': 'ORDER_CONFIRMED',
+          'PAID': 'ORDER_CONFIRMED',
+          'IN_PROGRESS': 'ORDER_IN_PROGRESS',
+          'COMPLETED': 'ORDER_COMPLETED',
+          'CANCELLED': 'ORDER_CANCELLED'
+        };
+
+        const notificationType = statusToNotificationType[updatedOrder.status] || 'GENERAL';
+        const notificationTitle = `Order ${updatedOrder.status.charAt(0) + updatedOrder.status.slice(1).toLowerCase().replace(/_/g, ' ')}`;
+        const notificationMessage = `Your order ${order.orderNumber} has been updated to ${updatedOrder.status.toLowerCase().replace(/_/g, ' ')}.${adminRemarks ? ` Notes: ${adminRemarks}` : ''}`;
+        
+        // Create notification in database only if notification model exists
+        if (prisma.notification) {
+          await prisma.notification.create({
+            data: {
+              userId: order.coach.user.id,
+              type: notificationType,
+              title: notificationTitle,
+              message: notificationMessage,
+              data: JSON.stringify({
+                orderId: order.id,
+                orderNumber: order.orderNumber,
+                status: updatedOrder.status,
+                adminRemarks: adminRemarks
+              })
+            }
+          });
+          console.log(`🔔 Notification created for user ${order.coach.user.id}`);
+        } else {
+          console.log('⚠️ Notification model not available, skipping notification creation');
+        }
+
+        // Send email notification
+        if (order.coach?.user?.email && order.coach?.name) {
+          const emailResult = await sendOrderStatusEmail(
+            order.coach.user.email,
+            order.coach.name,
+            updatedOrder.status,
+            {
+              orderNumber: order.orderNumber,
+              certificates: order.certificates,
+              medals: order.medals,
+              trophies: order.trophies,
+              totalAmount: updatedOrder.totalAmount,
+              event: { name: order.event?.name }
+            },
+            adminRemarks
+          );
+          
+          if (emailResult.success) {
+            console.log(`📧 Order status email sent to ${order.coach.user.email}`);
+          } else {
+            console.error('⚠️ Failed to send order status email:', emailResult.error);
+          }
+        }
+      }
+    } catch (notificationError) {
+      console.error('⚠️ Failed to create notification or send email:', notificationError);
+      // Don't fail the request if notification creation fails
+    }
 
     res.json(successResponse(updatedOrder, 'Order updated successfully.'));
 
@@ -2385,6 +2498,200 @@ router.get('/users/:userId/payment-status', authenticate, requireAdmin, async (r
   } catch (error) {
     console.error('Get user payment status error:', error);
     res.status(500).json(errorResponse('Failed to retrieve payment status.', 500));
+  }
+});
+
+// Notification Management Endpoints
+
+// Get user notifications
+router.get('/notifications', authenticate, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, unreadOnly = false } = req.query;
+    const { skip, take } = getPaginationParams(page, limit);
+
+    console.log(`🔔 Fetching notifications for user ${req.user.id}`);
+
+    // Check if notification model exists
+    if (!prisma.notification) {
+      console.log('⚠️ Notification model not found in Prisma schema, returning empty notifications');
+      return res.json(successResponse({
+        notifications: [],
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: 0,
+          totalItems: 0,
+          itemsPerPage: parseInt(limit),
+          hasNextPage: false,
+          hasPrevPage: false
+        },
+        unreadCount: 0
+      }, 'Notifications retrieved successfully.'));
+    }
+
+    const where = {
+      userId: req.user.id,
+      ...(unreadOnly === 'true' && { isRead: false })
+    };
+
+    const [notifications, total] = await Promise.all([
+      prisma.notification.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take
+      }),
+      prisma.notification.count({ where })
+    ]);
+
+    const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
+
+    // Parse JSON data for each notification
+    const formattedNotifications = notifications.map(notification => ({
+      ...notification,
+      data: notification.data ? JSON.parse(notification.data) : null
+    }));
+
+    res.json(successResponse({
+      notifications: formattedNotifications,
+      pagination,
+      unreadCount: await prisma.notification.count({
+        where: { userId: req.user.id, isRead: false }
+      })
+    }, 'Notifications retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get notifications error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve notifications.', 500));
+  }
+});
+
+// Mark notification as read
+router.patch('/notifications/:notificationId/read', authenticate, async (req, res) => {
+  try {
+    const { notificationId } = req.params;
+
+    console.log(`🔔 Marking notification ${notificationId} as read`);
+
+    // Check if notification model exists
+    if (!prisma.notification) {
+      console.log('⚠️ Notification model not found in Prisma schema');
+      return res.status(404).json(errorResponse('Notifications feature not available.', 404));
+    }
+
+    const notification = await prisma.notification.update({
+      where: {
+        id: notificationId,
+        userId: req.user.id // Ensure user can only update their own notifications
+      },
+      data: {
+        isRead: true,
+        readAt: new Date()
+      }
+    });
+
+    if (!notification) {
+      return res.status(404).json(errorResponse('Notification not found.', 404));
+    }
+
+    res.json(successResponse(notification, 'Notification marked as read.'));
+
+  } catch (error) {
+    console.error('❌ Mark notification as read error:', error);
+    res.status(500).json(errorResponse('Failed to mark notification as read.', 500));
+  }
+});
+
+// Mark all notifications as read
+router.patch('/notifications/mark-all-read', authenticate, async (req, res) => {
+  try {
+    console.log(`🔔 Marking all notifications as read for user ${req.user.id}`);
+
+    // Check if notification model exists
+    if (!prisma.notification) {
+      console.log('⚠️ Notification model not found in Prisma schema');
+      return res.json(successResponse({
+        updatedCount: 0
+      }, 'Notifications feature not available.'));
+    }
+
+    const result = await prisma.notification.updateMany({
+      where: {
+        userId: req.user.id,
+        isRead: false
+      },
+      data: {
+        isRead: true,
+        readAt: new Date()
+      }
+    });
+
+    res.json(successResponse({
+      updatedCount: result.count
+    }, `${result.count} notifications marked as read.`));
+
+  } catch (error) {
+    console.error('❌ Mark all notifications as read error:', error);
+    res.status(500).json(errorResponse('Failed to mark all notifications as read.', 500));
+  }
+});
+
+// Delete notification
+router.delete('/notifications/:notificationId', authenticate, async (req, res) => {
+  try {
+    const { notificationId } = req.params;
+
+    console.log(`🔔 Deleting notification ${notificationId}`);
+
+    // Check if notification model exists
+    if (!prisma.notification) {
+      console.log('⚠️ Notification model not found in Prisma schema');
+      return res.status(404).json(errorResponse('Notifications feature not available.', 404));
+    }
+
+    const notification = await prisma.notification.delete({
+      where: {
+        id: notificationId,
+        userId: req.user.id // Ensure user can only delete their own notifications
+      }
+    });
+
+    if (!notification) {
+      return res.status(404).json(errorResponse('Notification not found.', 404));
+    }
+
+    res.json(successResponse(null, 'Notification deleted successfully.'));
+
+  } catch (error) {
+    console.error('❌ Delete notification error:', error);
+    res.status(500).json(errorResponse('Failed to delete notification.', 500));
+  }
+});
+
+// Get notification count (for header badge)
+router.get('/notifications/count', authenticate, async (req, res) => {
+  try {
+    // Check if notification model exists
+    if (!prisma.notification) {
+      console.log('⚠️ Notification model not found in Prisma schema, returning zero count');
+      return res.json(successResponse({
+        unreadCount: 0
+      }, 'Notification count retrieved successfully.'));
+    }
+
+    const unreadCount = await prisma.notification.count({
+      where: {
+        userId: req.user.id,
+        isRead: false
+      }
+    });
+
+    res.json(successResponse({
+      unreadCount
+    }, 'Notification count retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get notification count error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve notification count.', 500));
   }
 });
 

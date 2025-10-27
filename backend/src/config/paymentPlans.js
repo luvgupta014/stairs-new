@@ -1,60 +1,17 @@
 // Payment plans configuration for different user types
 export const paymentPlans = {
   coach: {
-    defaultPlan: 'professional',
+    defaultPlan: 'coordinator',
     redirectPath: '/dashboard/coach',
-    userDisplayName: 'Coach',
+    userDisplayName: 'Coach/Coordinator',
     plans: [
       {
-        id: 'basic',
-        name: 'Basic Plan',
-        price: 999,
-        originalPrice: 1499,
-        duration: 'month',
-        popular: false,
-        features: [
-          'Up to 15 students',
-          '2 events per month',
-          'Basic analytics',
-          'Email support',
-          'Mobile app access'
-        ],
-        notIncluded: [
-          'Priority support',
-          'Advanced analytics',
-          'Bulk student import',
-          'Custom branding'
-        ]
-      },
-      {
-        id: 'professional',
-        name: 'Professional Plan',
-        price: 1999,
-        originalPrice: 2999,
+        id: 'coordinator',
+        name: 'Coordinator Plan',
+        price: 2000,
+        originalPrice: 2000,
         duration: 'month',
         popular: true,
-        features: [
-          'Up to 50 students',
-          '10 events per month',
-          'Advanced analytics',
-          'Priority support',
-          'Mobile app access',
-          'Bulk student import',
-          'Basic branding',
-          'Payment processing'
-        ],
-        notIncluded: [
-          'White-label solution',
-          'API access'
-        ]
-      },
-      {
-        id: 'enterprise',
-        name: 'Enterprise Plan',
-        price: 4999,
-        originalPrice: 7499,
-        duration: 'month',
-        popular: false,
         features: [
           'Unlimited students',
           'Unlimited events',
@@ -64,9 +21,10 @@ export const paymentPlans = {
           'Bulk student import',
           'Custom branding',
           'Payment processing',
-          'White-label solution',
-          'API access',
-          'Dedicated account manager'
+          'Event management',
+          'Student registration',
+          'Performance tracking',
+          'Certificate generation'
         ],
         notIncluded: []
       }

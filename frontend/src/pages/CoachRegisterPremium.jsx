@@ -28,7 +28,7 @@ const CoachRegisterPremium = () => {
     applyingAs: "Chief District coordinator",
     primarySports: "",
     otherSports: "",
-    payLater: false,
+    payLater: true,
   });
 
   const navigate = useNavigate();
@@ -143,13 +143,13 @@ const CoachRegisterPremium = () => {
         }
         break;
 
-      case "utrNumber":
-        if (value && !/^\d{12}$/.test(value)) {
-          errors.utrNumber = "UTR must be 12 digits";
-        } else {
-          delete errors.utrNumber;
-        }
-        break;
+      // case "utrNumber":
+      //   if (value && !/^\d{12}$/.test(value)) {
+      //     errors.utrNumber = "UTR must be 12 digits";
+      //   } else {
+      //     delete errors.utrNumber;
+      //   }
+      //   break;
 
       case "password":
         if (!value) {
@@ -296,10 +296,10 @@ const CoachRegisterPremium = () => {
           setError("Password must be at least 6 characters long.");
           return false;
         }
-        if (!formData.payLater && !formData.utrNumber) {
-          setError("Please provide UTR number or select pay later option.");
-          return false;
-        }
+        // if (!formData.payLater && !formData.utrNumber) {
+        //   setError("Please provide UTR number or select pay later option.");
+        //   return false;
+        // }
         break;
     }
 
@@ -910,7 +910,7 @@ const CoachRegisterPremium = () => {
             )} */}
 
             {/* Pay Later Option */}
-            <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+            {/* <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
               <div className="flex items-start space-x-4">
                 <input
                   type="checkbox"
@@ -953,7 +953,7 @@ const CoachRegisterPremium = () => {
                   </div>
                 </div>
               </div>
-            </div>
+            </div> */}
           </div>
         );
 
@@ -1091,7 +1091,7 @@ const CoachRegisterPremium = () => {
                 }
               >
                 {/* Step Content */}
-                <div className="min-h-[500px]">{renderStepContent()}</div>
+                <div className="">{renderStepContent()}</div>
 
                 {/* Navigation Buttons */}
                 <div className="flex justify-between items-center pt-8 border-t mt-8">

@@ -51,7 +51,6 @@ import EventDetails from "./pages/events/EventDetails";
 import EventCreate from "./pages/events/EventCreate";
 import BulkUpload from "./pages/BulkUpload";
 import Payment from "./components/Payment";
-import CoachRegisterPremiumNew from "./pages/CoachRegisterPremium";
 import AdminEventResults from "./components/AdminEventResults";
 import EventResultUpload from "./pages/events/EventResultUpload";
 import EventOrders from "./pages/events/EventOrders";
@@ -92,7 +91,7 @@ function App() {
             {/* Premium Registration Routes (no header/footer) */}
             <Route
               path="/register/coach-premium"
-              element={<CoachRegisterPremiumNew />}
+              element={<CoachRegisterPremium />}
             />
             <Route
               path="/register/institute-premium"

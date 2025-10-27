@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   getAdminDashboard, 
@@ -80,6 +80,9 @@ const AdminDashboard = () => {
 
   // Cleanup states
   // Removed database maintenance functionality
+  
+  // Use ref to track if initial load is done
+  const initialLoadDone = useRef(false);
 
   // Modal helper functions
   const showInfoModal = (title, content, type = 'info', data = null) => {
@@ -167,17 +170,7 @@ const AdminDashboard = () => {
     setParticipantsModal(prev => ({ ...prev, isOpen: false }));
   };
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === 'all') {
-      fetchAllEvents();
-    }
-  }, [activeTab, eventFilters]);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -256,9 +249,9 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchAllEvents = async () => {
+  const fetchAllEvents = useCallback(async () => {
     try {
       setEventLoading(true);
       console.log('🔄 Fetching all events...');
@@ -281,7 +274,22 @@ const AdminDashboard = () => {
     } finally {
       setEventLoading(false);
     }
-  };
+  }, [eventFilters]);
+
+  // Initial data load - only runs once on mount
+  useEffect(() => {
+    if (!initialLoadDone.current) {
+      initialLoadDone.current = true;
+      fetchDashboardData();
+    }
+  }, [fetchDashboardData]);
+
+  // Load all events when tab changes
+  useEffect(() => {
+    if (activeTab === 'all') {
+      fetchAllEvents();
+    }
+  }, [activeTab, fetchAllEvents]);
 
   // Update the handleModerateEvent function with better error handling
   const handleModerateEvent = async (eventId, action, remarks = '') => {

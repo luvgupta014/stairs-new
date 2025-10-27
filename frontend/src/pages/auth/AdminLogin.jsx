@@ -3,16 +3,25 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
 import LoginLayout from '../../components/LoginLayout';
+import ErrorPopup from '../../components/ErrorPopup';
+import { parseLoginError } from '../../utils/errorUtils';
 
 const AdminLogin = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [errorPopup, setErrorPopup] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'error'
+  });
   const navigate = useNavigate();
   const { login } = useAuth();
 
   const handleLogin = async (formData) => {
     setLoading(true);
     setError('');
+    setErrorPopup({ isOpen: false, title: '', message: '', type: 'error' });
 
     try {
       console.log('Attempting admin login with:', formData.email);
@@ -26,18 +35,33 @@ const AdminLogin = () => {
         // Navigate to admin dashboard - FIXED path
         navigate('/dashboard/admin', { replace: true });
       } else {
-        setError(response.message || 'Login failed. Please try again.');
+        // Parse error and show popup
+        const errorConfig = parseLoginError(response.message || response, 'admin');
+        setErrorPopup({
+          isOpen: true,
+          title: errorConfig.title,
+          message: errorConfig.message,
+          type: errorConfig.type
+        });
       }
     } catch (err) {
       console.error('Admin login error:', err);
-      setError(
-        err.response?.data?.message || 
-        err.message || 
-        'Login failed. Please check your credentials and try again.'
-      );
+      // Parse catch errors too
+      const errorMessage = err.response?.data?.message || err.message || 'Login failed. Please check your credentials and try again.';
+      const errorConfig = parseLoginError(errorMessage, 'admin');
+      setErrorPopup({
+        isOpen: true,
+        title: errorConfig.title,
+        message: errorConfig.message,
+        type: errorConfig.type
+      });
     } finally {
       setLoading(false);
     }
+  };
+
+  const closeErrorPopup = () => {
+    setErrorPopup({ isOpen: false, title: '', message: '', type: 'error' });
   };
 
   return (
@@ -51,7 +75,7 @@ const AdminLogin = () => {
         registerPath="/admin/register"
         onSubmit={handleLogin}
         loading={loading}
-        error={error}
+        error="" // Clear error since we're using popup
       />
 
       {/* Additional Admin-specific Features */}
@@ -125,6 +149,15 @@ const AdminLogin = () => {
           </p>
         </div>
       </motion.div>
+      
+      {/* Error Popup */}
+      <ErrorPopup
+        isOpen={errorPopup.isOpen}
+        onClose={closeErrorPopup}
+        title={errorPopup.title}
+        message={errorPopup.message}
+        type={errorPopup.type}
+      />
     </div>
   );
 };

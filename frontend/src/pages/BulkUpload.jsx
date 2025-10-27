@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { bulkUploadStudents } from '../api';
 import Spinner from '../components/Spinner';
 import BackButton from '../components/BackButton';
+import PaymentPopup from '../components/PaymentPopup';
+import usePaymentStatus from '../hooks/usePaymentStatus';
 import { useNavigate } from 'react-router-dom';
+import { FaExclamationTriangle, FaCreditCard } from 'react-icons/fa';
 
 const BulkUpload = () => {
   const [file, setFile] = useState(null);
@@ -11,6 +14,16 @@ const BulkUpload = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [uploadResults, setUploadResults] = useState(null);
+  
+  // Payment status hook
+  const {
+    isPending,
+    showPaymentPopup,
+    dismissPaymentPopup,
+    onPaymentSuccess,
+    showPaymentPopupManually
+  } = usePaymentStatus();
+  
   const navigate = useNavigate();
 
   const handleFileSelect = (e) => {
@@ -55,6 +68,12 @@ const BulkUpload = () => {
   const handleUpload = async () => {
     if (!file) {
       setError('Please select a file to upload');
+      return;
+    }
+
+    // Check payment status before allowing upload
+    if (isPending) {
+      showPaymentPopupManually();
       return;
     }
 
@@ -297,6 +316,33 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom J
           </p>
         </div>
 
+        {/* Payment Status Alert */}
+        {isPending && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-6">
+            <div className="flex items-start">
+              <FaExclamationTriangle className="text-amber-500 mt-1 mr-3 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-amber-900 mb-2">
+                  Payment Required
+                </h3>
+                <p className="text-amber-700 mb-4">
+                  You need to complete your subscription payment to upload students. Complete your payment to unlock student management features.
+                </p>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={showPaymentPopupManually}
+                    type="button"
+                    className="inline-flex items-center bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors"
+                  >
+                    <FaCreditCard className="mr-2" />
+                    Pay Now (₹2,000)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
             {error}
@@ -469,6 +515,15 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom J
           </div>
         </div>
       </div>
+      
+      {/* Payment Popup */}
+      <PaymentPopup
+        isOpen={showPaymentPopup}
+        onClose={() => dismissPaymentPopup(false)}
+        userType="coach"
+        userProfile={null}
+        onPaymentSuccess={onPaymentSuccess}
+      />
     </div>
   );
 };

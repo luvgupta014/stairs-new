@@ -33,6 +33,9 @@ model User {
   // Payment Management
   payments Payment[]
 
+  // Notifications
+  notifications Notification[]
+
   @@map("users")
 }
 
@@ -501,6 +504,24 @@ model EventOrder {
   @@map("event_orders")
 }
 
+// Notification Management
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String           // User who receives the notification
+  type        NotificationType // Type of notification
+  title       String           // Notification title
+  message     String           // Notification message
+  data        String?          // JSON data for additional context
+  isRead      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  readAt      DateTime?
+  
+  // Relations
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("notifications")
+}
+
 enum OrderStatus {
   PENDING         // Order placed, waiting for admin review
   CONFIRMED       // Admin confirmed the order, payment required
@@ -509,4 +530,18 @@ enum OrderStatus {
   IN_PROGRESS     // Order is being prepared
   COMPLETED       // Order is ready/delivered
   CANCELLED       // Order was cancelled
+}
+
+enum NotificationType {
+  EVENT_APPROVED
+  EVENT_REJECTED
+  EVENT_SUSPENDED
+  EVENT_RESTARTED
+  ORDER_CONFIRMED
+  ORDER_IN_PROGRESS
+  ORDER_COMPLETED
+  ORDER_CANCELLED
+  PAYMENT_RECEIVED
+  PAYMENT_FAILED
+  GENERAL
 }

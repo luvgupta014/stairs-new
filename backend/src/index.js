@@ -124,6 +124,7 @@ app.use('/api/club', clubRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/payment', paymentRoutes);
+// Notification routes are included in admin routes for now
 
 // Static file serving (for uploaded files)
 app.use('/uploads', express.static('uploads'));

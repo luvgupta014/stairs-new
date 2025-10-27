@@ -1,16 +1,122 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../api';
 
 const Header = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
 
   const handleLogout = () => {
     logout();
     navigate('/login/student');
+  };
+
+  // Load notifications when user is authenticated
+  useEffect(() => {
+    if (isAuthenticated() && user) {
+      loadNotifications();
+      // Set up polling for new notifications every 30 seconds
+      const interval = setInterval(loadNotifications, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated(), user]);
+
+  const loadNotifications = async () => {
+    try {
+      setLoadingNotifications(true);
+      const response = await getNotifications({ limit: 10 });
+      if (response.success) {
+        setNotifications(response.data.notifications || []);
+        setUnreadCount(response.data.unreadCount || 0);
+      }
+    } catch (error) {
+      console.error('Failed to load notifications:', error);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const handleNotificationClick = async (notification) => {
+    if (!notification.isRead) {
+      try {
+        await markNotificationAsRead(notification.id);
+        setNotifications(prev => 
+          prev.map(n => 
+            n.id === notification.id 
+              ? { ...n, isRead: true, readAt: new Date() }
+              : n
+          )
+        );
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      } catch (error) {
+        console.error('Failed to mark notification as read:', error);
+      }
+    }
+    setShowNotifications(false);
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await markAllNotificationsAsRead();
+      setNotifications(prev => 
+        prev.map(n => ({ ...n, isRead: true, readAt: new Date() }))
+      );
+      setUnreadCount(0);
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+    }
+  };
+
+  const getNotificationIcon = (type) => {
+    const icons = {
+      EVENT_APPROVED: '✅',
+      EVENT_REJECTED: '❌',
+      EVENT_SUSPENDED: '⏸️',
+      EVENT_RESTARTED: '🔄',
+      ORDER_CONFIRMED: '📋',
+      ORDER_IN_PROGRESS: '⚙️',
+      ORDER_COMPLETED: '🎉',
+      ORDER_CANCELLED: '❌',
+      PAYMENT_RECEIVED: '💰',
+      PAYMENT_FAILED: '💳',
+      GENERAL: '📢'
+    };
+    return icons[type] || '📢';
+  };
+
+  const getNotificationColor = (type) => {
+    const colors = {
+      EVENT_APPROVED: 'text-green-600',
+      EVENT_REJECTED: 'text-red-600',
+      EVENT_SUSPENDED: 'text-orange-600',
+      EVENT_RESTARTED: 'text-blue-600',
+      ORDER_CONFIRMED: 'text-green-600',
+      ORDER_IN_PROGRESS: 'text-blue-600',
+      ORDER_COMPLETED: 'text-green-600',
+      ORDER_CANCELLED: 'text-red-600',
+      PAYMENT_RECEIVED: 'text-green-600',
+      PAYMENT_FAILED: 'text-red-600',
+      GENERAL: 'text-gray-600'
+    };
+    return colors[type] || 'text-gray-600';
+  };
+
+  const formatNotificationTime = (createdAt) => {
+    const now = new Date();
+    const notificationTime = new Date(createdAt);
+    const diffInMinutes = Math.floor((now - notificationTime) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+    return `${Math.floor(diffInMinutes / 1440)}d ago`;
   };
 
   const isLoginPage = location.pathname.includes('/login');
@@ -158,6 +264,101 @@ const Header = () => {
               </div>
             ) : isAuthenticated() && user ? (
               <div className="flex items-center space-x-4">
+                {/* Notifications */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowNotifications(!showNotifications)}
+                    className="relative p-2 text-gray-700 hover:text-blue-600 focus:outline-none"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-5 5v-5zM4 19h6v2H4a2 2 0 01-2-2V7a2 2 0 012-2h6v2H4v10zM20 5H8a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2z" />
+                    </svg>
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </button>
+                  
+                  {/* Notifications Dropdown */}
+                  {showNotifications && (
+                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg py-1 z-50 border">
+                      <div className="px-4 py-2 border-b border-gray-200 flex justify-between items-center">
+                        <h3 className="text-sm font-medium text-gray-900">Notifications</h3>
+                        {unreadCount > 0 && (
+                          <button
+                            onClick={handleMarkAllAsRead}
+                            className="text-xs text-blue-600 hover:text-blue-800"
+                          >
+                            Mark all as read
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div className="max-h-96 overflow-y-auto">
+                        {loadingNotifications ? (
+                          <div className="px-4 py-8 text-center">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                            <p className="text-sm text-gray-500 mt-2">Loading notifications...</p>
+                          </div>
+                        ) : notifications.length > 0 ? (
+                          notifications.map((notification) => (
+                            <div
+                              key={notification.id}
+                              onClick={() => handleNotificationClick(notification)}
+                              className={`px-4 py-3 hover:bg-gray-50 cursor-pointer border-l-4 ${
+                                notification.isRead 
+                                  ? 'border-transparent bg-gray-50' 
+                                  : 'border-blue-500 bg-white'
+                              }`}
+                            >
+                              <div className="flex items-start space-x-3">
+                                <span className="text-lg flex-shrink-0">
+                                  {getNotificationIcon(notification.type)}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium ${getNotificationColor(notification.type)}`}>
+                                    {notification.title}
+                                  </p>
+                                  <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                                    {notification.message}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {formatNotificationTime(notification.createdAt)}
+                                  </p>
+                                </div>
+                                {!notification.isRead && (
+                                  <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2"></div>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="px-4 py-8 text-center text-gray-500">
+                            <svg className="w-12 h-12 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-5 5v-5zM4 19h6v2H4a2 2 0 01-2-2V7a2 2 0 012-2h6v2H4v10zM20 5H8a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2z" />
+                            </svg>
+                            <p className="text-sm">No notifications yet</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {notifications.length > 0 && (
+                        <div className="px-4 py-2 border-t border-gray-200 text-center">
+                          <Link
+                            to={`/dashboard/${user.role.toLowerCase()}`}
+                            className="text-xs text-blue-600 hover:text-blue-800"
+                            onClick={() => setShowNotifications(false)}
+                          >
+                            View all notifications
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Profile Dropdown */}
                 <div className="relative">
                   <button
                     onClick={() => setShowProfileDropdown(!showProfileDropdown)}

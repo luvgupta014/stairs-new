@@ -933,7 +933,7 @@ const InstituteRegisterPremium = () => {
                     </div>
 
                     {/* Pay Later Option */}
-                    <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                    {/* <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
                       <div className="flex items-start space-x-4">
                         <input
                           type="checkbox"
@@ -964,7 +964,7 @@ const InstituteRegisterPremium = () => {
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </div> */}
                   </div>
                 )}
 
