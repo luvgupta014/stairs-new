@@ -82,6 +82,12 @@ const BulkUpload = () => {
     setUploadProgress(0);
 
     try {
+      console.log('📤 Starting file upload...', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+      });
+
       // Simulate upload progress
       const progressInterval = setInterval(() => {
         setUploadProgress(prev => {
@@ -95,12 +101,21 @@ const BulkUpload = () => {
 
       const result = await bulkUploadStudents(file);
       
+      console.log('✅ Upload result:', result);
+      
       clearInterval(progressInterval);
       setUploadProgress(100);
-      setSuccess(true);
-      setUploadResults(result.data);
+      
+      if (result.success) {
+        setSuccess(true);
+        setUploadResults(result.data);
+      } else {
+        throw new Error(result.message || 'Upload failed');
+      }
     } catch (error) {
-      setError(error.message || 'Upload failed');
+      console.error('❌ Upload error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Upload failed. Please try again.';
+      setError(errorMessage);
       setUploadProgress(0);
     } finally {
       setLoading(false);
@@ -111,8 +126,8 @@ const BulkUpload = () => {
     // Create a comprehensive CSV template with all supported fields
     const csvContent = `Name,Email,Phone,Sport,Level,Date of Birth,Father Name,Aadhaar,Gender,Address,City,State,District,Pincode,Sport 2,Sport 3,School,Club,Coach Name,Coach Mobile,Achievements
 John Doe,john.doe@email.com,+1234567890,Football,Intermediate,2005-01-15,Robert Doe,123456789012,Male,123 Main St,New York,NY,Manhattan,10001,Basketball,,State High School,City Football Club,Mike Johnson,+1234567895,Regional Champion 2023
-Jane Smith,jane.smith@email.com,+1234567892,Basketball,Advanced,2004-03-22,David Smith,123456789013,Female,456 Oak Ave,Los Angeles,CA,Los Angeles,90001,Tennis,Swimming,Metro High School,Sports Academy,Sarah Wilson,+1234567896,State Level Player
-Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom Johnson,123456789014,Male,789 Pine St,Chicago,IL,Cook,60601,,,Central High School,,John Coach,+1234567897,`;
+Jane Smith,jane.smith@email.com,+1234567892,Basketball,Advanced,2004-03-22,David Smith,234567890123,Female,456 Oak Ave,Los Angeles,CA,Los Angeles,90001,Tennis,Swimming,Metro High School,Sports Academy,Sarah Wilson,+1234567896,State Level Player
+Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom Johnson,345678901234,Male,789 Pine St,Chicago,IL,Cook,60601,,,Central High School,,John Coach,+1234567897,`;
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -473,6 +488,9 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom J
             </p>
             <p className="text-sm text-gray-600">
               All other fields are optional and can enhance the student profile.
+            </p>
+            <p className="text-sm text-orange-600">
+              ⚠️ Aadhaar numbers must be unique. Duplicate Aadhaar numbers will be skipped automatically.
             </p>
             <p className="text-sm text-gray-500">
               New students will be created with temporary passwords that coaches can see in the upload results.

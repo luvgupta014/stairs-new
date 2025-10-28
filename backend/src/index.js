@@ -63,12 +63,25 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// File upload middleware - DISABLED to avoid conflict with multer
-// app.use(fileUpload({
-//   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
-//   useTempFiles: true,
-//   tempFileDir: '/tmp/'
-// }));
+// File upload middleware - ENABLED for bulk student upload and file uploads
+app.use(fileUpload({
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  useTempFiles: true,
+  tempFileDir: path.join(__dirname, '../temp/'),
+  createParentPath: true, // Automatically create temp directory
+  debug: true // Enable debug logging
+}));
+
+// Ensure temp and uploads directories exist
+const fs = require('fs');
+const tempDir = path.join(__dirname, '../temp');
+const uploadsDir = path.join(__dirname, '../uploads');
+[tempDir, uploadsDir].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log(`✅ Created directory: ${dir}`);
+  }
+});
 
 // Serve uploaded tournament result files publicly with proper MIME types
 app.use('/uploads', (req, res, next) => {

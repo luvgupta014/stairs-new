@@ -279,9 +279,13 @@ const GoogleMapsPlacesAutocomplete = ({
 
       <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center">
         {isManualMode ? (
-          <FaExclamationTriangle
-            className="text-amber-500 w-4 h-4"
-            title="Google Maps unavailable - using manual input"
+          // <FaExclamationTriangle
+          //   className="text-amber-500 w-4 h-4"
+          //   title="Google Maps unavailable - using manual input"
+          // />
+          <FaMapMarkerAlt
+            className="text-green-500 w-4 h-4"
+            title="Smart venue search enabled"
           />
         ) : (
           <FaMapMarkerAlt
@@ -291,7 +295,7 @@ const GoogleMapsPlacesAutocomplete = ({
         )}
       </div>
 
-      {loadError && (
+      {/* {loadError && (
         <div className="mt-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2">
           <div className="flex items-start">
             <FaExclamationTriangle className="w-3 h-3 mt-0.5 mr-2 flex-shrink-0" />
@@ -315,7 +319,7 @@ const GoogleMapsPlacesAutocomplete = ({
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {!isManualMode && !loadError && (
         <div className="mt-1 text-xs text-green-600">

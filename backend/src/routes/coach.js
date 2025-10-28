@@ -505,11 +505,16 @@ router.post('/students/bulk-upload', authenticate, requireCoach, async (req, res
     console.log('=== Starting bulk upload process ===');
     console.log('Coach ID:', req.coach.id);
     console.log('Coach Name:', req.coach.name);
+    console.log('Request headers:', req.headers);
+    console.log('Request files:', req.files);
+    console.log('Request body:', req.body);
 
     // Validate file upload
     if (!req.files || !req.files.file) {
       console.log('ERROR: No file uploaded');
-      return res.status(400).json(errorResponse('Please upload a file.', 400));
+      console.log('req.files:', req.files);
+      console.log('req.body:', req.body);
+      return res.status(400).json(errorResponse('Please upload a file. Make sure the form field name is "file".', 400));
     }
 
     const file = req.files.file;
@@ -768,6 +773,18 @@ async function processBulkStudents(studentData, coachId, results, errors) {
         }
       });
 
+      // Check if Aadhaar already exists (if provided)
+      let aadhaarExists = false;
+      if (aadhaar) {
+        const existingAadhaar = await prisma.student.findFirst({
+          where: { aadhaar: aadhaar }
+        });
+        if (existingAadhaar) {
+          console.log('WARNING: Aadhaar number already exists, will be set to null for this student');
+          aadhaarExists = true;
+        }
+      }
+
       let student;
       let tempPassword = null;
       let isNewUser = false;
@@ -817,52 +834,69 @@ async function processBulkStudents(studentData, coachId, results, errors) {
         }
 
         // Create user with student profile according to Prisma schema
-        user = await prisma.user.create({
-          data: {
-            email,
-            phone,
-            password: hashedPassword,
-            role: 'STUDENT',
-            isActive: true,
-            isVerified: true,
-            studentProfile: {
-              create: {
-                name,
-                fatherName: fatherName || null,
-                aadhaar: aadhaar || null,
-                gender: gender || null,
-                dateOfBirth: parsedDateOfBirth,
-                state: state || null,
-                district: district || null,
-                address: address || null,
-                pincode: pincode || null,
-                sport: sport,
-                sport2: sport2 || null,
-                sport3: sport3 || null,
-                level: level || 'BEGINNER',
-                school: school || null,
-                club: club || null,
-                coachName: coachName || null,
-                coachMobile: coachMobile || null,
-                achievements: achievements ? JSON.stringify([achievements]) : null,
-                profileCompletion: calculateProfileCompletion({
-                  name, email, phone, sport, fatherName,
-                  dateOfBirth: parsedDateOfBirth, address, city, state
-                })
+        try {
+          user = await prisma.user.create({
+            data: {
+              email,
+              phone,
+              password: hashedPassword,
+              role: 'STUDENT',
+              isActive: true,
+              isVerified: true,
+              studentProfile: {
+                create: {
+                  name,
+                  fatherName: fatherName || null,
+                  aadhaar: (aadhaar && !aadhaarExists) ? aadhaar : null, // Only set if unique
+                  gender: gender || null,
+                  dateOfBirth: parsedDateOfBirth,
+                  state: state || null,
+                  district: district || null,
+                  address: address || null,
+                  pincode: pincode || null,
+                  sport: sport,
+                  sport2: sport2 || null,
+                  sport3: sport3 || null,
+                  level: level || 'BEGINNER',
+                  school: school || null,
+                  club: club || null,
+                  coachName: coachName || null,
+                  coachMobile: coachMobile || null,
+                  achievements: achievements ? JSON.stringify([achievements]) : null,
+                  profileCompletion: calculateProfileCompletion({
+                    name, email, phone, sport, fatherName,
+                    dateOfBirth: parsedDateOfBirth, address, city, state
+                  })
+                }
               }
+            },
+            include: {
+              studentProfile: true
             }
-          },
-          include: {
-            studentProfile: true
-          }
-        });
+          });
 
-        student = user.studentProfile;
-        console.log('Created new user and student:', {
-          userId: user.id,
-          studentId: student.id,
-          profileCompletion: student.profileCompletion
-        });
+          student = user.studentProfile;
+          console.log('Created new user and student:', {
+            userId: user.id,
+            studentId: student.id,
+            profileCompletion: student.profileCompletion,
+            aadhaarSkipped: aadhaarExists
+          });
+        } catch (createError) {
+          // Handle unique constraint errors gracefully
+          if (createError.code === 'P2002') {
+            const field = createError.meta?.target?.[0] || 'unknown field';
+            console.log(`ERROR: Duplicate ${field} detected for row ${i + 1}`);
+            errors.push({
+              row: i + 1,
+              name,
+              email,
+              error: `Duplicate ${field} - this ${field} is already in use`
+            });
+            continue;
+          }
+          throw createError; // Re-throw if not a unique constraint error
+        }
       }
 
       // Create connection between coach and student
