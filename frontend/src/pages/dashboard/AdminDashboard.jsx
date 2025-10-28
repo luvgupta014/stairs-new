@@ -39,6 +39,7 @@ const AdminDashboard = () => {
     search: ''
   });
   const [eventLoading, setEventLoading] = useState(false);
+  const [usingCachedData, setUsingCachedData] = useState(false);
   
   // Filter states for registrations
   const [registrationFilters, setRegistrationFilters] = useState({
@@ -83,6 +84,10 @@ const AdminDashboard = () => {
   
   // Use ref to track if initial load is done
   const initialLoadDone = useRef(false);
+  const allEventsCache = useRef({ timestamp: 0, data: [], filters: {} });
+  const dashboardCache = useRef({ timestamp: 0, data: null });
+  const CACHE_DURATION = 120000; // 2 minutes cache
+  const searchDebounceTimer = useRef(null);
 
   // Modal helper functions
   const showInfoModal = (title, content, type = 'info', data = null) => {
@@ -170,10 +175,25 @@ const AdminDashboard = () => {
     setParticipantsModal(prev => ({ ...prev, isOpen: false }));
   };
 
-  const fetchDashboardData = useCallback(async () => {
+  const fetchDashboardData = useCallback(async (force = false) => {
+    // Check cache first
+    const now = Date.now();
+    if (!force && dashboardCache.current.timestamp && (now - dashboardCache.current.timestamp) < CACHE_DURATION && dashboardCache.current.data) {
+      console.log('✅ Using cached dashboard data');
+      const cached = dashboardCache.current.data;
+      setStats(cached.stats);
+      setRecentUsers(cached.recentUsers);
+      setPendingEvents(cached.pendingEvents);
+      setLoading(false);
+      setUsingCachedData(true);
+      setTimeout(() => setUsingCachedData(false), 3000); // Show indicator for 3 seconds
+      return;
+    }
+
     try {
       setLoading(true);
       setError('');
+      setUsingCachedData(false);
       
       console.log('🔄 Fetching admin dashboard data...');
       
@@ -197,7 +217,7 @@ const AdminDashboard = () => {
           eventsCount: pendingEventsData?.length || recentEvents?.length || 0
         });
         
-        setStats({
+        const statsData = {
           totalStudents: dashboardStats?.totalStudents || 0,
           totalCoaches: dashboardStats?.totalCoaches || 0,
           totalInstitutes: dashboardStats?.totalInstitutes || 0,
@@ -208,12 +228,23 @@ const AdminDashboard = () => {
           pendingApprovals: (dashboardStats?.pendingCoachApprovals || 0) + (dashboardStats?.pendingInstituteApprovals || 0),
           activeUsers: (dashboardStats?.totalStudents || 0) + (dashboardStats?.totalCoaches || 0) + (dashboardStats?.totalInstitutes || 0) + (dashboardStats?.totalClubs || 0),
           monthlyGrowth: dashboardStats?.monthlyGrowth || 0
-        });
+        };
         
+        setStats(statsData);
         setRecentUsers(users || []);
         setPendingEvents(pendingEventsData || recentEvents || []);
         
-        console.log('✅ Dashboard data loaded successfully');
+        // Update cache
+        dashboardCache.current = {
+          timestamp: now,
+          data: {
+            stats: statsData,
+            recentUsers: users || [],
+            pendingEvents: pendingEventsData || recentEvents || []
+          }
+        };
+        
+        console.log('✅ Dashboard data loaded and cached successfully');
       } else {
         throw new Error(response?.message || 'Failed to fetch dashboard data');
       }
@@ -251,10 +282,23 @@ const AdminDashboard = () => {
     }
   }, []);
 
-  const fetchAllEvents = useCallback(async () => {
+  const fetchAllEvents = useCallback(async (force = false) => {
+    // Check if filters match cache
+    const filtersKey = JSON.stringify(eventFilters);
+    const now = Date.now();
+    
+    if (!force && 
+        allEventsCache.current.timestamp && 
+        (now - allEventsCache.current.timestamp) < CACHE_DURATION &&
+        allEventsCache.current.filters === filtersKey) {
+      console.log('✅ Using cached events data');
+      setAllEvents(allEventsCache.current.data);
+      return;
+    }
+
     try {
       setEventLoading(true);
-      console.log('🔄 Fetching all events...');
+      console.log('🔄 Fetching all events with filters:', eventFilters);
       
       const response = await getAdminEvents({
         page: 1,
@@ -263,8 +307,17 @@ const AdminDashboard = () => {
       });
       
       if (response.success) {
-        setAllEvents(response.data.events || []);
-        console.log('✅ All events loaded successfully:', response.data.events?.length || 0);
+        const eventsData = response.data.events || [];
+        setAllEvents(eventsData);
+        
+        // Update cache
+        allEventsCache.current = {
+          timestamp: now,
+          data: eventsData,
+          filters: filtersKey
+        };
+        
+        console.log('✅ All events loaded and cached successfully:', eventsData.length);
       } else {
         throw new Error(response.message || 'Failed to fetch events');
       }
@@ -284,12 +337,32 @@ const AdminDashboard = () => {
     }
   }, [fetchDashboardData]);
 
-  // Load all events when tab changes
+  // Load all events when tab changes (with debouncing for search)
   useEffect(() => {
     if (activeTab === 'all') {
-      fetchAllEvents();
+      // Clear any pending debounce timer
+      if (searchDebounceTimer.current) {
+        clearTimeout(searchDebounceTimer.current);
+      }
+
+      // If search filter is being used, debounce the API call
+      if (eventFilters.search) {
+        console.log('⏱️ Debouncing search input...');
+        searchDebounceTimer.current = setTimeout(() => {
+          fetchAllEvents();
+        }, 500); // Wait 500ms after user stops typing
+      } else {
+        // For non-search filters, fetch immediately
+        fetchAllEvents();
+      }
     }
-  }, [activeTab, fetchAllEvents]);
+
+    return () => {
+      if (searchDebounceTimer.current) {
+        clearTimeout(searchDebounceTimer.current);
+      }
+    };
+  }, [activeTab, eventFilters, fetchAllEvents]);
 
   // Update the handleModerateEvent function with better error handling
   const handleModerateEvent = async (eventId, action, remarks = '') => {
@@ -453,7 +526,7 @@ const AdminDashboard = () => {
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Dashboard Error</h2>
           <p className="text-gray-600 mb-4">{error}</p>
           <button 
-            onClick={fetchDashboardData}
+            onClick={() => fetchDashboardData(true)} // Force refresh on retry
             className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
           >
             Retry
@@ -472,6 +545,14 @@ const AdminDashboard = () => {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
               <p className="text-gray-600 mt-2">Manage users, view analytics, and monitor system health</p>
+              {usingCachedData && (
+                <div className="mt-2 inline-flex items-center bg-blue-50 border border-blue-200 rounded-lg px-3 py-1 text-sm text-blue-700">
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Loaded from cache (instant)
+                </div>
+              )}
             </div>
             <div className="flex space-x-3">
               <Link
@@ -725,7 +806,7 @@ const AdminDashboard = () => {
                   All Events ({allEvents.length})
                 </h4>
                 <button
-                  onClick={fetchAllEvents}
+                  onClick={() => fetchAllEvents(true)} // Force refresh
                   disabled={eventLoading}
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
@@ -885,7 +966,7 @@ const AdminDashboard = () => {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-semibold text-gray-900">Recent Registrations ({getFilteredRecentUsers().length})</h3>
             <button
-              onClick={fetchDashboardData}
+              onClick={() => fetchDashboardData(true)} // Force refresh
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors"
             >
               Refresh
