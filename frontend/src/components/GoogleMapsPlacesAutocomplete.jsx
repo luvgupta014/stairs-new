@@ -29,8 +29,11 @@ const GoogleMapsPlacesAutocomplete = ({
     console.log("Attempting to initialize autocomplete...");
 
     if (!inputRef.current) {
-      console.log("Input ref not available");
-      return false;
+      console.error("Input ref not available. Initialization aborted.");
+      setLoadError("Input field not found. Please refresh the page.");
+      setIsManualMode(true);
+      setIsLoaded(true);
+      return;
     }
 
     if (!checkGoogleMapsAvailability()) {
@@ -40,7 +43,10 @@ const GoogleMapsPlacesAutocomplete = ({
         places: !!window.google?.maps?.places,
         Autocomplete: !!window.google?.maps?.places?.Autocomplete,
       });
-      return false;
+      setLoadError("Google Maps API not properly loaded.");
+      setIsManualMode(true);
+      setIsLoaded(true);
+      return;
     }
 
     try {
@@ -111,124 +117,103 @@ const GoogleMapsPlacesAutocomplete = ({
       });
 
       console.log("Autocomplete initialized successfully");
-      return true;
+      setIsLoaded(true);
     } catch (error) {
       console.error("Autocomplete initialization error:", error);
-      return false;
+      setLoadError("Failed to initialize autocomplete.");
+      setIsManualMode(true);
+      setIsLoaded(true);
     }
   };
 
-  useEffect(() => {
-    const loadGoogleMaps = () => {
-      const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  const loadGoogleMaps = () => {
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
-      if (!apiKey) {
-        console.error("Google Maps API key not found. Manual input mode enabled.");
-        console.info("To fix: Set VITE_GOOGLE_MAPS_API_KEY environment variable and rebuild the application.");
-        setLoadError("Google Maps API not available. Please enter address manually.");
-        setIsManualMode(true);
-        setIsLoaded(true);
-        return;
-      }
+    if (!apiKey) {
+      console.error("Google Maps API key not found. Manual input mode enabled.");
+      setLoadError("Google Maps API not available. Please enter address manually.");
+      setIsManualMode(true);
+      setIsLoaded(true);
+      return;
+    }
 
-      // Check if already loaded
-      if (checkGoogleMapsAvailability()) {
-        console.log("Google Maps already available");
-        if (initializeAutocomplete()) {
-          setIsLoaded(true);
-        } else {
-          setLoadError("Failed to initialize autocomplete");
-          setIsManualMode(true);
-          setIsLoaded(true);
-        }
-        return;
-      }
+    // Check if already loaded
+    if (checkGoogleMapsAvailability()) {
+      console.log("Google Maps already available");
+      initializeAutocomplete();
+      return;
+    }
 
-      // Check if script is already loading/loaded
-      const existingScript = document.querySelector(
-        `script[src*="maps.googleapis.com"]`
-      );
-      if (existingScript && !scriptLoadedRef.current) {
-        console.log("Google Maps script already exists, waiting for load...");
+    // Check if script is already loading/loaded
+    const existingScript = document.querySelector(
+      `script[src*="maps.googleapis.com"]`
+    );
+    if (existingScript && !scriptLoadedRef.current) {
+      console.log("Google Maps script already exists, waiting for load...");
 
-        // Add our own load listener
-        const checkAndInit = () => {
-          if (checkGoogleMapsAvailability()) {
-            scriptLoadedRef.current = true;
-            // Add delay to ensure input ref is ready
-            setTimeout(() => {
-              if (initializeAutocomplete()) {
-                setIsLoaded(true);
-              } else {
-                setLoadError("Failed to initialize autocomplete");
-                setIsManualMode(true);
-                setIsLoaded(true);
-              }
-            }, 200);
-          } else {
-            // Keep checking
-            setTimeout(checkAndInit, 100);
-          }
-        };
-
-        checkAndInit();
-        return;
-      }
-
-      if (scriptLoadedRef.current) {
-        return; // Already loaded by this instance
-      }
-
-      console.log("Loading Google Maps script...");
-
-      // Create unique callback name to avoid conflicts
-      const callbackName = `initGoogleMaps_${Date.now()}`;
-
-      window[callbackName] = () => {
-        console.log("Google Maps callback triggered");
+      existingScript.addEventListener("load", () => {
         scriptLoadedRef.current = true;
+        initializeAutocomplete();
+      });
 
-        // Add delay to ensure input component is fully mounted
-        setTimeout(() => {
-          if (checkGoogleMapsAvailability()) {
-            if (initializeAutocomplete()) {
-              setIsLoaded(true);
-            } else {
-              setLoadError("Failed to initialize autocomplete");
-              setIsManualMode(true);
-              setIsLoaded(true);
-            }
-          } else {
-            setLoadError("Google Maps API not properly loaded");
-            setIsManualMode(true);
-            setIsLoaded(true);
-          }
-        }, 300);
-
-        // Clean up callback
-        delete window[callbackName];
-      };
-
-      const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=${callbackName}`;
-      script.async = true;
-      script.defer = true;
-
-      script.onerror = () => {
+      existingScript.addEventListener("error", () => {
         console.error("Failed to load Google Maps script");
-        setLoadError("Failed to load Google Maps script");
+        setLoadError("Failed to load Google Maps script.");
         setIsManualMode(true);
         setIsLoaded(true);
-        delete window[callbackName];
-      };
+      });
 
-      document.head.appendChild(script);
+      return;
+    }
+
+    if (scriptLoadedRef.current) {
+      return; // Already loaded by this instance
+    }
+
+    console.log("Loading Google Maps script...");
+
+    // Create unique callback name to avoid conflicts
+    const callbackName = `initGoogleMaps_${Date.now()}`;
+
+    window[callbackName] = () => {
+      console.log("Google Maps callback triggered");
+      scriptLoadedRef.current = true;
+      initializeAutocomplete();
+      delete window[callbackName];
     };
 
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=${callbackName}`;
+    script.async = true;
+    script.defer = true;
+
+    script.onerror = () => {
+      console.error("Failed to load Google Maps script");
+      setLoadError("Failed to load Google Maps script.");
+      setIsManualMode(true);
+      setIsLoaded(true);
+      delete window[callbackName];
+    };
+
+    document.head.appendChild(script);
+  };
+
+  useEffect(() => {
     loadGoogleMaps();
+
+    // Wait for the input element to mount before initializing autocomplete
+    const observer = new MutationObserver(() => {
+      if (inputRef.current) {
+        observer.disconnect();
+        initializeAutocomplete();
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
 
     // Cleanup
     return () => {
+      observer.disconnect();
       if (autocompleteRef.current && window.google?.maps?.event) {
         window.google.maps.event.clearInstanceListeners(autocompleteRef.current);
       }
@@ -304,14 +289,6 @@ const GoogleMapsPlacesAutocomplete = ({
               <p className="mt-1 text-green-700">
                 ✓ <strong>Manual Mode Active:</strong> You can still enter complete venue details manually.
               </p>
-              <p className="mt-1">
-                Using manual input mode. You can still enter venue details manually.
-              </p>
-              {loadError.includes("API key") && (
-                <p className="mt-1 text-xs">
-                  Contact administrator to configure Google Maps API key.
-                </p>
-              )}
             </div>
           </div>
         </div>
