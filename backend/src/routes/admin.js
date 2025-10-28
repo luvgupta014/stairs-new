@@ -2503,7 +2503,7 @@ router.get('/users/:userId/payment-status', authenticate, requireAdmin, async (r
 
 // Notification Management Endpoints
 
-// Get user notifications
+// Get user notifications - Optimized with caching
 router.get('/notifications', authenticate, async (req, res) => {
   try {
     const { page = 1, limit = 20, unreadOnly = false } = req.query;
@@ -2550,6 +2550,9 @@ router.get('/notifications', authenticate, async (req, res) => {
       ...notification,
       data: notification.data ? JSON.parse(notification.data) : null
     }));
+
+    // Add cache headers (cache for 30 seconds)
+    res.set('Cache-Control', 'private, max-age=30');
 
     res.json(successResponse({
       notifications: formattedNotifications,
@@ -2667,7 +2670,7 @@ router.delete('/notifications/:notificationId', authenticate, async (req, res) =
   }
 });
 
-// Get notification count (for header badge)
+// Get notification count (for header badge) - Optimized with caching
 router.get('/notifications/count', authenticate, async (req, res) => {
   try {
     // Check if notification model exists
@@ -2684,6 +2687,9 @@ router.get('/notifications/count', authenticate, async (req, res) => {
         isRead: false
       }
     });
+
+    // Add cache headers to reduce database load (cache for 30 seconds)
+    res.set('Cache-Control', 'private, max-age=30');
 
     res.json(successResponse({
       unreadCount

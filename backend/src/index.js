@@ -31,10 +31,15 @@ app.use(helmet({
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 200, // Increased from 100 to 200 requests per windowMs to handle normal usage better
   message: errorResponse('Too many requests from this IP, please try again later.', 429),
   standardHeaders: true,
   legacyHeaders: false,
+  // Skip rate limiting for certain endpoints
+  skip: (req) => {
+    // Skip rate limiting for health checks
+    return req.path === '/health';
+  }
 });
 
 app.use(limiter);

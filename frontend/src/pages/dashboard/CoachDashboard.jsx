@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getCoachDashboard, getCoachEvents, updateEvent, deleteEvent, getEventRegistrations, getNotifications, markNotificationAsRead } from '../../api';
+import { getCoachDashboard, getCoachEvents, updateEvent, deleteEvent, getEventRegistrations, getNotifications, getNotificationCount, markNotificationAsRead } from '../../api';
 import StudentCard from '../../components/StudentCard';
 import Spinner from '../../components/Spinner';
 import CoachParticipantsModal from '../../components/CoachParticipantsModal';
@@ -55,15 +55,43 @@ const CoachDashboard = () => {
   
   // Use ref to track if initial load is done
   const initialLoadDone = useRef(false);
+  const notificationCache = useRef({ timestamp: 0, data: [] });
+  const CACHE_DURATION = 60000; // 1 minute cache
 
-  // Memoize loadNotifications to prevent infinite re-renders
-  const loadNotifications = useCallback(async () => {
+  // Lightweight function to only fetch notification count (for polling)
+  const loadNotificationCount = useCallback(async () => {
+    try {
+      const response = await getNotificationCount();
+      if (response.success) {
+        setUnreadCount(response.data.unreadCount || 0);
+      }
+    } catch (error) {
+      console.error('Failed to load notification count:', error);
+    }
+  }, []);
+
+  // Full notifications load - only called when user opens notification panel
+  const loadNotifications = useCallback(async (force = false) => {
+    // Check cache first
+    const now = Date.now();
+    if (!force && notificationCache.current.timestamp && (now - notificationCache.current.timestamp) < CACHE_DURATION) {
+      setNotifications(notificationCache.current.data);
+      return;
+    }
+
     try {
       setLoadingNotifications(true);
       const response = await getNotifications({ limit: 10 });
       if (response.success) {
-        setNotifications(response.data.notifications || []);
+        const notifData = response.data.notifications || [];
+        setNotifications(notifData);
         setUnreadCount(response.data.unreadCount || 0);
+        
+        // Update cache
+        notificationCache.current = {
+          timestamp: now,
+          data: notifData
+        };
       }
     } catch (error) {
       console.error('Failed to load notifications:', error);
@@ -148,7 +176,7 @@ const CoachDashboard = () => {
     if (!initialLoadDone.current) {
       initialLoadDone.current = true;
       loadDashboardData();
-      loadNotifications();
+      loadNotificationCount(); // Only load count initially
     }
     
     // Check if redirected from payment success
@@ -156,13 +184,14 @@ const CoachDashboard = () => {
       setPaymentSuccess(true);
       setTimeout(() => setPaymentSuccess(false), 5000);
     }
-  }, [location.state?.paymentSuccess, loadDashboardData, loadNotifications]);
+  }, [location.state?.paymentSuccess, loadDashboardData, loadNotificationCount]);
 
-  // Set up polling for notifications - separate effect
+  // Set up polling for notification count ONLY - much more efficient
   useEffect(() => {
-    const interval = setInterval(loadNotifications, 30000);
+    // Poll every 3 minutes instead of 30 seconds
+    const interval = setInterval(loadNotificationCount, 180000); // 3 minutes
     return () => clearInterval(interval);
-  }, [loadNotifications]);
+  }, [loadNotificationCount]);
 
   // Load events when tab changes
   useEffect(() => {
@@ -345,13 +374,19 @@ const CoachDashboard = () => {
     if (!notification.isRead) {
       try {
         await markNotificationAsRead(notification.id);
-        setNotifications(prev => 
-          prev.map(n => 
-            n.id === notification.id 
-              ? { ...n, isRead: true, readAt: new Date() }
-              : n
-          )
+        const updatedNotifications = notifications.map(n => 
+          n.id === notification.id 
+            ? { ...n, isRead: true, readAt: new Date() }
+            : n
         );
+        setNotifications(updatedNotifications);
+        
+        // Update cache
+        notificationCache.current = {
+          timestamp: Date.now(),
+          data: updatedNotifications
+        };
+        
         setUnreadCount(prev => Math.max(0, prev - 1));
       } catch (error) {
         console.error('Failed to mark notification as read:', error);
@@ -463,8 +498,8 @@ const CoachDashboard = () => {
           </div>
         )}
 
-        {/* Notifications Section */}
-        {notifications.length > 0 && (
+        {/* Notifications Section - Only show if we have notifications OR if the panel is expanded */}
+        {(notifications.length > 0 || unreadCount > 0) && (
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center">
@@ -477,7 +512,14 @@ const CoachDashboard = () => {
                 )}
               </h3>
               <button
-                onClick={() => setShowNotifications(!showNotifications)}
+                onClick={() => {
+                  const newState = !showNotifications;
+                  setShowNotifications(newState);
+                  // Load full notifications only when opening the panel
+                  if (newState) {
+                    loadNotifications(true); // Force reload
+                  }
+                }}
                 className="text-blue-600 hover:text-blue-800 text-sm font-medium"
               >
                 {showNotifications ? 'Hide' : 'View All'}
