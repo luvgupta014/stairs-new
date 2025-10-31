@@ -14,35 +14,25 @@ const GoogleMapsPlacesAutocomplete = ({
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [isManualMode, setIsManualMode] = useState(false);
-  const scriptLoadedRef = useRef(false);
 
-  const checkGoogleMapsAvailability = () => {
-    return (
-      window.google &&
-      window.google.maps &&
-      window.google.maps.places &&
-      window.google.maps.places.Autocomplete
-    );
-  };
+  // ✅ Check Maps availability
+  const checkGoogleMapsAvailability = () =>
+    window.google?.maps?.places?.Autocomplete;
 
+  // ✅ Initialize Autocomplete
   const initializeAutocomplete = () => {
     console.log("Attempting to initialize autocomplete...");
 
     if (!inputRef.current) {
-      console.error("Input ref not available. Initialization aborted.");
-      setLoadError("Input field not found. Please refresh the page.");
+      console.error("❌ Input ref not available.");
+      setLoadError("Input field not found. Please refresh.");
       setIsManualMode(true);
       setIsLoaded(true);
       return;
     }
 
     if (!checkGoogleMapsAvailability()) {
-      console.error("Google Maps dependencies not available", {
-        google: !!window.google,
-        maps: !!window.google?.maps,
-        places: !!window.google?.maps?.places,
-        Autocomplete: !!window.google?.maps?.places?.Autocomplete,
-      });
+      console.error("❌ Google Maps dependencies not available.");
       setLoadError("Google Maps API not properly loaded.");
       setIsManualMode(true);
       setIsLoaded(true);
@@ -50,7 +40,6 @@ const GoogleMapsPlacesAutocomplete = ({
     }
 
     try {
-      // Clear any existing autocomplete
       if (autocompleteRef.current) {
         window.google.maps.event.clearInstanceListeners(
           autocompleteRef.current
@@ -67,7 +56,6 @@ const GoogleMapsPlacesAutocomplete = ({
             "formatted_address",
             "address_components",
             "geometry",
-            "types",
           ],
         }
       );
@@ -76,15 +64,8 @@ const GoogleMapsPlacesAutocomplete = ({
 
       autocomplete.addListener("place_changed", () => {
         const place = autocomplete.getPlace();
+        if (!place.geometry) return;
 
-        console.log("Place changed:", place);
-
-        if (!place.geometry) {
-          console.log("No geometry available for:", place.name);
-          return;
-        }
-
-        // Extract place details
         const placeData = {
           placeId: place.place_id,
           name: place.name || "",
@@ -96,142 +77,106 @@ const GoogleMapsPlacesAutocomplete = ({
           country: "",
         };
 
-        // Parse address components
         if (place.address_components) {
-          place.address_components.forEach((component) => {
-            const types = component.types;
-
-            if (
-              types.includes("locality") ||
-              types.includes("administrative_area_level_2")
-            ) {
-              placeData.city = component.long_name;
-            } else if (types.includes("administrative_area_level_1")) {
-              placeData.state = component.long_name;
-            } else if (types.includes("country")) {
-              placeData.country = component.long_name;
-            }
+          place.address_components.forEach((c) => {
+            if (c.types.includes("locality")) placeData.city = c.long_name;
+            if (c.types.includes("administrative_area_level_1"))
+              placeData.state = c.long_name;
+            if (c.types.includes("country")) placeData.country = c.long_name;
           });
         }
 
-        console.log("Extracted place data:", placeData);
+        console.log("✅ Place selected:", placeData);
         onPlaceSelect?.(placeData);
       });
 
-      console.log("Autocomplete initialized successfully");
+      console.log("✅ Autocomplete initialized");
       setIsLoaded(true);
-    } catch (error) {
-      console.error("Autocomplete initialization error:", error);
+    } catch (err) {
+      console.error("❌ Autocomplete initialization error:", err);
       setLoadError("Failed to initialize autocomplete.");
       setIsManualMode(true);
       setIsLoaded(true);
     }
   };
 
+  // ✅ Load Google Maps script safely
   const loadGoogleMaps = () => {
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
     if (!apiKey) {
-      console.error(
-        "Google Maps API key not found. Manual input mode enabled."
-      );
-      setLoadError(
-        "Google Maps API not available. Please enter address manually."
-      );
+      console.error("❌ Google Maps API key missing.");
+      setLoadError("Google Maps API not configured.");
       setIsManualMode(true);
       setIsLoaded(true);
       return;
     }
 
-    // Check if already loaded
     if (checkGoogleMapsAvailability()) {
-      console.log("Google Maps already available");
+      console.log("✅ Google Maps already available.");
       initializeAutocomplete();
       return;
     }
 
-    // Check if script is already loading/loaded
     const existingScript = document.querySelector(
-      `script[src*="maps.googleapis.com"]`
+      `script[src*="maps.googleapis.com/maps/api/js"]`
     );
-    if (existingScript && !scriptLoadedRef.current) {
-      console.log("Google Maps script already exists, waiting for load...");
-
-      existingScript.addEventListener("load", () => {
-        scriptLoadedRef.current = true;
-        initializeAutocomplete();
-      });
-
-      existingScript.addEventListener("error", () => {
-        console.error("Failed to load Google Maps script");
-        setLoadError("Failed to load Google Maps script.");
-        setIsManualMode(true);
-        setIsLoaded(true);
-      });
-
+    if (existingScript) {
+      console.log("⚙️ Script already exists — waiting for it to finish loading...");
+      existingScript.addEventListener("load", initializeAutocomplete);
       return;
     }
 
-    if (scriptLoadedRef.current) {
-      return; // Already loaded by this instance
-    }
-
-    console.log("Loading Google Maps script...");
-
-    // Create unique callback name to avoid conflicts
+    console.log("🚀 Injecting new Google Maps script...");
     const callbackName = `initGoogleMaps_${Date.now()}`;
 
     window[callbackName] = () => {
-      console.log("✅ Google Maps callback triggered");
-      scriptLoadedRef.current = true;
-
-      // Wait until inputRef is ready before initializing
-      const waitForInput = setInterval(() => {
+      console.log("✅ Google Maps callback triggered.");
+      setTimeout(() => {
         if (inputRef.current) {
-          clearInterval(waitForInput);
-          console.log("✅ Input ready — initializing autocomplete");
           initializeAutocomplete();
+        } else {
+          const wait = setInterval(() => {
+            if (inputRef.current) {
+              clearInterval(wait);
+              initializeAutocomplete();
+            }
+          }, 300);
+          setTimeout(() => clearInterval(wait), 5000);
         }
-      }, 300);
-
-      // safety timeout in case input never appears
-      setTimeout(() => clearInterval(waitForInput), 5000);
-
+      }, 100);
       delete window[callbackName];
-    }; 
+    };
 
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=${callbackName}`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=${callbackName}&v=weekly`;
     script.async = true;
     script.defer = true;
-
     script.onerror = () => {
-      console.error("Failed to load Google Maps script");
-      setLoadError("Failed to load Google Maps script.");
+      console.error("❌ Failed to load Google Maps script.");
+      setLoadError("Failed to load Google Maps API.");
       setIsManualMode(true);
       setIsLoaded(true);
       delete window[callbackName];
     };
 
     document.head.appendChild(script);
+
+    // ⏳ Safety timeout (prevents endless loading)
+    setTimeout(() => {
+      if (!window.google?.maps?.places && !isLoaded) {
+        console.warn("⚠️ Timeout: switching to manual mode.");
+        setIsManualMode(true);
+        setIsLoaded(true);
+      }
+    }, 10000);
   };
 
+  // ✅ Effect: run once
   useEffect(() => {
     loadGoogleMaps();
 
-    // Wait for the input element to mount before initializing autocomplete
-    const observer = new MutationObserver(() => {
-      if (inputRef.current) {
-        observer.disconnect();
-        initializeAutocomplete();
-      }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    // Cleanup
     return () => {
-      observer.disconnect();
       if (autocompleteRef.current && window.google?.maps?.event) {
         window.google.maps.event.clearInstanceListeners(
           autocompleteRef.current
@@ -284,7 +229,7 @@ const GoogleMapsPlacesAutocomplete = ({
 
       <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center">
         {isManualMode ? (
-          <FaMapMarkerAlt
+          <FaExclamationTriangle
             className="text-amber-500 w-4 h-4"
             title="Manual input mode - Google Maps unavailable"
           />
@@ -295,27 +240,6 @@ const GoogleMapsPlacesAutocomplete = ({
           />
         )}
       </div>
-
-      {/* {loadError && isManualMode && (
-        <div className="mt-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2">
-          <div className="flex items-start">
-            <FaExclamationTriangle className="w-3 h-3 mt-0.5 mr-2 flex-shrink-0" />
-            <div>
-              <p className="font-medium">Smart search unavailable</p>
-              <p className="mt-1">{loadError}</p>
-              <p className="mt-1 text-amber-700">
-                💡 <strong>Ad Blocker Detected:</strong> Smart venue search is
-                blocked. Please disable ad blocker for this site, or continue
-                with manual entry below.
-              </p>
-              <p className="mt-1 text-green-700">
-                ✓ <strong>Manual Mode Active:</strong> You can still enter
-                complete venue details manually.
-              </p>
-            </div>
-          </div>
-        </div>
-      )} */}
 
       {!isManualMode && !loadError && (
         <div className="mt-1 text-xs text-green-600">
