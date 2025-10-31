@@ -11,42 +11,34 @@ const GoogleMapsPlacesAutocomplete = ({
 }) => {
   const inputRef = useRef(null);
   const autocompleteRef = useRef(null);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [isApiReady, setIsApiReady] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [isManualMode, setIsManualMode] = useState(false);
-  const [debugInfo, setDebugInfo] = useState("");
-  const loadingTimeoutRef = useRef(null);
-  const initAttemptRef = useRef(0);
+  const intervalRef = useRef(null);
+  const timeoutRef = useRef(null);
 
   const checkGoogleMapsAvailability = () =>
     window.google?.maps?.places?.Autocomplete;
 
   const initializeAutocomplete = () => {
-    console.log("🔧 Attempting to initialize autocomplete...");
+    console.log("🔧 Initializing autocomplete with input:", inputRef.current);
 
     if (!inputRef.current) {
-      console.error("❌ Input ref not available.");
-      setLoadError("Input field not found. Please refresh.");
-      setDebugInfo("Input ref missing");
-      setIsManualMode(true);
-      setIsLoaded(true);
+      console.error("❌ Input ref not available");
       return;
     }
 
     if (!checkGoogleMapsAvailability()) {
-      console.error("❌ Google Maps dependencies not available.");
+      console.error("❌ Google Maps API not available");
       setLoadError("Google Maps API not properly loaded.");
-      setDebugInfo("Maps API not available");
       setIsManualMode(true);
-      setIsLoaded(true);
       return;
     }
 
     try {
-      if (autocompleteRef.current) {
-        window.google.maps.event.clearInstanceListeners(
-          autocompleteRef.current
-        );
+      // Clear existing listener
+      if (autocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(autocompleteRef.current);
       }
 
       const autocomplete = new window.google.maps.places.Autocomplete(
@@ -67,7 +59,12 @@ const GoogleMapsPlacesAutocomplete = ({
 
       autocomplete.addListener("place_changed", () => {
         const place = autocomplete.getPlace();
-        if (!place.geometry) return;
+        console.log("📍 Place changed:", place);
+
+        if (!place.geometry) {
+          console.warn("⚠️ No geometry for place");
+          return;
+        }
 
         const placeData = {
           placeId: place.place_id,
@@ -94,22 +91,20 @@ const GoogleMapsPlacesAutocomplete = ({
       });
 
       console.log("✅ Autocomplete initialized successfully");
-      setIsLoaded(true);
-      setDebugInfo("Loaded successfully");
-      
-      // Clear any pending timeouts
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-        loadingTimeoutRef.current = null;
-      }
     } catch (err) {
       console.error("❌ Autocomplete initialization error:", err);
       setLoadError(`Failed to initialize: ${err.message}`);
-      setDebugInfo(`Error: ${err.message}`);
       setIsManualMode(true);
-      setIsLoaded(true);
     }
   };
+
+  // Effect to initialize autocomplete when both API and input are ready
+  useEffect(() => {
+    if (isApiReady && inputRef.current && !autocompleteRef.current) {
+      console.log("🎯 Both API and input ready - initializing");
+      initializeAutocomplete();
+    }
+  }, [isApiReady, inputRef.current]);
 
   const loadGoogleMaps = () => {
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -121,18 +116,17 @@ const GoogleMapsPlacesAutocomplete = ({
     console.log("- Full URL:", window.location.href);
 
     if (!apiKey) {
-      console.error("❌ Google Maps API key missing.");
-      setLoadError("Google Maps API key not configured in environment.");
-      setDebugInfo("API key missing");
+      console.error("❌ Google Maps API key missing");
+      setLoadError("Google Maps API key not configured.");
       setIsManualMode(true);
-      setIsLoaded(true);
+      setIsApiReady(true); // Set to true so component shows input
       return;
     }
 
     // Check if already loaded
     if (checkGoogleMapsAvailability()) {
-      console.log("✅ Google Maps already available.");
-      initializeAutocomplete();
+      console.log("✅ Google Maps already available");
+      setIsApiReady(true);
       return;
     }
 
@@ -140,129 +134,107 @@ const GoogleMapsPlacesAutocomplete = ({
     const existingScript = document.querySelector(
       `script[src*="maps.googleapis.com/maps/api/js"]`
     );
-    
+
     if (existingScript) {
-      console.log("⚙️ Script already exists – waiting for it to finish loading...");
-      
-      // Set up a polling mechanism instead of relying on events
-      const checkInterval = setInterval(() => {
-        if (checkGoogleMapsAvailability() && inputRef.current) {
-          clearInterval(checkInterval);
-          if (loadingTimeoutRef.current) {
-            clearTimeout(loadingTimeoutRef.current);
-          }
-          console.log("✅ Places API ready via polling");
-          initializeAutocomplete();
+      console.log("⚙️ Script already exists - polling for API");
+
+      intervalRef.current = setInterval(() => {
+        if (checkGoogleMapsAvailability()) {
+          console.log("✅ API ready via polling (existing script)");
+          clearInterval(intervalRef.current);
+          clearTimeout(timeoutRef.current);
+          setIsApiReady(true);
         }
       }, 100);
 
-      // Set up timeout
-      loadingTimeoutRef.current = setTimeout(() => {
-        clearInterval(checkInterval);
-        if (!checkGoogleMapsAvailability()) {
-          console.warn("⚠️ Existing script timeout - Maps API didn't load");
-          setLoadError("Google Maps failed to load. Please refresh the page.");
-          setDebugInfo("Existing script timeout");
-          setIsManualMode(true);
-          setIsLoaded(true);
-        }
-      }, 20000); // Increased to 20 seconds for slower connections
+      timeoutRef.current = setTimeout(() => {
+        clearInterval(intervalRef.current);
+        console.warn("⚠️ Timeout waiting for existing script");
+        setLoadError("Google Maps failed to load. Please refresh.");
+        setIsManualMode(true);
+        setIsApiReady(true); // Show input anyway
+      }, 20000);
 
       return;
     }
 
     // Create new script
-    console.log("🚀 Injecting new Google Maps script...");
+    console.log("🚀 Creating new Google Maps script");
     const callbackName = `initGoogleMaps_${Date.now()}`;
 
     window[callbackName] = () => {
-      console.log("✅ Google Maps callback triggered.");
-      
-      // Use polling to wait for everything to be ready
-      const checkInterval = setInterval(() => {
-        if (inputRef.current && checkGoogleMapsAvailability()) {
-          clearInterval(checkInterval);
-          if (loadingTimeoutRef.current) {
-            clearTimeout(loadingTimeoutRef.current);
-          }
-          console.log("✅ Everything ready, initializing autocomplete");
-          initializeAutocomplete();
-        } else {
-          initAttemptRef.current++;
-          console.log(`⏳ Waiting... attempt ${initAttemptRef.current}`);
-        }
-      }, 200);
+      console.log("✅ Callback triggered");
+      clearTimeout(timeoutRef.current);
 
-      // Set timeout
-      loadingTimeoutRef.current = setTimeout(() => {
-        clearInterval(checkInterval);
-        if (!checkGoogleMapsAvailability()) {
-          console.error("❌ Timeout: Places API not available after callback");
-          setLoadError("Failed to initialize Places library");
-          setDebugInfo("Callback timeout");
+      // Wait a tiny bit for Places library to fully initialize
+      setTimeout(() => {
+        if (checkGoogleMapsAvailability()) {
+          console.log("✅ Places API confirmed available");
+          setIsApiReady(true);
+        } else {
+          console.error("❌ Places API not available after callback");
+          setLoadError("Places library failed to load");
           setIsManualMode(true);
-          setIsLoaded(true);
+          setIsApiReady(true);
         }
-      }, 10000);
-      
+      }, 100);
+
       delete window[callbackName];
     };
 
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=${callbackName}&v=weekly&loading=async`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=${callbackName}&v=weekly`;
     script.async = true;
     script.defer = true;
-    
-    script.onerror = (e) => {
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-      console.error("❌ Failed to load Google Maps script:", e);
-      console.error("Possible causes:");
-      console.error("1. Invalid API key");
-      console.error("2. Domain not authorized (check API restrictions)");
-      console.error("3. Billing not enabled");
-      console.error("4. Network/firewall blocking request");
-      setLoadError("Failed to load Google Maps API. Check console for details.");
-      setDebugInfo("Script load error");
+
+    script.onerror = () => {
+      console.error("❌ Script failed to load");
+      console.error("Check:");
+      console.error("1. API key validity");
+      console.error("2. Domain restrictions in Google Cloud Console");
+      console.error("3. Billing enabled");
+      clearTimeout(timeoutRef.current);
+      setLoadError("Failed to load Google Maps API");
       setIsManualMode(true);
-      setIsLoaded(true);
+      setIsApiReady(true); // Show input anyway
       delete window[callbackName];
     };
 
-    script.onload = () => {
-      console.log("📦 Script loaded, waiting for callback...");
-    };
+    timeoutRef.current = setTimeout(() => {
+      console.warn("⚠️ Script load timeout");
+      setLoadError("Google Maps API load timeout");
+      setIsManualMode(true);
+      setIsApiReady(true); // Show input anyway
+      delete window[callbackName];
+    }, 15000);
 
     document.head.appendChild(script);
+    console.log("📦 Script tag added to document");
   };
 
   useEffect(() => {
     loadGoogleMaps();
 
     return () => {
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (autocompleteRef.current && window.google?.maps?.event) {
-        window.google.maps.event.clearInstanceListeners(
-          autocompleteRef.current
-        );
+        window.google.maps.event.clearInstanceListeners(autocompleteRef.current);
       }
     };
   }, []);
 
   const handleInputChange = (e) => {
-    const syntheticEvent = {
+    onChange?.({
       target: {
         name: "venue",
         value: e.target.value,
       },
-    };
-    onChange?.(syntheticEvent);
+    });
   };
 
-  if (!isLoaded) {
+  // Show loading state only while waiting for API
+  if (!isApiReady) {
     return (
       <div className="relative">
         <input
@@ -277,36 +249,39 @@ const GoogleMapsPlacesAutocomplete = ({
           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
         </div>
         <div className="mt-1 text-xs text-gray-500">
-          Initializing venue search... {initAttemptRef.current > 0 && `(attempt ${initAttemptRef.current})`}
+          Initializing venue search...
         </div>
       </div>
     );
   }
 
+  // Show actual input once API is ready (or failed)
   return (
     <div className="relative">
       <input
         ref={inputRef}
         type="text"
+        name="venue"
         value={value || ""}
         onChange={handleInputChange}
         placeholder={
-          isManualMode ? `${placeholder} (Manual input)` : placeholder
+          isManualMode ? `${placeholder} (Manual entry)` : placeholder
         }
-        className={`${className} ${isManualMode ? "pr-10" : "pr-8"}`}
+        className={className}
         disabled={disabled}
+        autoComplete="off"
       />
 
-      <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center">
+      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
         {isManualMode ? (
           <FaExclamationTriangle
             className="text-amber-500 w-4 h-4"
-            title={`Manual input mode - ${loadError || 'Google Maps unavailable'}`}
+            title="Manual input mode - Google Maps unavailable"
           />
         ) : (
           <FaMapMarkerAlt
             className="text-green-500 w-4 h-4"
-            title="Smart venue search enabled"
+            title="Google Maps search enabled"
           />
         )}
       </div>
@@ -315,16 +290,15 @@ const GoogleMapsPlacesAutocomplete = ({
         <div className="mt-1 text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
           <div className="font-semibold">⚠️ Google Maps Unavailable</div>
           <div className="mt-1">{loadError}</div>
-          <div className="mt-1 text-gray-600">Please enter venue details manually</div>
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mt-1 text-gray-500 text-xs">Debug: {debugInfo}</div>
-          )}
+          <div className="mt-1 text-gray-600">
+            Please enter venue details manually
+          </div>
         </div>
       )}
 
-      {!isManualMode && !loadError && (
+      {!isManualMode && (
         <div className="mt-1 text-xs text-green-600">
-          ✓ Start typing to see venue suggestions from Google Maps
+          ✓ Start typing to search venues on Google Maps
         </div>
       )}
     </div>
