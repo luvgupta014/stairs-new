@@ -52,7 +52,9 @@ const GoogleMapsPlacesAutocomplete = ({
     try {
       // Clear any existing autocomplete
       if (autocompleteRef.current) {
-        window.google.maps.event.clearInstanceListeners(autocompleteRef.current);
+        window.google.maps.event.clearInstanceListeners(
+          autocompleteRef.current
+        );
       }
 
       const autocomplete = new window.google.maps.places.Autocomplete(
@@ -130,8 +132,12 @@ const GoogleMapsPlacesAutocomplete = ({
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
     if (!apiKey) {
-      console.error("Google Maps API key not found. Manual input mode enabled.");
-      setLoadError("Google Maps API not available. Please enter address manually.");
+      console.error(
+        "Google Maps API key not found. Manual input mode enabled."
+      );
+      setLoadError(
+        "Google Maps API not available. Please enter address manually."
+      );
       setIsManualMode(true);
       setIsLoaded(true);
       return;
@@ -176,9 +182,21 @@ const GoogleMapsPlacesAutocomplete = ({
     const callbackName = `initGoogleMaps_${Date.now()}`;
 
     window[callbackName] = () => {
-      console.log("Google Maps callback triggered");
+      console.log("✅ Google Maps callback triggered");
       scriptLoadedRef.current = true;
-      initializeAutocomplete();
+
+      // Wait until inputRef is ready before initializing
+      const waitForInput = setInterval(() => {
+        if (inputRef.current) {
+          clearInterval(waitForInput);
+          console.log("✅ Input ready — initializing autocomplete");
+          initializeAutocomplete();
+        }
+      }, 300);
+
+      // safety timeout in case input never appears
+      setTimeout(() => clearInterval(waitForInput), 5000);
+
       delete window[callbackName];
     };
 
@@ -215,7 +233,9 @@ const GoogleMapsPlacesAutocomplete = ({
     return () => {
       observer.disconnect();
       if (autocompleteRef.current && window.google?.maps?.event) {
-        window.google.maps.event.clearInstanceListeners(autocompleteRef.current);
+        window.google.maps.event.clearInstanceListeners(
+          autocompleteRef.current
+        );
       }
     };
   }, []);
@@ -284,10 +304,13 @@ const GoogleMapsPlacesAutocomplete = ({
               <p className="font-medium">Smart search unavailable</p>
               <p className="mt-1">{loadError}</p>
               <p className="mt-1 text-amber-700">
-                💡 <strong>Ad Blocker Detected:</strong> Smart venue search is blocked. Please disable ad blocker for this site, or continue with manual entry below.
+                💡 <strong>Ad Blocker Detected:</strong> Smart venue search is
+                blocked. Please disable ad blocker for this site, or continue
+                with manual entry below.
               </p>
               <p className="mt-1 text-green-700">
-                ✓ <strong>Manual Mode Active:</strong> You can still enter complete venue details manually.
+                ✓ <strong>Manual Mode Active:</strong> You can still enter
+                complete venue details manually.
               </p>
             </div>
           </div>
