@@ -16,6 +16,7 @@ const GoogleMapsPlacesAutocomplete = ({
   const [isManualMode, setIsManualMode] = useState(false);
   const [debugInfo, setDebugInfo] = useState("");
   const loadingTimeoutRef = useRef(null);
+  const initAttemptRef = useRef(0);
 
   const checkGoogleMapsAvailability = () =>
     window.google?.maps?.places?.Autocomplete;
@@ -95,6 +96,12 @@ const GoogleMapsPlacesAutocomplete = ({
       console.log("✅ Autocomplete initialized successfully");
       setIsLoaded(true);
       setDebugInfo("Loaded successfully");
+      
+      // Clear any pending timeouts
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
     } catch (err) {
       console.error("❌ Autocomplete initialization error:", err);
       setLoadError(`Failed to initialize: ${err.message}`);
@@ -137,49 +144,30 @@ const GoogleMapsPlacesAutocomplete = ({
     if (existingScript) {
       console.log("⚙️ Script already exists – waiting for it to finish loading...");
       
-      if (existingScript.dataset.loaded === 'true' && checkGoogleMapsAvailability()) {
-        initializeAutocomplete();
-      } else {
-        // Set up timeout for existing script
-        loadingTimeoutRef.current = setTimeout(() => {
-          if (!checkGoogleMapsAvailability()) {
-            console.warn("⚠️ Existing script timeout - Maps API didn't load");
-            setLoadError("Google Maps failed to load. Please refresh the page.");
-            setDebugInfo("Existing script timeout");
-            setIsManualMode(true);
-            setIsLoaded(true);
+      // Set up a polling mechanism instead of relying on events
+      const checkInterval = setInterval(() => {
+        if (checkGoogleMapsAvailability() && inputRef.current) {
+          clearInterval(checkInterval);
+          if (loadingTimeoutRef.current) {
+            clearTimeout(loadingTimeoutRef.current);
           }
-        }, 15000);
+          console.log("✅ Places API ready via polling");
+          initializeAutocomplete();
+        }
+      }, 100);
 
-        existingScript.addEventListener("load", () => {
-          if (loadingTimeoutRef.current) {
-            clearTimeout(loadingTimeoutRef.current);
-          }
-          existingScript.dataset.loaded = 'true';
-          // Wait a bit for places library to initialize
-          setTimeout(() => {
-            if (checkGoogleMapsAvailability()) {
-              initializeAutocomplete();
-            } else {
-              console.error("❌ Places library not available after script load");
-              setLoadError("Places library failed to load.");
-              setIsManualMode(true);
-              setIsLoaded(true);
-            }
-          }, 500);
-        });
-        
-        existingScript.addEventListener("error", (e) => {
-          if (loadingTimeoutRef.current) {
-            clearTimeout(loadingTimeoutRef.current);
-          }
-          console.error("❌ Existing script failed to load:", e);
-          setLoadError("Google Maps script failed to load. Check API key and domain restrictions.");
-          setDebugInfo("Script load error");
+      // Set up timeout
+      loadingTimeoutRef.current = setTimeout(() => {
+        clearInterval(checkInterval);
+        if (!checkGoogleMapsAvailability()) {
+          console.warn("⚠️ Existing script timeout - Maps API didn't load");
+          setLoadError("Google Maps failed to load. Please refresh the page.");
+          setDebugInfo("Existing script timeout");
           setIsManualMode(true);
           setIsLoaded(true);
-        });
-      }
+        }
+      }, 20000); // Increased to 20 seconds for slower connections
+
       return;
     }
 
@@ -189,32 +177,33 @@ const GoogleMapsPlacesAutocomplete = ({
 
     window[callbackName] = () => {
       console.log("✅ Google Maps callback triggered.");
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
       
-      // Wait for DOM and Places library
-      setTimeout(() => {
+      // Use polling to wait for everything to be ready
+      const checkInterval = setInterval(() => {
         if (inputRef.current && checkGoogleMapsAvailability()) {
+          clearInterval(checkInterval);
+          if (loadingTimeoutRef.current) {
+            clearTimeout(loadingTimeoutRef.current);
+          }
+          console.log("✅ Everything ready, initializing autocomplete");
           initializeAutocomplete();
         } else {
-          const waitInterval = setInterval(() => {
-            if (inputRef.current && checkGoogleMapsAvailability()) {
-              clearInterval(waitInterval);
-              initializeAutocomplete();
-            }
-          }, 100);
-          
-          setTimeout(() => {
-            clearInterval(waitInterval);
-            if (!checkGoogleMapsAvailability()) {
-              setLoadError("Failed to initialize Places library");
-              setIsManualMode(true);
-              setIsLoaded(true);
-            }
-          }, 5000);
+          initAttemptRef.current++;
+          console.log(`⏳ Waiting... attempt ${initAttemptRef.current}`);
         }
-      }, 100);
+      }, 200);
+
+      // Set timeout
+      loadingTimeoutRef.current = setTimeout(() => {
+        clearInterval(checkInterval);
+        if (!checkGoogleMapsAvailability()) {
+          console.error("❌ Timeout: Places API not available after callback");
+          setLoadError("Failed to initialize Places library");
+          setDebugInfo("Callback timeout");
+          setIsManualMode(true);
+          setIsLoaded(true);
+        }
+      }, 10000);
       
       delete window[callbackName];
     };
@@ -229,9 +218,13 @@ const GoogleMapsPlacesAutocomplete = ({
         clearTimeout(loadingTimeoutRef.current);
       }
       console.error("❌ Failed to load Google Maps script:", e);
-      console.error("Check: 1) API key validity, 2) Domain restrictions, 3) Billing enabled");
+      console.error("Possible causes:");
+      console.error("1. Invalid API key");
+      console.error("2. Domain not authorized (check API restrictions)");
+      console.error("3. Billing not enabled");
+      console.error("4. Network/firewall blocking request");
       setLoadError("Failed to load Google Maps API. Check console for details.");
-      setDebugInfo("Script injection failed");
+      setDebugInfo("Script load error");
       setIsManualMode(true);
       setIsLoaded(true);
       delete window[callbackName];
@@ -239,26 +232,9 @@ const GoogleMapsPlacesAutocomplete = ({
 
     script.onload = () => {
       console.log("📦 Script loaded, waiting for callback...");
-      script.dataset.loaded = 'true';
     };
 
     document.head.appendChild(script);
-
-    // Set overall timeout
-    loadingTimeoutRef.current = setTimeout(() => {
-      if (!checkGoogleMapsAvailability() && !isLoaded) {
-        console.warn("⚠️ Timeout: Maps API didn't load in 15 seconds");
-        console.warn("Possible causes:");
-        console.warn("1. Network issues or slow connection");
-        console.warn("2. API key restrictions (check domain whitelist)");
-        console.warn("3. Billing not enabled on Google Cloud");
-        console.warn("4. HTTPS required but using HTTP");
-        setLoadError("Google Maps API load timeout. Please refresh the page.");
-        setDebugInfo("Load timeout (15s)");
-        setIsManualMode(true);
-        setIsLoaded(true);
-      }
-    }, 15000);
   };
 
   useEffect(() => {
@@ -301,7 +277,7 @@ const GoogleMapsPlacesAutocomplete = ({
           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
         </div>
         <div className="mt-1 text-xs text-gray-500">
-          Initializing venue search... (This may take a few seconds)
+          Initializing venue search... {initAttemptRef.current > 0 && `(attempt ${initAttemptRef.current})`}
         </div>
       </div>
     );
