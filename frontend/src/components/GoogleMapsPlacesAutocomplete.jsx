@@ -198,7 +198,7 @@ const GoogleMapsPlacesAutocomplete = ({
       setTimeout(() => clearInterval(waitForInput), 5000);
 
       delete window[callbackName];
-    };
+    }; 
 
     const script = document.createElement("script");
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=${callbackName}`;
