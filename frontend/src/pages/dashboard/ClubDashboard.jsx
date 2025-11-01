@@ -217,7 +217,10 @@ const ClubDashboard = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-emerald-500">
+          <div 
+            className="bg-white rounded-xl shadow-md p-6 border-l-4 border-emerald-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            onClick={() => setActiveTab('members')}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Members</p>
@@ -232,7 +235,10 @@ const ClubDashboard = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500">
+          <div 
+            className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            onClick={() => setActiveTab('analytics')}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Monthly Revenue</p>
@@ -247,7 +253,10 @@ const ClubDashboard = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500">
+          <div 
+            className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            onClick={() => setActiveTab('events')}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Event Attendance</p>
@@ -262,7 +271,10 @@ const ClubDashboard = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-yellow-500">
+          <div 
+            className="bg-white rounded-xl shadow-md p-6 border-l-4 border-yellow-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            onClick={() => setActiveTab('facilities')}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Facility Usage</p>

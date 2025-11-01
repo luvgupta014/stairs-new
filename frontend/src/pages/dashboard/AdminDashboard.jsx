@@ -585,12 +585,14 @@ const AdminDashboard = () => {
             icon="👥"
             color="blue"
             growth={stats.monthlyGrowth}
+            onClick={() => setActiveTab('all')}
           />
           <StatCard
             title="Total Events"
             value={stats.totalEvents}
             icon="🎯"
             color="green"
+            onClick={() => setActiveTab('all')}
           />
           <StatCard
             title="Pending Events"
@@ -598,6 +600,7 @@ const AdminDashboard = () => {
             icon="⏳"
             color="orange"
             urgent={stats.pendingEvents > 0}
+            onClick={() => setActiveTab('pending')}
           />
           <StatCard
             title="Pending Approvals"
@@ -605,6 +608,7 @@ const AdminDashboard = () => {
             icon="👤"
             color="red"
             urgent={stats.pendingApprovals > 0}
+            onClick={() => setActiveTab('pending')}
           />
         </div>
 
@@ -1161,7 +1165,7 @@ const AdminDashboard = () => {
 };
 
 // Helper component for stat cards
-const StatCard = ({ title, value, icon, color, growth, urgent }) => {
+const StatCard = ({ title, value, icon, color, growth, urgent, onClick }) => {
   const colorClasses = {
     blue: 'bg-blue-500',
     green: 'bg-green-500',
@@ -1174,7 +1178,10 @@ const StatCard = ({ title, value, icon, color, growth, urgent }) => {
   };
 
   return (
-    <div className={`bg-white rounded-xl shadow-lg p-6 ${urgent ? 'border-l-4 border-orange-500' : ''}`}>
+    <div 
+      className={`bg-white rounded-xl shadow-lg p-6 ${urgent ? 'border-l-4 border-orange-500' : ''} ${onClick ? 'cursor-pointer hover:shadow-xl transition-shadow duration-200' : ''}`}
+      onClick={onClick}
+    >
       <div className="flex items-center justify-between">
         <div>
           <p className="text-gray-600 text-sm font-medium">{title}</p>

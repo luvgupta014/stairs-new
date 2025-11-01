@@ -388,7 +388,10 @@ const StudentDashboard = () => {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Connected Coaches */}
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500">
+          <div 
+            className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            onClick={() => setActiveTab('coaches')}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Connected Coaches</p>
@@ -403,7 +406,10 @@ const StudentDashboard = () => {
             </div>
           </div>
           {/* Events Registered */}
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500">
+          <div 
+            className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            onClick={() => setActiveTab('events')}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Events Registered</p>
@@ -418,7 +424,10 @@ const StudentDashboard = () => {
             </div>
           </div>
           {/* Available Events */}
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-500">
+          <div 
+            className="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            onClick={handleBrowseEvents}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Available Events</p>
@@ -433,7 +442,10 @@ const StudentDashboard = () => {
             </div>
           </div>
           {/* Profile Completion */}
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500">
+          <div 
+            className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            onClick={handleUpdateProfile}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Profile Completion</p>
