@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getInstituteDashboard, bulkUploadStudents } from '../../api';
 import Spinner from '../../components/Spinner';
 import Modal from '../../components/Modal';
@@ -14,6 +14,7 @@ const InstituteDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSport, setFilterSport] = useState('all');
+  const tabContentRef = useRef(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -220,7 +221,12 @@ const InstituteDashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div 
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
-            onClick={() => setActiveTab('students')}
+            onClick={() => {
+              setActiveTab('students');
+              setTimeout(() => {
+                tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
           >
             <div className="flex items-center justify-between">
               <div>
@@ -238,7 +244,12 @@ const InstituteDashboard = () => {
 
           <div 
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
-            onClick={() => setActiveTab('coaches')}
+            onClick={() => {
+              setActiveTab('coaches');
+              setTimeout(() => {
+                tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
           >
             <div className="flex items-center justify-between">
               <div>
@@ -256,7 +267,12 @@ const InstituteDashboard = () => {
 
           <div 
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
-            onClick={() => setActiveTab('analytics')}
+            onClick={() => {
+              setActiveTab('analytics');
+              setTimeout(() => {
+                tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
           >
             <div className="flex items-center justify-between">
               <div>
@@ -289,7 +305,7 @@ const InstituteDashboard = () => {
         </div>
 
         {/* Tab Navigation */}
-        <div className="bg-white rounded-lg shadow-md mb-8">
+        <div ref={tabContentRef} className="bg-white rounded-lg shadow-md mb-8">
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8 px-6">
               {[

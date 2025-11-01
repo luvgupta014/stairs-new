@@ -88,6 +88,7 @@ const AdminDashboard = () => {
   const dashboardCache = useRef({ timestamp: 0, data: null });
   const CACHE_DURATION = 120000; // 2 minutes cache
   const searchDebounceTimer = useRef(null);
+  const recentRegistrationsRef = useRef(null);
 
   // Modal helper functions
   const showInfoModal = (title, content, type = 'info', data = null) => {
@@ -585,7 +586,12 @@ const AdminDashboard = () => {
             icon="👥"
             color="blue"
             growth={stats.monthlyGrowth}
-            onClick={() => setActiveTab('all')}
+            onClick={() => {
+              setRegistrationFilters({ role: '', status: '', search: '' });
+              setTimeout(() => {
+                recentRegistrationsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
           />
           <StatCard
             title="Total Events"
@@ -619,24 +625,48 @@ const AdminDashboard = () => {
             value={stats.totalStudents}
             icon="🎓"
             color="indigo"
+            onClick={() => {
+              handleRegistrationFilterChange('role', 'STUDENT');
+              setTimeout(() => {
+                recentRegistrationsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
           />
           <StatCard
             title="Coaches"
             value={stats.totalCoaches}
             icon="🏆"
             color="purple"
+            onClick={() => {
+              handleRegistrationFilterChange('role', 'COACH');
+              setTimeout(() => {
+                recentRegistrationsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
           />
           <StatCard
             title="Institutes"
             value={stats.totalInstitutes}
             icon="🏫"
             color="pink"
+            onClick={() => {
+              handleRegistrationFilterChange('role', 'INSTITUTE');
+              setTimeout(() => {
+                recentRegistrationsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
           />
           <StatCard
             title="Clubs"
             value={stats.totalClubs}
             icon="🏟️"
             color="teal"
+            onClick={() => {
+              handleRegistrationFilterChange('role', 'CLUB');
+              setTimeout(() => {
+                recentRegistrationsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
           />
         </div>
 
@@ -966,7 +996,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* Recent Users */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
+        <div ref={recentRegistrationsRef} className="bg-white rounded-xl shadow-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-semibold text-gray-900">Recent Registrations ({getFilteredRecentUsers().length})</h3>
             <button

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   getStudentDashboard, 
   getAvailableCoaches, 
@@ -30,6 +30,8 @@ const StudentDashboard = () => {
   const [eventsFilter, setEventsFilter] = useState('all'); // all, registered, pending, approved
   const [modalSearchFilter, setModalSearchFilter] = useState('');
   const [modalSportFilter, setModalSportFilter] = useState('');
+  
+  const tabContentRef = useRef(null);
   
   const navigate = useNavigate();
   
@@ -390,7 +392,12 @@ const StudentDashboard = () => {
           {/* Connected Coaches */}
           <div 
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
-            onClick={() => setActiveTab('coaches')}
+            onClick={() => {
+              setActiveTab('coaches');
+              setTimeout(() => {
+                tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
           >
             <div className="flex items-center justify-between">
               <div>
@@ -408,7 +415,12 @@ const StudentDashboard = () => {
           {/* Events Registered */}
           <div 
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
-            onClick={() => setActiveTab('events')}
+            onClick={() => {
+              setActiveTab('events');
+              setTimeout(() => {
+                tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
           >
             <div className="flex items-center justify-between">
               <div>
@@ -467,7 +479,7 @@ const StudentDashboard = () => {
         </div>
 
         {/* Tab Navigation */}
-        <div className="bg-white rounded-lg shadow-md mb-8">
+        <div ref={tabContentRef} className="bg-white rounded-lg shadow-md mb-8">
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8 px-6">
               {[

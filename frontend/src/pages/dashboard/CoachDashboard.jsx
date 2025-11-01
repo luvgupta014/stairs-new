@@ -57,6 +57,7 @@ const CoachDashboard = () => {
   const initialLoadDone = useRef(false);
   const notificationCache = useRef({ timestamp: 0, data: [] });
   const CACHE_DURATION = 60000; // 1 minute cache
+  const tabContentRef = useRef(null);
 
   // Lightweight function to only fetch notification count (for polling)
   const loadNotificationCount = useCallback(async () => {
@@ -633,7 +634,12 @@ const CoachDashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div 
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
-            onClick={() => setActiveTab('students')}
+            onClick={() => {
+              setActiveTab('students');
+              setTimeout(() => {
+                tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
           >
             <div className="flex items-center justify-between">
               <div>
@@ -651,7 +657,12 @@ const CoachDashboard = () => {
 
           <div 
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
-            onClick={() => setActiveTab('events')}
+            onClick={() => {
+              setActiveTab('events');
+              setTimeout(() => {
+                tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
           >
             <div className="flex items-center justify-between">
               <div>
@@ -667,7 +678,15 @@ const CoachDashboard = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-yellow-500">
+          <div 
+            className="bg-white rounded-xl shadow-md p-6 border-l-4 border-yellow-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            onClick={() => {
+              setActiveTab('analytics');
+              setTimeout(() => {
+                tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Average Rating</p>
@@ -691,7 +710,15 @@ const CoachDashboard = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500">
+          <div 
+            className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            onClick={() => {
+              setActiveTab('analytics');
+              setTimeout(() => {
+                tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Revenue</p>
@@ -708,7 +735,7 @@ const CoachDashboard = () => {
         </div>
 
         {/* Tab Navigation */}
-        <div className="bg-white rounded-lg shadow-md mb-8">
+        <div ref={tabContentRef} className="bg-white rounded-lg shadow-md mb-8">
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8 px-6">
               {[
