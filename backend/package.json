@@ -11,7 +11,9 @@
     "railway:build": "npm ci && npx prisma generate",
     "railway:start": "node src/index.js",
     "deploy": "npx prisma db push && npm start",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "migrate:uid": "node scripts/migrateToNewUID.js",
+    "test:uid": "node scripts/testUIDGenerator.js"
   },
   "engines": {
     "node": ">=18.0.0"

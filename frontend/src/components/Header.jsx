@@ -367,8 +367,17 @@ const Header = () => {
                     <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
                       {getDisplayName().charAt(0).toUpperCase()}
                     </div>
-                    <span className="hidden md:block">{getDisplayName()}</span>
-                    <span className="text-xs text-gray-500 hidden md:block">({user.role})</span>
+                    <div className="hidden md:block">
+                      <div className="flex items-center space-x-2">
+                        <span>{getDisplayName()}</span>
+                        <span className="text-xs text-gray-500">({user.role})</span>
+                      </div>
+                      {user.uniqueId && (
+                        <div className="text-xs text-blue-600 font-medium">
+                          ID: {user.uniqueId}
+                        </div>
+                      )}
+                    </div>
                   </button>
                   
                   {showProfileDropdown && (

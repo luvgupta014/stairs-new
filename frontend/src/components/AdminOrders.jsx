@@ -688,7 +688,7 @@ const AdminOrders = () => {
                   >
                     <option value="PENDING">Pending</option>
                     <option value="CONFIRMED">Confirmed</option>
-                    <option value="PAYMENT_PENDING">Payment Pending</option>
+                    {/* <option value="PAYMENT_PENDING">Payment Pending</option> */}
                     <option value="PAID">Paid</option>
                     <option value="IN_PROGRESS">In Progress</option>
                     <option value="COMPLETED">Completed</option>

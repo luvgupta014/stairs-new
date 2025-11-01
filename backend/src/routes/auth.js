@@ -12,7 +12,7 @@ const {
   successResponse,
   errorResponse 
 } = require('../utils/helpers');
-const { generateUniqueId } = require('../utils/uniqueId');
+const { generateUID } = require('../utils/uidGenerator');
 const { sendOTPEmail, sendPasswordResetEmail, sendWelcomeEmail } = require('../utils/emailService');
 
 const router = express.Router();
@@ -196,9 +196,9 @@ router.post('/student/register', async (req, res) => {
     console.log('🔑 Generated OTP:', otp);
     console.log('⏰ OTP expires at:', otpExpires.toISOString());
 
-    // Generate unique ID for student
-    const uniqueId = generateUniqueId('STUDENT');
-    console.log('🆔 Generated unique ID:', uniqueId);
+    // Generate UID format: a00001DL112025
+    const uniqueId = await generateUID('STUDENT', state);
+    console.log('🆔 Generated UID:', uniqueId);
 
     // Hash password
     console.log('🔒 Hashing password...');
@@ -758,9 +758,9 @@ router.post('/coach/register', async (req, res) => {
     console.log('🔑 Generated OTP:', otp);
     console.log('⏰ OTP expires at:', otpExpires.toISOString());
 
-    // Generate unique ID for coach
-    const uniqueId = generateUniqueId('COACH');
-    console.log('🆔 Generated unique ID:', uniqueId);
+    // Generate UID format: c00001DL112025
+    const uniqueId = await generateUID('COACH', state);
+    console.log('🆔 Generated UID:', uniqueId);
 
     // Hash password
     console.log('🔒 Hashing password...');
@@ -964,9 +964,11 @@ router.post('/institute/register', async (req, res) => {
     console.log('🔑 Generated OTP:', otp);
     console.log('⏰ OTP expires at:', otpExpires.toISOString());
 
-    // Generate unique ID for institute
-    const uniqueId = generateUniqueId('INSTITUTE');
-    console.log('🆔 Generated unique ID:', uniqueId);
+    // Generate unique ID for institute (new UID format)
+    // Extract state from address or use a default
+    const instituteState = address?.split(',')[2]?.trim() || 'Delhi';
+    const uniqueId = await generateUID('INSTITUTE', instituteState);
+    console.log('🆔 Generated UID:', uniqueId);
 
     // Hash password
     console.log('🔒 Hashing password...');
@@ -1148,9 +1150,11 @@ router.post('/club/register', async (req, res) => {
     console.log('🔑 Generated OTP:', otp);
     console.log('⏰ OTP expires at:', otpExpires.toISOString());
 
-    // Generate unique ID for club
-    const uniqueId = generateUniqueId('CLUB');
-    console.log('🆔 Generated unique ID:', uniqueId);
+    // Generate unique ID for club (new UID format)
+    // Extract state from address or use a default
+    const clubState = address?.split(',')[2]?.trim() || 'Delhi';
+    const uniqueId = await generateUID('CLUB', clubState);
+    console.log('🆔 Generated UID:', uniqueId);
 
     // Hash password
     console.log('🔒 Hashing password...');
@@ -1301,6 +1305,13 @@ router.post('/login', async (req, res) => {
 
     // Check password
     console.log('🔒 Verifying password...');
+    
+    // Check if user has a password set
+    if (!user.password) {
+      console.log('❌ User has no password set:', email);
+      return res.status(401).json(errorResponse('Account setup incomplete. Please reset your password or contact support.', 401));
+    }
+    
     const isPasswordValid = await comparePassword(password, user.password);
     if (!isPasswordValid) {
       console.log('❌ Invalid password for user:', email);
@@ -1339,6 +1350,7 @@ router.post('/login', async (req, res) => {
       token,
       user: {
         id: user.id,
+        uniqueId: user.uniqueId,
         email: user.email,
         phone: user.phone,
         role: user.role,
