@@ -7,6 +7,7 @@ const {
   getPaginationParams, 
   getPaginationMeta 
 } = require('../utils/helpers');
+const { generateUID } = require('../utils/uidGenerator');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -228,9 +229,20 @@ router.post('/members', authenticate, requireClub, async (req, res) => {
         return res.status(409).json(errorResponse('User is already a member of this club.', 409));
       }
     } else {
+      // Get club's state for UID generation
+      const clubProfile = await prisma.club.findUnique({
+        where: { userId: req.user.id }
+      });
+      const clubState = clubProfile?.state || 'Delhi';
+      
+      // Generate uniqueId with new UID format
+      const uniqueId = await generateUID('STUDENT', clubState);
+      console.log('Generated UID for club member:', uniqueId);
+      
       // Create new user without password (they can set it later)
       const newUser = await prisma.user.create({
         data: {
+          uniqueId,
           email,
           phone,
           role: 'STUDENT',

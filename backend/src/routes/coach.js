@@ -9,6 +9,7 @@ const {
   getPaginationParams,
   getPaginationMeta
 } = require('../utils/helpers');
+const { generateUID } = require('../utils/uidGenerator');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -833,10 +834,16 @@ async function processBulkStudents(studentData, coachId, results, errors) {
           }
         }
 
+        // Generate uniqueId with new UID format
+        const studentState = state || 'Delhi'; // Default to Delhi if no state provided
+        const uniqueId = await generateUID('STUDENT', studentState);
+        console.log('Generated UID for student:', uniqueId);
+
         // Create user with student profile according to Prisma schema
         try {
           user = await prisma.user.create({
             data: {
+              uniqueId,
               email,
               phone,
               password: hashedPassword,

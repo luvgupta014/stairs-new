@@ -16,6 +16,7 @@ const {
   hashPassword,
   isValidExcelFile
 } = require('../utils/helpers');
+const { generateUID } = require('../utils/uidGenerator');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -349,9 +350,15 @@ router.post('/bulk-upload/students', authenticate, requireInstitute, requireAppr
         const password = rowData.firstName.toLowerCase() + rowData.phone.slice(-4);
         const hashedPassword = await hashPassword(password);
 
+        // Generate uniqueId with new UID format
+        const studentState = rowData.state || 'Delhi'; // Default to Delhi if no state provided
+        const uniqueId = await generateUID('STUDENT', studentState);
+        console.log('Generated UID for student:', uniqueId);
+
         // Create user and student
         const user = await prisma.user.create({
           data: {
+            uniqueId,
             email: rowData.email,
             phone: rowData.phone,
             password: hashedPassword,
@@ -523,9 +530,15 @@ router.post('/bulk-upload/coaches', authenticate, requireInstitute, requireAppro
         const certifications = rowData.certifications ? 
           rowData.certifications.split(',').map(cert => cert.trim()).filter(cert => cert) : [];
 
+        // Generate uniqueId with new UID format
+        const coachState = rowData.state || 'Delhi'; // Default to Delhi if no state provided
+        const uniqueId = await generateUID('COACH', coachState);
+        console.log('Generated UID for coach:', uniqueId);
+
         // Create user and coach
         const user = await prisma.user.create({
           data: {
+            uniqueId,
             email: rowData.email,
             phone: rowData.phone,
             password: hashedPassword,
