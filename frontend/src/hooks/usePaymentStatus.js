@@ -1,151 +1,71 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
-export const usePaymentStatus = () => {
-  const { user } = useAuth();
-  const [paymentStatus, setPaymentStatus] = useState(null);
+/**
+ * Custom hook to manage payment status and payment popup for coaches, institutes, and clubs
+ * @returns {Object} Payment status utilities
+ */
+const usePaymentStatus = () => {
+  const { user, refreshUser } = useAuth();
   const [showPaymentPopup, setShowPaymentPopup] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [isPending, setIsPending] = useState(false);
 
+  // Check payment status from user profile
   useEffect(() => {
-    checkPaymentStatus();
+    if (!user) {
+      setIsPending(false);
+      return;
+    }
+
+    // Get payment status based on user role
+    let paymentStatus = null;
+    
+    if (user.role === 'COACH' && user.profile) {
+      paymentStatus = user.profile.paymentStatus;
+    } else if (user.role === 'INSTITUTE' && user.profile) {
+      paymentStatus = user.profile.paymentStatus;
+    } else if (user.role === 'CLUB' && user.profile) {
+      paymentStatus = user.profile.paymentStatus;
+    }
+
+    // Set isPending if payment status is PENDING
+    const isPendingStatus = paymentStatus === 'PENDING';
+    setIsPending(isPendingStatus);
+
+    // Auto-show popup on mount if payment is pending (optional behavior)
+    // Uncomment the next line if you want the popup to show automatically
+    // if (isPendingStatus) setShowPaymentPopup(true);
   }, [user]);
 
-  const checkPaymentStatus = async () => {
-    try {
-      setLoading(true);
-      
-      if (!user) {
-        setPaymentStatus(null);
-        setShowPaymentPopup(false);
-        return;
-      }
-
-      const authToken = localStorage.getItem('authToken');
-      if (!authToken) {
-        setPaymentStatus(null);
-        setShowPaymentPopup(false);
-        return;
-      }
-
-      // Skip payment check for admin users
-      if (user.role === 'ADMIN') {
-        setPaymentStatus('SUCCESS');
-        setShowPaymentPopup(false);
-        return;
-      }
-
-      // Skip for demo users
-      if (authToken && authToken.startsWith('demo-token-')) {
-        setPaymentStatus('SUCCESS');
-        setShowPaymentPopup(false);
-        return;
-      }
-
-      let apiEndpoint;
-      switch (user.role) {
-        case 'COACH':
-          apiEndpoint = '/api/coach/dashboard';
-          break;
-        case 'STUDENT':
-          apiEndpoint = '/api/student/dashboard';
-          break;
-        case 'INSTITUTE':
-          apiEndpoint = '/api/institute/dashboard';
-          break;
-        case 'CLUB':
-          apiEndpoint = '/api/club/dashboard';
-          break;
-        default:
-          setPaymentStatus('SUCCESS');
-          setShowPaymentPopup(false);
-          return;
-      }
-
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}${apiEndpoint}`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          let userProfile = null;
-          let currentPaymentStatus = 'SUCCESS'; // Default for students
-
-          switch (user.role) {
-            case 'COACH':
-              userProfile = data.data.coach;
-              currentPaymentStatus = userProfile?.paymentStatus || 'PENDING';
-              break;
-            case 'STUDENT':
-              userProfile = data.data.student;
-              currentPaymentStatus = userProfile?.paymentStatus || 'SUCCESS';
-              break;
-            case 'INSTITUTE':
-              userProfile = data.data.institute;
-              currentPaymentStatus = userProfile?.paymentStatus || 'PENDING';
-              break;
-            case 'CLUB':
-              userProfile = data.data.club;
-              currentPaymentStatus = userProfile?.paymentStatus || 'PENDING';
-              break;
-          }
-
-          setPaymentStatus(currentPaymentStatus);
-
-          // Show popup if payment is pending and not already dismissed
-          const popupDismissed = localStorage.getItem(`paymentPopupDismissed_${user.id}`);
-          const shouldShowPopup = currentPaymentStatus === 'PENDING' && 
-                                  !userProfile?.isActive && 
-                                  !popupDismissed;
-
-          setShowPaymentPopup(shouldShowPopup);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to check payment status:', error);
-      setPaymentStatus(null);
-      setShowPaymentPopup(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const dismissPaymentPopup = (permanent = false) => {
-    setShowPaymentPopup(false);
-    if (permanent) {
-      localStorage.setItem(`paymentPopupDismissed_${user?.id}`, 'true');
-    }
-  };
-
-  const showPaymentPopupManually = () => {
+  // Manually show payment popup
+  const showPaymentPopupManually = useCallback(() => {
     setShowPaymentPopup(true);
-  };
+  }, []);
 
-  const onPaymentSuccess = (paymentData) => {
-    setPaymentStatus('SUCCESS');
+  // Dismiss payment popup
+  const dismissPaymentPopup = useCallback((refresh = false) => {
     setShowPaymentPopup(false);
-    // Remove dismissal flag so popup can show again if needed
-    if (user?.id) {
-      localStorage.removeItem(`paymentPopupDismissed_${user.id}`);
+    if (refresh) {
+      // Refresh user context to get updated payment status
+      refreshUser();
     }
-  };
+  }, [refreshUser]);
 
-  const isPending = paymentStatus === 'PENDING';
-  const isSuccess = paymentStatus === 'SUCCESS';
+  // Handle successful payment
+  const onPaymentSuccess = useCallback(async () => {
+    setShowPaymentPopup(false);
+    // Refresh user context to get updated payment status
+    await refreshUser();
+    // Update isPending state
+    setIsPending(false);
+  }, [refreshUser]);
 
   return {
-    paymentStatus,
     isPending,
-    isSuccess,
-    loading,
     showPaymentPopup,
-    dismissPaymentPopup,
     showPaymentPopupManually,
-    onPaymentSuccess,
-    checkPaymentStatus
+    dismissPaymentPopup,
+    onPaymentSuccess
   };
 };
 

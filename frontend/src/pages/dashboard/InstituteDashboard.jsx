@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { getInstituteDashboard, bulkUploadStudents } from '../../api';
 import Spinner from '../../components/Spinner';
 import Modal from '../../components/Modal';
@@ -401,6 +402,12 @@ const InstituteDashboard = () => {
                     <button className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors">
                       👨‍🏫 Invite Coach
                     </button>
+                    <Link
+                      to="/institute/profile"
+                      className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors block text-center"
+                    >
+                      📝 Update Profile
+                    </Link>
                     <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors">
                       📊 Generate Report
                     </button>

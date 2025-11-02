@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../api';
 
 const Header = () => {
@@ -18,17 +18,8 @@ const Header = () => {
     navigate('/login/student');
   };
 
-  // Load notifications when user is authenticated
-  useEffect(() => {
-    if (isAuthenticated() && user) {
-      loadNotifications();
-      // Set up polling for new notifications every 30 seconds
-      const interval = setInterval(loadNotifications, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [isAuthenticated(), user]);
-
-  const loadNotifications = async () => {
+  // Memoized function to load notifications
+  const loadNotifications = useCallback(async () => {
     try {
       setLoadingNotifications(true);
       const response = await getNotifications({ limit: 10 });
@@ -41,7 +32,17 @@ const Header = () => {
     } finally {
       setLoadingNotifications(false);
     }
-  };
+  }, []); // No dependencies needed as it only uses state setters
+
+  // Load notifications when user is authenticated (admin only for now)
+  useEffect(() => {
+    if (user && user.role === 'ADMIN') {
+      loadNotifications();
+      // Set up polling for new notifications every 30 seconds
+      const interval = setInterval(loadNotifications, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [user, loadNotifications]); // Depend on user and memoized loadNotifications
 
   const handleNotificationClick = async (notification) => {
     if (!notification.isRead) {
@@ -264,24 +265,25 @@ const Header = () => {
               </div>
             ) : isAuthenticated() && user ? (
               <div className="flex items-center space-x-4">
-                {/* Notifications */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowNotifications(!showNotifications)}
-                    className="relative p-2 text-gray-700 hover:text-blue-600 focus:outline-none"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-5 5v-5zM4 19h6v2H4a2 2 0 01-2-2V7a2 2 0 012-2h6v2H4v10zM20 5H8a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2z" />
-                    </svg>
-                    {unreadCount > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                      </span>
-                    )}
-                  </button>
-                  
-                  {/* Notifications Dropdown */}
-                  {showNotifications && (
+                {/* Notifications - Admin Only */}
+                {user.role === 'ADMIN' && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowNotifications(!showNotifications)}
+                      className="relative p-2 text-gray-700 hover:text-blue-600 focus:outline-none"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-5 5v-5zM4 19h6v2H4a2 2 0 01-2-2V7a2 2 0 012-2h6v2H4v10zM20 5H8a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2z" />
+                      </svg>
+                      {unreadCount > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
+                      )}
+                    </button>
+                    
+                    {/* Notifications Dropdown */}
+                    {showNotifications && (
                     <div className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg py-1 z-50 border">
                       <div className="px-4 py-2 border-b border-gray-200 flex justify-between items-center">
                         <h3 className="text-sm font-medium text-gray-900">Notifications</h3>
@@ -357,6 +359,7 @@ const Header = () => {
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Profile Dropdown */}
                 <div className="relative">
@@ -383,7 +386,7 @@ const Header = () => {
                   {showProfileDropdown && (
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
                       <Link
-                        to={`/dashboard/${user.role.toLowerCase()}`}
+                        to={`/${user.role.toLowerCase()}/profile`}
                         className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         onClick={() => setShowProfileDropdown(false)}
                       >

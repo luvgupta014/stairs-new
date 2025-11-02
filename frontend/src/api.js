@@ -354,6 +354,83 @@ export const getAdminDashboard = async () => {
   }
 };
 
+// Profile APIs
+export const getStudentProfile = async () => {
+  try {
+    const response = await api.get('/api/student/profile');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const updateStudentProfile = async (data) => {
+  try {
+    const response = await api.put('/api/student/profile', data);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getCoachProfile = async () => {
+  try {
+    const response = await api.get('/api/coach/profile');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const updateCoachProfile = async (data) => {
+  try {
+    console.log('API: Sending PUT request to /api/coach/profile with data:', data);
+    const response = await api.put('/api/coach/profile', data);
+    console.log('API: Response received:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('API: Error in updateCoachProfile:', error);
+    console.error('API: Error response:', error.response?.data);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getInstituteProfile = async () => {
+  try {
+    const response = await api.get('/api/institute/profile');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const updateInstituteProfile = async (data) => {
+  try {
+    const response = await api.put('/api/institute/profile', data);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getClubProfile = async () => {
+  try {
+    const response = await api.get('/api/club/profile');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const updateClubProfile = async (data) => {
+  try {
+    const response = await api.put('/api/club/profile', data);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 // Student Connection APIs
 export const getAvailableCoaches = async () => {
   try {

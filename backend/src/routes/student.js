@@ -82,29 +82,60 @@ router.put('/profile', authenticate, requireStudent, async (req, res) => {
   try {
     const {
       name,
+      fatherName,
+      aadhaar,
+      gender,
       dateOfBirth,
-      sport,
-      level,
-      address,
-      city,
       state,
+      district,
+      address,
       pincode,
-      achievements
+      sport,
+      sport2,
+      sport3,
+      level,
+      school,
+      club,
+      coachName,
+      coachMobile,
+      phone
     } = req.body;
+
+    console.log('Updating student profile:', req.body);
+
+    // Update user phone if provided
+    if (phone) {
+      await prisma.user.update({
+        where: { id: req.user.id },
+        data: { phone }
+      });
+    }
+
+    // Prepare update data, only include fields that are provided
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (fatherName !== undefined) updateData.fatherName = fatherName || null;
+    if (aadhaar !== undefined) updateData.aadhaar = aadhaar || null;
+    if (gender !== undefined) updateData.gender = gender || null;
+    if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
+    if (state !== undefined) updateData.state = state || null;
+    if (district !== undefined) updateData.district = district || null;
+    if (address !== undefined) updateData.address = address || null;
+    if (pincode !== undefined) updateData.pincode = pincode || null;
+    if (sport !== undefined) updateData.sport = sport || null;
+    if (sport2 !== undefined) updateData.sport2 = sport2 || null;
+    if (sport3 !== undefined) updateData.sport3 = sport3 || null;
+    if (level !== undefined) updateData.level = level || null;
+    if (school !== undefined) updateData.school = school || null;
+    if (club !== undefined) updateData.club = club || null;
+    if (coachName !== undefined) updateData.coachName = coachName || null;
+    if (coachMobile !== undefined) updateData.coachMobile = coachMobile || null;
+
+    console.log('Update data:', updateData);
 
     const updatedStudent = await prisma.student.update({
       where: { userId: req.user.id },
-      data: {
-        name,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
-        sport,
-        level,
-        address,
-        city,
-        state,
-        pincode,
-        achievements: achievements || null
-      },
+      data: updateData,
       include: {
         user: {
           select: {

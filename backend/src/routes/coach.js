@@ -83,30 +83,57 @@ router.put('/profile', authenticate, requireCoach, async (req, res) => {
   try {
     const {
       name,
+      phone,
       specialization,
       experience,
       certifications,
       bio,
-      location
+      location,
+      city,
+      state,
+      pincode
     } = req.body;
+
+    console.log('Updating coach profile:', { name, phone, specialization, experience, certifications, bio, location, city, state, pincode });
+
+    // Update user phone if provided
+    if (phone) {
+      try {
+        await prisma.user.update({
+          where: { id: req.user.id },
+          data: { phone }
+        });
+      } catch (phoneError) {
+        console.error('Error updating phone:', phoneError);
+        return res.status(500).json(errorResponse('Failed to update phone number.', 500));
+      }
+    }
+
+    // Prepare update data, only include fields that are provided
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (specialization !== undefined) updateData.specialization = specialization;
+    if (experience !== undefined) updateData.experience = experience ? parseInt(experience) : null;
+    if (certifications !== undefined) updateData.certifications = certifications || null;
+    if (bio !== undefined) updateData.bio = bio || null;
+    if (location !== undefined) updateData.location = location || null;
+    if (city !== undefined) updateData.city = city || null;
+    if (state !== undefined) updateData.state = state || null;
+    if (pincode !== undefined) updateData.pincode = pincode || null;
+
+    console.log('Update data:', updateData);
+    console.log('User ID:', req.user.id);
 
     const updatedCoach = await prisma.coach.update({
       where: { userId: req.user.id },
-      data: {
-        name,
-        specialization,
-        experience: experience ? parseInt(experience) : undefined,
-        certifications: certifications || undefined,
-        bio,
-        location
-      },
+      data: updateData,
       include: {
         user: {
           select: {
             id: true,
             email: true,
             phone: true,
-            status: true
+            isActive: true
           }
         }
       }
@@ -116,7 +143,9 @@ router.put('/profile', authenticate, requireCoach, async (req, res) => {
 
   } catch (error) {
     console.error('Update coach profile error:', error);
-    res.status(500).json(errorResponse('Failed to update profile.', 500));
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
+    res.status(500).json(errorResponse(error.message || 'Failed to update profile.', 500));
   }
 });
 

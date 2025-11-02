@@ -19,11 +19,8 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     // Clear any stale authentication data first
     clearStaleAuth();
-    
     if (token) {
-      // Set token in API headers
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      // Verify token and get user data
       verifyToken();
     } else {
       setLoading(false);
@@ -203,37 +200,37 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-const register = async (data, role) => {
-  try {
-    setLoading(true);
-    console.log('Attempting registration with role:', role);
-    console.log('Registration data:', { ...data, password: '***' });
-    
-    const response = await api.post(`/api/auth/${role}/register`, data);
-    console.log('Registration response:', response.data);
+  const register = async (data, role) => {
+    try {
+      setLoading(true);
+      console.log('Attempting registration with role:', role);
+      console.log('Registration data:', { ...data, password: '***' });
+      
+      const response = await api.post(`/api/auth/${role}/register`, data);
+      console.log('Registration response:', response.data);
 
-    if (response.data.success) {
-      return { 
-        success: true, 
-        data: response.data.data,
-        message: response.data.message 
-      };
-    } else {
+      if (response.data.success) {
+        return { 
+          success: true, 
+          data: response.data.data,
+          message: response.data.message 
+        };
+      } else {
+        return { 
+          success: false, 
+          message: response.data.message || 'Registration failed' 
+        };
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
       return { 
         success: false, 
-        message: response.data.message || 'Registration failed' 
+        message: error.response?.data?.message || 'Registration failed. Please try again.' 
       };
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('Registration error:', error);
-    return { 
-      success: false, 
-      message: error.response?.data?.message || 'Registration failed. Please try again.' 
-    };
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const verifyOtp = async (userId, otp) => {
     try {
@@ -350,6 +347,44 @@ const register = async (data, role) => {
     }
   };
 
+  const refreshUser = async () => {
+    try {
+      if (!user) return;
+      
+      let endpoint;
+      switch (user.role) {
+        case 'STUDENT':
+          endpoint = '/api/student/profile';
+          break;
+        case 'COACH':
+          endpoint = '/api/coach/profile';
+          break;
+        case 'INSTITUTE':
+          endpoint = '/api/institute/profile';
+          break;
+        case 'CLUB':
+          endpoint = '/api/club/profile';
+          break;
+        default:
+          return;
+      }
+
+      const response = await api.get(endpoint);
+      
+      if (response.data.success) {
+        const updatedUser = {
+          ...user,
+          profile: response.data.data
+        };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        console.log('User context refreshed with updated profile');
+      }
+    } catch (error) {
+      console.error('Failed to refresh user:', error);
+    }
+  };
+
   const isAuthenticated = () => {
     return !!token && !!user;
   };
@@ -370,6 +405,7 @@ const register = async (data, role) => {
     logout,
     clearStaleAuth,
     updateProfile,
+    refreshUser,
     isAuthenticated,
     getDashboardRoute
   };

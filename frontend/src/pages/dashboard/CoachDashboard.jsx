@@ -799,9 +799,12 @@ const CoachDashboard = () => {
                     >
                       📥 Add Students (Bulk)
                     </Link>
-                    <button className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 rounded-lg text-sm font-medium text-center block transition-colors">
-                      💬 Send Message to All
-                    </button>
+                    <Link
+                      to="/coach/profile"
+                      className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 rounded-lg text-sm font-medium text-center block transition-colors"
+                    >
+                      � Update Profile
+                    </Link>
                     <button className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-lg text-sm font-medium text-center block transition-colors">
                       📋 Schedule Training
                     </button>

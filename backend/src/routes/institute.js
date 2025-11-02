@@ -125,7 +125,19 @@ router.get('/profile', authenticate, requireInstitute, async (req, res) => {
       return res.status(404).json(errorResponse('Institute profile not found.', 404));
     }
 
-    res.json(successResponse(institute, 'Institute profile retrieved successfully.'));
+    // Transform database field names to match frontend expectations
+    const transformedInstitute = {
+      ...institute,
+      institutionType: institute.type,
+      address: institute.location,
+      establishedYear: institute.established,
+      // Keep original fields for backward compatibility
+      type: institute.type,
+      location: institute.location,
+      established: institute.established
+    };
+
+    res.json(successResponse(transformedInstitute, 'Institute profile retrieved successfully.'));
 
   } catch (error) {
     console.error('Get institute profile error:', error);
@@ -138,32 +150,56 @@ router.put('/profile', authenticate, requireInstitute, async (req, res) => {
   try {
     const {
       name,
+      phone,
+      institutionType,
+      affiliatedBody,  // Not in schema, ignore
+      principalName,  // Not in schema, ignore
+      establishedYear,
       address,
-      website,
-      description,
+      city,
+      state,
+      district,  // Not in schema, ignore
+      pincode,
+      description,  // Not in schema, ignore
+      facilities,  // Not in schema, ignore
       sportsOffered,
-      contactPerson,
-      licenseNumber
+      website  // Not in schema, ignore
     } = req.body;
+
+    console.log('Updating institute profile:', req.body);
+
+    // Update user phone if provided
+    if (phone) {
+      await prisma.user.update({
+        where: { id: req.user.id },
+        data: { phone }
+      });
+    }
+
+    // Prepare update data, only include fields that exist in schema
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (institutionType !== undefined) updateData.type = institutionType || null;
+    if (address !== undefined) updateData.location = address || null;
+    if (city !== undefined) updateData.city = city || null;
+    if (state !== undefined) updateData.state = state || null;
+    if (pincode !== undefined) updateData.pincode = pincode || null;
+    if (establishedYear !== undefined) updateData.established = establishedYear || null;
+    if (sportsOffered !== undefined) updateData.sportsOffered = sportsOffered || null;
+    // Note: affiliatedBody, principalName, district, description, facilities, website are not in schema
+
+    console.log('Update data:', updateData);
 
     const updatedInstitute = await prisma.institute.update({
       where: { userId: req.user.id },
-      data: {
-        name,
-        address,
-        website,
-        description,
-        sportsOffered: sportsOffered || undefined,
-        contactPerson,
-        licenseNumber
-      },
+      data: updateData,
       include: {
         user: {
           select: {
             id: true,
             email: true,
             phone: true,
-            status: true
+            isActive: true
           }
         }
       }
