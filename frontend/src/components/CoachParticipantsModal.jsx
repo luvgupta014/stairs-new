@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaTimes, FaUser, FaEnvelope, FaPhone, FaMapMarkerAlt, FaBirthdayCake, FaCalendarAlt, FaTrophy, FaGraduationCap } from 'react-icons/fa';
+import { FaTimes, FaUser, FaEnvelope, FaPhone, FaMapMarkerAlt, FaBirthdayCake, FaCalendarAlt, FaTrophy, FaGraduationCap, FaIdCard } from 'react-icons/fa';
 
 const CoachParticipantsModal = ({ isOpen, onClose, eventData, participants, loading }) => {
   if (!isOpen) return null;
@@ -122,6 +122,12 @@ const CoachParticipantsModal = ({ isOpen, onClose, eventData, participants, load
                           {student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Student'}
                         </h4>
                         <p className="text-sm text-gray-600">Registration #{index + 1}</p>
+                        {student.user?.uniqueId && (
+                          <div className="flex items-center text-xs text-blue-600 font-medium mt-1">
+                            <FaIdCard className="w-3 h-3 mr-1" />
+                            <span>UID: {student.user.uniqueId}</span>
+                          </div>
+                        )}
                       </div>
                       {getStatusBadge(registration.status)}
                     </div>

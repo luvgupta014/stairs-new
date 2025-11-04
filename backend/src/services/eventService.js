@@ -391,7 +391,11 @@ class EventService {
                   name: true,
                   sport: true,
                   user: {
-                    select: { email: true, phone: true }
+                    select: { 
+                      email: true, 
+                      phone: true,
+                      uniqueId: true
+                    }
                   }
                 }
               }

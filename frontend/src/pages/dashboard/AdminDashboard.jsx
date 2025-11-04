@@ -228,7 +228,9 @@ const AdminDashboard = () => {
           pendingEvents: dashboardStats?.pendingEvents || 0,
           pendingApprovals: (dashboardStats?.pendingCoachApprovals || 0) + (dashboardStats?.pendingInstituteApprovals || 0),
           activeUsers: (dashboardStats?.totalStudents || 0) + (dashboardStats?.totalCoaches || 0) + (dashboardStats?.totalInstitutes || 0) + (dashboardStats?.totalClubs || 0),
-          monthlyGrowth: dashboardStats?.monthlyGrowth || 0
+          monthlyGrowth: dashboardStats?.monthlyGrowth || 0,
+          revenue: dashboardStats?.revenue || 0,
+          revenueGrowth: dashboardStats?.revenueGrowth || 0
         };
         
         setStats(statsData);
@@ -487,10 +489,11 @@ const AdminDashboard = () => {
       const matchesStatus = !registrationFilters.status || 
         (registrationFilters.status === 'active' && user.isActive && user.isVerified) ||
         (registrationFilters.status === 'pending' && (!user.isActive || !user.isVerified));
-      const matchesSearch = !registrationFilters.search || 
-        userName?.toLowerCase().includes(registrationFilters.search.toLowerCase()) ||
-        user.email?.toLowerCase().includes(registrationFilters.search.toLowerCase());
-      
+      const search = registrationFilters.search?.toLowerCase() || '';
+      const matchesSearch = !search ||
+        userName?.toLowerCase().includes(search) ||
+        user.email?.toLowerCase().includes(search) ||
+        (user.uniqueId && user.uniqueId.toLowerCase().includes(search));
       return matchesRole && matchesStatus && matchesSearch;
     });
   };
@@ -557,6 +560,15 @@ const AdminDashboard = () => {
             </div>
             <div className="flex space-x-3">
               <Link
+                to="/admin/users"
+                className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-lg font-medium inline-flex items-center transition-colors"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m9-4V7a4 4 0 00-8 0v3m12 4a4 4 0 01-8 0m8 0a4 4 0 01-8 0" />
+                </svg>
+                All Users
+              </Link>
+              <Link
                 to="/admin/event-results"
                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium inline-flex items-center transition-colors"
               >
@@ -573,6 +585,15 @@ const AdminDashboard = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                 </svg>
                 Event Orders
+              </Link>
+              <Link
+                to="/admin/revenue"
+                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium inline-flex items-center transition-colors"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Revenue Dashboard
               </Link>
             </div>
           </div>
@@ -609,12 +630,12 @@ const AdminDashboard = () => {
             onClick={() => setActiveTab('pending')}
           />
           <StatCard
-            title="Pending Approvals"
-            value={stats.pendingApprovals}
-            icon="👤"
+            title="Revenue"
+            value={typeof stats.revenue === 'number' ? `₹${stats.revenue.toLocaleString('en-IN')}` : '₹0'}
+            icon="💰"
             color="red"
-            urgent={stats.pendingApprovals > 0}
-            onClick={() => setActiveTab('pending')}
+            growth={typeof stats.revenueGrowth === 'number' ? stats.revenueGrowth : undefined}
+            onClick={() => window.location.href = '/admin/revenue'}
           />
         </div>
 
@@ -1042,7 +1063,7 @@ const AdminDashboard = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
                 <input
                   type="text"
-                  placeholder="Search by name or email..."
+                  placeholder="Search by name, email or uid..."
                   value={registrationFilters.search}
                   onChange={(e) => handleRegistrationFilterChange('search', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
@@ -1077,9 +1098,18 @@ const AdminDashboard = () => {
                   {getFilteredRecentUsers().map((user) => (
                     <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-3 px-4">
-                        <div className="text-gray-900 font-medium">{getUserName(user)}</div>
+                        <Link to={`/admin/users/${user.uniqueId}`} className="group">
+                          <div className="text-gray-900 font-medium group-hover:text-blue-600 transition-colors">{getUserName(user)}</div>
+                          {user.uniqueId && (
+                            <div className="text-xs text-blue-600 font-mono font-medium mt-1 group-hover:text-blue-700">UID: {user.uniqueId}</div>
+                          )}
+                        </Link>
                       </td>
-                      <td className="py-3 px-4 text-gray-600">{user.email}</td>
+                      <td className="py-3 px-4">
+                        <Link to={`/admin/users/${user.uniqueId}`} className="text-gray-600 hover:text-blue-600 transition-colors">
+                          {user.email}
+                        </Link>
+                      </td>
                       <td className="py-3 px-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRoleColor(user.role)}`}>
                           {user.role}
@@ -1216,10 +1246,17 @@ const StatCard = ({ title, value, icon, color, growth, urgent, onClick }) => {
         <div>
           <p className="text-gray-600 text-sm font-medium">{title}</p>
           <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+          {/* Show growth line: for revenue, use custom style; for others, use default */}
           {growth !== undefined && (
-            <p className={`text-sm mt-1 ${growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {growth >= 0 ? '+' : ''}{growth}% this month
-            </p>
+            title === 'Revenue' ? (
+              <p className={`text-sm mt-1 ${growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {growth >= 0 ? '+' : ''}{growth}% this month
+              </p>
+            ) : (
+              <p className={`text-sm mt-1 ${growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {growth >= 0 ? '+' : ''}{growth}% this month
+              </p>
+            )
           )}
           {urgent && (
             <p className="text-sm mt-1 text-orange-600 font-medium">Requires attention</p>
@@ -1236,13 +1273,13 @@ const StatCard = ({ title, value, icon, color, growth, urgent, onClick }) => {
 // Helper function for role colors
 const getRoleColor = (role) => {
   const colors = {
-    STUDENT: 'bg-blue-100 text-blue-800',
-    COACH: 'bg-purple-100 text-purple-800',
-    INSTITUTE: 'bg-indigo-100 text-indigo-800',
-    CLUB: 'bg-pink-100 text-pink-800',
-    ADMIN: 'bg-red-100 text-red-800'
+    STUDENT: 'bg-blue-100 text-blue-800 border border-blue-300',
+    COACH: 'bg-green-100 text-green-800 border border-green-300',
+    INSTITUTE: 'bg-purple-100 text-purple-800 border border-purple-300',
+    CLUB: 'bg-orange-100 text-orange-800 border border-orange-300',
+    ADMIN: 'bg-red-100 text-red-800 border border-red-300'
   };
-  return colors[role] || 'bg-gray-100 text-gray-800';
+  return colors[role] || 'bg-gray-100 text-gray-800 border border-gray-300';
 };
 
 export default AdminDashboard;

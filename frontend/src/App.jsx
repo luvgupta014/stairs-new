@@ -1,3 +1,5 @@
+import AdminUserProfile from "./pages/dashboard/AdminUserProfile";
+import AllUsers from "./pages/dashboard/AllUsers";
 import {
   BrowserRouter as Router,
   Routes,
@@ -58,6 +60,7 @@ import AdminEventResults from "./components/AdminEventResults";
 import EventResultUpload from "./pages/events/EventResultUpload";
 import EventOrders from "./pages/events/EventOrders";
 import AdminOrders from "./components/AdminOrders";
+import AdminRevenue from "./pages/AdminRevenue";
 
 function App() {
   return (
@@ -191,6 +194,35 @@ function App() {
               }
             />
             {/* Other Protected Routes with Header and Footer */}
+            <Route
+              path="/admin/users/:userId"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute role="ADMIN">
+                      <AdminUserProfile />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+
+            <Route
+              path="/admin/users"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute role="ADMIN">
+                      <AllUsers />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
             <Route
               path="/student/profile"
               element={
@@ -489,6 +521,20 @@ function App() {
                   <main className="flex-grow">
                     <ProtectedRoute role="ADMIN">
                       <AdminOrders />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/admin/revenue"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute role="ADMIN">
+                      <AdminRevenue />
                     </ProtectedRoute>
                   </main>
                   <Footer />

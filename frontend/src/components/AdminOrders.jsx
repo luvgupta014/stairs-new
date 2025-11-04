@@ -594,6 +594,11 @@ const AdminOrders = () => {
                           <div className="text-sm text-gray-500">
                             {order.coach.name}
                           </div>
+                          {order.coach.user?.uniqueId && (
+                            <div className="text-xs text-blue-600 font-mono font-medium">
+                              UID: {order.coach.user.uniqueId}
+                            </div>
+                          )}
                           <div className="text-xs text-gray-400">
                             {order.event.sport}
                           </div>

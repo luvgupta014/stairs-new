@@ -52,6 +52,12 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
     const startTime = Date.now();
 
     // Use Promise.allSettled to handle errors gracefully and run queries in parallel
+    // Add revenue and revenueGrowth calculation
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const startOfPrevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const endOfPrevMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
     const [
       totalUsersResult,
       totalStudentsResult,
@@ -66,7 +72,11 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
       activeEventsResult,
       recentRegistrationsResult,
       recentEventsResult,
-      monthlyGrowthResult
+      monthlyGrowthResult,
+      // Revenue for current month
+      currentMonthRevenueResult,
+      // Revenue for previous month
+      prevMonthRevenueResult
     ] = await Promise.allSettled([
       prisma.user.count(),
       prisma.user.count({ where: { role: 'STUDENT' } }),
@@ -93,6 +103,7 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
         select: {
           id: true,
           email: true,
+          uniqueId: true,
           role: true,
           isActive: true,
           isVerified: true,
@@ -145,6 +156,70 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
           console.error('Error calculating monthly growth:', error);
           return 0;
         }
+      })(),
+      // Revenue for current month (event orders + event payments + payments)
+      (async () => {
+        // Event Orders
+        const eventOrders = await prisma.eventOrder.aggregate({
+          where: {
+            paymentStatus: 'SUCCESS',
+            createdAt: { gte: startOfMonth }
+          },
+          _sum: { totalAmount: true }
+        });
+        // Event Payments
+        const eventPayments = await prisma.eventPayment.aggregate({
+          where: {
+            status: 'SUCCESS',
+            createdAt: { gte: startOfMonth }
+          },
+          _sum: { amount: true }
+        });
+        // General Payments
+        const payments = await prisma.payment.aggregate({
+          where: {
+            status: 'SUCCESS',
+            createdAt: { gte: startOfMonth }
+          },
+          _sum: { amount: true }
+        });
+        return (
+          (eventOrders._sum.totalAmount || 0) +
+          (eventPayments._sum.amount || 0) +
+          (payments._sum.amount || 0)
+        );
+      })(),
+      // Revenue for previous month
+      (async () => {
+        // Event Orders
+        const eventOrders = await prisma.eventOrder.aggregate({
+          where: {
+            paymentStatus: 'SUCCESS',
+            createdAt: { gte: startOfPrevMonth, lt: endOfPrevMonth }
+          },
+          _sum: { totalAmount: true }
+        });
+        // Event Payments
+        const eventPayments = await prisma.eventPayment.aggregate({
+          where: {
+            status: 'SUCCESS',
+            createdAt: { gte: startOfPrevMonth, lt: endOfPrevMonth }
+          },
+          _sum: { amount: true }
+        });
+        // General Payments
+        const payments = await prisma.payment.aggregate({
+          where: {
+            status: 'SUCCESS',
+            createdAt: { gte: startOfPrevMonth, lt: endOfPrevMonth }
+          },
+          _sum: { amount: true }
+        });
+        return (
+          (eventOrders._sum.totalAmount || 0) +
+          (eventPayments._sum.amount || 0) +
+          (payments._sum.amount || 0)
+        );
       })()
     ]);
 
@@ -161,7 +236,17 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
       pendingEvents: pendingEventsResult.status === 'fulfilled' ? pendingEventsResult.value : 0,
       approvedEvents: approvedEventsResult.status === 'fulfilled' ? approvedEventsResult.value : 0,
       activeEvents: activeEventsResult.status === 'fulfilled' ? activeEventsResult.value : 0,
-      monthlyGrowth: monthlyGrowthResult.status === 'fulfilled' ? monthlyGrowthResult.value : 0
+      monthlyGrowth: monthlyGrowthResult.status === 'fulfilled' ? monthlyGrowthResult.value : 0,
+      revenue: currentMonthRevenueResult.status === 'fulfilled' ? currentMonthRevenueResult.value : 0,
+      revenueGrowth: (() => {
+        const prev = prevMonthRevenueResult.status === 'fulfilled' ? prevMonthRevenueResult.value : 0;
+        const curr = currentMonthRevenueResult.status === 'fulfilled' ? currentMonthRevenueResult.value : 0;
+        if (prev > 0) {
+          return Math.round(((curr - prev) / prev) * 100 * 100) / 100;
+        } else {
+          return curr > 0 ? 100 : 0;
+        }
+      })()
     };
 
     const recentRegistrations = recentRegistrationsResult.status === 'fulfilled' ? recentRegistrationsResult.value : [];
@@ -173,6 +258,7 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
       return {
         id: user.id,
         email: user.email,
+        uniqueId: user.uniqueId,
         role: user.role,
         isActive: user.isActive,
         isVerified: user.isVerified,
@@ -811,18 +897,17 @@ router.get('/users', authenticate, requireAdmin, async (req, res) => {
       ...(status && { status: status.toUpperCase() }),
       ...(search && {
         OR: [
+          { uniqueId: { contains: search, mode: 'insensitive' } },
           { email: { contains: search, mode: 'insensitive' } },
           { phone: { contains: search, mode: 'insensitive' } },
-          { student: { 
+          { studentProfile: { 
             OR: [
-              { firstName: { contains: search, mode: 'insensitive' } },
-              { lastName: { contains: search, mode: 'insensitive' } }
+              { name: { contains: search, mode: 'insensitive' } }
             ]
           }},
-          { coach: { 
+          { coachProfile: { 
             OR: [
-              { firstName: { contains: search, mode: 'insensitive' } },
-              { lastName: { contains: search, mode: 'insensitive' } }
+              { name: { contains: search, mode: 'insensitive' } }
             ]
           }},
           { instituteProfile: { name: { contains: search, mode: 'insensitive' } } },
@@ -836,6 +921,7 @@ router.get('/users', authenticate, requireAdmin, async (req, res) => {
         where,
         select: {
           id: true,
+          uniqueId: true,
           email: true,
           phone: true,
           role: true,
@@ -869,6 +955,13 @@ router.get('/users', authenticate, requireAdmin, async (req, res) => {
               id: true,
               name: true
             }
+          },
+          adminProfile: {
+            select: {
+              id: true,
+              name: true,
+              role: true
+            }
           }
         },
         skip,
@@ -888,6 +981,194 @@ router.get('/users', authenticate, requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json(errorResponse('Failed to retrieve users.', 500));
+  }
+});
+
+// Get single user by uniqueId with full details
+router.get('/users/:uniqueId/details', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { uniqueId } = req.params;
+
+    console.log(`🔍 Fetching full details for user with UID: ${uniqueId}`);
+
+    const user = await prisma.user.findUnique({
+      where: { uniqueId },
+      include: {
+        studentProfile: {
+          include: {
+            eventRegistrations: {
+              include: {
+                event: {
+                  select: {
+                    id: true,
+                    name: true,
+                    sport: true,
+                    startDate: true,
+                    venue: true,
+                    city: true,
+                    status: true
+                  }
+                }
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 10
+            },
+            coachConnections: {
+              include: {
+                coach: {
+                  select: {
+                    id: true,
+                    name: true,
+                    specialization: true,
+                    user: {
+                      select: {
+                        uniqueId: true,
+                        email: true
+                      }
+                    }
+                  }
+                }
+              },
+              orderBy: { createdAt: 'desc' }
+            }
+          }
+        },
+        coachProfile: {
+          include: {
+            events: {
+              select: {
+                id: true,
+                name: true,
+                sport: true,
+                startDate: true,
+                venue: true,
+                city: true,
+                status: true,
+                currentParticipants: true,
+                maxParticipants: true
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 10
+            },
+            payments: {
+              select: {
+                id: true,
+                type: true,
+                amount: true,
+                status: true,
+                createdAt: true
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 10
+            },
+            studentConnections: {
+              include: {
+                student: {
+                  select: {
+                    id: true,
+                    name: true,
+                    sport: true,
+                    user: {
+                      select: {
+                        uniqueId: true,
+                        email: true
+                      }
+                    }
+                  }
+                }
+              },
+              orderBy: { createdAt: 'desc' }
+            }
+          }
+        },
+        instituteProfile: {
+          include: {
+            students: {
+              include: {
+                student: {
+                  select: {
+                    id: true,
+                    name: true,
+                    sport: true,
+                    user: {
+                      select: {
+                        uniqueId: true,
+                        email: true
+                      }
+                    }
+                  }
+                }
+              },
+              take: 20
+            },
+            coaches: {
+              include: {
+                coach: {
+                  select: {
+                    id: true,
+                    name: true,
+                    specialization: true,
+                    user: {
+                      select: {
+                        uniqueId: true,
+                        email: true
+                      }
+                    }
+                  }
+                }
+              },
+              take: 20
+            }
+          }
+        },
+        clubProfile: {
+          include: {
+            members: {
+              include: {
+                student: {
+                  select: {
+                    id: true,
+                    name: true,
+                    sport: true,
+                    user: {
+                      select: {
+                        uniqueId: true,
+                        email: true
+                      }
+                    }
+                  }
+                }
+              },
+              take: 20
+            }
+          }
+        },
+        adminProfile: true,
+        payments: {
+          select: {
+            id: true,
+            type: true,
+            amount: true,
+            status: true,
+            createdAt: true
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 10
+        }
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json(errorResponse('User not found.', 404));
+    }
+
+    console.log(`✅ Retrieved full details for user: ${user.email}`);
+
+    res.json(successResponse(user, 'User details retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get user details error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve user details.', 500));
   }
 });
 
@@ -1888,7 +2169,14 @@ router.get('/orders', authenticate, requireAdmin, async (req, res) => {
             select: { 
               id: true, 
               name: true,
-              specialization: true
+              specialization: true,
+              user: {
+                select: {
+                  uniqueId: true,
+                  email: true,
+                  phone: true
+                }
+              }
             }
           },
           admin: {
@@ -2297,7 +2585,8 @@ router.get('/event-results', authenticate, requireAdmin, async (req, res) => {
                 user: {
                   select: {
                     email: true,
-                    phone: true
+                    phone: true,
+                    uniqueId: true
                   }
                 }
               }
@@ -2698,6 +2987,590 @@ router.get('/notifications/count', authenticate, async (req, res) => {
   } catch (error) {
     console.error('❌ Get notification count error:', error);
     res.status(500).json(errorResponse('Failed to retrieve notification count.', 500));
+  }
+});
+
+// Revenue Dashboard - Get comprehensive financial insights
+router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { dateRange = '30' } = req.query; // Days to look back
+    let daysBack;
+    let startDate = new Date();
+    if (dateRange === 'ytd') {
+      // Year to Date: from Jan 1st of current year
+      startDate = new Date(startDate.getFullYear(), 0, 1);
+      // Calculate daysBack as days from Jan 1 to today (inclusive)
+      const now = new Date();
+      daysBack = Math.floor((now - startDate) / (1000 * 60 * 60 * 24)) + 1;
+      console.log(`💰 Fetching revenue dashboard data for Year to Date (YTD): from ${startDate.toISOString().split('T')[0]} to ${now.toISOString().split('T')[0]} (${daysBack} days)`);
+    } else {
+      daysBack = parseInt(dateRange);
+      startDate.setDate(startDate.getDate() - daysBack);
+      console.log(`💰 Fetching revenue dashboard data for last ${daysBack} days...`);
+    }
+
+    // Get all revenue sources in parallel
+    const [
+      // Membership Payments (Coaches, Institutes, Clubs)
+      coachSubscriptions,
+      instituteMemberships,
+      clubMemberships,
+      
+      // Event Order Payments
+      eventOrders,
+      eventPayments,
+      
+      // All Payments
+      allPayments,
+      
+      // Premium Members
+      premiumCoaches,
+      activeCoaches,
+      
+      // Top Spenders
+      topSpendingCoaches
+    ] = await Promise.all([
+      // Coach subscriptions
+      prisma.coach.findMany({
+        where: {
+          paymentStatus: 'SUCCESS',
+          subscriptionType: { in: ['MONTHLY', 'ANNUAL'] }
+        },
+        select: {
+          id: true,
+          name: true,
+          paymentStatus: true,
+          subscriptionType: true,
+          subscriptionExpiresAt: true,
+          createdAt: true,
+          updatedAt: true,
+          user: {
+            select: {
+              id: true,
+              email: true,
+              phone: true,
+              uniqueId: true
+            }
+          }
+        }
+      }),
+
+      // Institute memberships
+      prisma.institute.findMany({
+        where: {
+          paymentStatus: 'SUCCESS'
+        },
+        select: {
+          id: true,
+          name: true,
+          paymentStatus: true,
+          createdAt: true,
+          user: {
+            select: {
+              id: true,
+              email: true,
+              phone: true,
+              uniqueId: true
+            }
+          }
+        }
+      }),
+
+      // Club memberships
+      prisma.club.findMany({
+        where: {
+          paymentStatus: 'SUCCESS'
+        },
+        select: {
+          id: true,
+          name: true,
+          paymentStatus: true,
+          createdAt: true,
+          user: {
+            select: {
+              id: true,
+              email: true,
+              phone: true,
+              uniqueId: true
+            }
+          }
+        }
+      }),
+
+      // Event Orders
+      prisma.eventOrder.findMany({
+        where: {
+          paymentStatus: 'SUCCESS',
+          createdAt: { gte: startDate }
+        },
+        include: {
+          coach: {
+            select: {
+              id: true,
+              name: true,
+              user: {
+                select: {
+                  email: true,
+                  phone: true,
+                  uniqueId: true
+                }
+              }
+            }
+          },
+          event: {
+            select: {
+              id: true,
+              name: true,
+              sport: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      }),
+
+      // Event Payments
+      prisma.eventPayment.findMany({
+        where: {
+          status: 'SUCCESS',
+          createdAt: { gte: startDate }
+        },
+        include: {
+          event: {
+            select: {
+              name: true,
+              sport: true,
+              coach: {
+                select: {
+                  name: true
+                }
+              }
+            }
+          }
+        }
+      }),
+
+      // All successful payments
+      prisma.payment.findMany({
+        where: {
+          status: 'SUCCESS',
+          createdAt: { gte: startDate }
+        },
+        include: {
+          user: {
+            select: {
+              role: true,
+              email: true,
+              studentProfile: { select: { name: true } },
+              coachProfile: { select: { name: true } },
+              instituteProfile: { select: { name: true } },
+              clubProfile: { select: { name: true } }
+            }
+          },
+          coach: {
+            select: {
+              name: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      }),
+
+      // Premium Coaches (Active subscriptions)
+      prisma.coach.findMany({
+        where: {
+          paymentStatus: 'SUCCESS',
+          subscriptionType: { in: ['MONTHLY', 'ANNUAL'] },
+          subscriptionExpiresAt: { gt: new Date() }
+        },
+        select: {
+          id: true,
+          name: true,
+          subscriptionType: true,
+          subscriptionExpiresAt: true,
+          primarySport: true,
+          city: true,
+          totalStudents: true,
+          rating: true,
+          user: {
+            select: {
+              email: true,
+              phone: true,
+              uniqueId: true,
+              createdAt: true
+            }
+          }
+        },
+        orderBy: { subscriptionExpiresAt: 'desc' }
+      }),
+
+      // Total active coaches
+      prisma.coach.count({
+        where: { isActive: true }
+      }),
+
+      // Top spending coaches (by event orders)
+      prisma.coach.findMany({
+        where: {
+          eventOrders: {
+            some: {
+              paymentStatus: 'SUCCESS'
+            }
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          primarySport: true,
+          city: true,
+          user: {
+            select: {
+              email: true,
+              phone: true,
+              uniqueId: true
+            }
+          },
+          eventOrders: {
+            where: {
+              paymentStatus: 'SUCCESS',
+              totalAmount: { not: null }
+            },
+            select: {
+              totalAmount: true,
+              createdAt: true
+            }
+          }
+        },
+        take: 20
+      })
+    ]);
+
+    // Calculate revenue totals
+    const membershipRevenue = {
+      coaches: coachSubscriptions.length,
+      institutes: instituteMemberships.length,
+      clubs: clubMemberships.length,
+      total: coachSubscriptions.length + instituteMemberships.length + clubMemberships.length
+    };
+
+    const orderRevenue = {
+      totalOrders: eventOrders.length,
+      totalAmount: eventOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0),
+      certificates: eventOrders.reduce((sum, order) => sum + order.certificates, 0),
+      medals: eventOrders.reduce((sum, order) => sum + order.medals, 0),
+      trophies: eventOrders.reduce((sum, order) => sum + order.trophies, 0)
+    };
+
+    const eventPaymentRevenue = {
+      totalPayments: eventPayments.length,
+      totalAmount: eventPayments.reduce((sum, payment) => sum + payment.amount, 0)
+    };
+
+    const paymentRevenue = {
+      total: allPayments.length,
+      totalAmount: allPayments.reduce((sum, payment) => sum + payment.amount, 0),
+      byType: {}
+    };
+
+    // Group payments by type
+    allPayments.forEach(payment => {
+      const type = payment.type || 'OTHER';
+      if (!paymentRevenue.byType[type]) {
+        paymentRevenue.byType[type] = {
+          count: 0,
+          amount: 0
+        };
+      }
+      paymentRevenue.byType[type].count++;
+      paymentRevenue.byType[type].amount += payment.amount;
+    });
+
+    // Calculate total revenue
+    const totalRevenue = 
+      orderRevenue.totalAmount + 
+      eventPaymentRevenue.totalAmount + 
+      paymentRevenue.totalAmount;
+
+    // Process top spending coaches
+    const topSpenders = topSpendingCoaches
+      .map(coach => ({
+        id: coach.id,
+        name: coach.name,
+        uniqueId: coach.user?.uniqueId,
+        email: coach.user?.email,
+        phone: coach.user?.phone,
+        primarySport: coach.primarySport,
+        city: coach.city,
+        totalSpent: coach.eventOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0),
+        orderCount: coach.eventOrders.length,
+        avgOrderValue: coach.eventOrders.length > 0 
+          ? coach.eventOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0) / coach.eventOrders.length 
+          : 0,
+        lastOrderDate: coach.eventOrders.length > 0 
+          ? Math.max(...coach.eventOrders.map(o => new Date(o.createdAt).getTime()))
+          : null
+      }))
+      .filter(coach => coach.totalSpent > 0)
+      .sort((a, b) => b.totalSpent - a.totalSpent)
+      .slice(0, 10);
+
+    // Format premium members
+    const premiumMembers = premiumCoaches.map(coach => ({
+      id: coach.id,
+      name: coach.name,
+      uniqueId: coach.user?.uniqueId,
+      email: coach.user?.email,
+      phone: coach.user?.phone,
+      subscriptionType: coach.subscriptionType,
+      subscriptionExpiresAt: coach.subscriptionExpiresAt,
+      primarySport: coach.primarySport,
+      city: coach.city,
+      totalStudents: coach.totalStudents,
+      rating: coach.rating,
+      memberSince: coach.user?.createdAt,
+      daysUntilExpiry: Math.ceil(
+        (new Date(coach.subscriptionExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      )
+    }));
+
+    // Recent transactions (last 20)
+    const recentTransactions = [
+      ...eventOrders.map(order => ({
+        id: order.id,
+        type: 'ORDER',
+        description: `Order #${order.orderNumber} - ${order.certificates} certificates, ${order.medals} medals, ${order.trophies} trophies`,
+        amount: order.totalAmount || 0,
+        status: order.paymentStatus,
+        date: order.paymentDate || order.createdAt,
+        customer: {
+          name: order.coach?.name,
+          uniqueId: order.coach?.user?.uniqueId,
+          email: order.coach?.user?.email,
+          type: 'COACH'
+        },
+        eventName: order.event?.name,
+        sport: order.event?.sport
+      })),
+      ...eventPayments.map(payment => ({
+        id: payment.id,
+        type: 'EVENT_PAYMENT',
+        description: `Event Fee - ${payment.event?.name}`,
+        amount: payment.amount,
+        status: payment.status,
+        date: payment.createdAt,
+        customer: {
+          name: payment.event?.coach?.name,
+          type: 'EVENT'
+        },
+        eventName: payment.event?.name,
+        sport: payment.event?.sport
+      })),
+      ...allPayments.map(payment => ({
+        id: payment.id,
+        type: payment.type,
+        description: payment.description || `${payment.type} Payment`,
+        amount: payment.amount,
+        status: payment.status,
+        date: payment.createdAt,
+        customer: {
+          name: payment.user?.studentProfile?.name || 
+                payment.user?.coachProfile?.name || 
+                payment.user?.instituteProfile?.name || 
+                payment.user?.clubProfile?.name ||
+                payment.coach?.name ||
+                'Unknown',
+          type: payment.userType || payment.user?.role || 'UNKNOWN',
+          email: payment.user?.email
+        }
+      }))
+    ]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 20);
+
+    // Revenue trend with appropriate granularity
+    const dailyRevenue = [];
+    
+    // Determine granularity based on date range
+    let granularity = 'day'; // default
+    if (dateRange === '1') {
+      granularity = 'hour'; // 24 hours
+    } else if (daysBack <= 90) {
+      granularity = 'day'; // daily for up to 90 days
+    } else if (daysBack <= 365 || dateRange === 'ytd') {
+      granularity = 'week'; // weekly for 6 months to 1 year
+    } else {
+      granularity = 'month'; // monthly for > 1 year
+    }
+
+    console.log(`📊 Using ${granularity} granularity for ${daysBack} days`);
+
+    if (granularity === 'hour') {
+      // Hourly breakdown for 1 day (24 hours)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      for (let hour = 0; hour < 24; hour++) {
+        const hourStart = new Date(today);
+        hourStart.setHours(hour);
+        const hourEnd = new Date(today);
+        hourEnd.setHours(hour + 1);
+
+        const hourOrders = eventOrders.filter(o => {
+          const orderDate = new Date(o.paymentDate || o.createdAt);
+          return orderDate >= hourStart && orderDate < hourEnd;
+        });
+
+        const hourPayments = allPayments.filter(p => {
+          const paymentDate = new Date(p.createdAt);
+          return paymentDate >= hourStart && paymentDate < hourEnd;
+        });
+
+        dailyRevenue.push({
+          date: `${hourStart.toISOString().split('T')[0]} ${hour.toString().padStart(2, '0')}:00`,
+          label: `${hour.toString().padStart(2, '0')}:00`,
+          revenue: hourOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0) +
+                  hourPayments.reduce((sum, p) => sum + p.amount, 0),
+          orders: hourOrders.length,
+          payments: hourPayments.length
+        });
+      }
+    } else if (granularity === 'day') {
+      // Daily breakdown
+      for (let i = daysBack - 1; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        date.setHours(0, 0, 0, 0);
+        
+        const nextDate = new Date(date);
+        nextDate.setDate(nextDate.getDate() + 1);
+
+        const dayOrders = eventOrders.filter(o => {
+          const orderDate = new Date(o.paymentDate || o.createdAt);
+          return orderDate >= date && orderDate < nextDate;
+        });
+
+        const dayPayments = allPayments.filter(p => {
+          const paymentDate = new Date(p.createdAt);
+          return paymentDate >= date && paymentDate < nextDate;
+        });
+
+        dailyRevenue.push({
+          date: date.toISOString().split('T')[0],
+          label: new Date(date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+          revenue: dayOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0) +
+                  dayPayments.reduce((sum, p) => sum + p.amount, 0),
+          orders: dayOrders.length,
+          payments: dayPayments.length
+        });
+      }
+    } else if (granularity === 'week') {
+      // Weekly breakdown
+      const weeks = Math.ceil(daysBack / 7);
+      for (let i = weeks - 1; i >= 0; i--) {
+        const weekEnd = new Date();
+        weekEnd.setDate(weekEnd.getDate() - (i * 7));
+        weekEnd.setHours(23, 59, 59, 999);
+        
+        const weekStart = new Date(weekEnd);
+        weekStart.setDate(weekStart.getDate() - 6);
+        weekStart.setHours(0, 0, 0, 0);
+
+        const weekOrders = eventOrders.filter(o => {
+          const orderDate = new Date(o.paymentDate || o.createdAt);
+          return orderDate >= weekStart && orderDate <= weekEnd;
+        });
+
+        const weekPayments = allPayments.filter(p => {
+          const paymentDate = new Date(p.createdAt);
+          return paymentDate >= weekStart && paymentDate <= weekEnd;
+        });
+
+        dailyRevenue.push({
+          date: weekStart.toISOString().split('T')[0],
+          label: `${weekStart.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}`,
+          revenue: weekOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0) +
+                  weekPayments.reduce((sum, p) => sum + p.amount, 0),
+          orders: weekOrders.length,
+          payments: weekPayments.length
+        });
+      }
+    } else if (granularity === 'month') {
+      // Monthly breakdown
+      const months = Math.ceil(daysBack / 30);
+      const endDate = new Date();
+      const tempStartDate = new Date(startDate);
+      
+      // Get unique months in range
+      const monthsSet = new Set();
+      for (let d = new Date(tempStartDate); d <= endDate; d.setMonth(d.getMonth() + 1)) {
+        monthsSet.add(`${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`);
+      }
+      
+      const monthsList = Array.from(monthsSet).sort();
+      
+      monthsList.forEach(monthKey => {
+        const [year, month] = monthKey.split('-').map(Number);
+        const monthStart = new Date(year, month - 1, 1);
+        const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+
+        const monthOrders = eventOrders.filter(o => {
+          const orderDate = new Date(o.paymentDate || o.createdAt);
+          return orderDate >= monthStart && orderDate <= monthEnd;
+        });
+
+        const monthPayments = allPayments.filter(p => {
+          const paymentDate = new Date(p.createdAt);
+          return paymentDate >= monthStart && paymentDate <= monthEnd;
+        });
+
+        dailyRevenue.push({
+          date: monthStart.toISOString().split('T')[0],
+          label: monthStart.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }),
+          revenue: monthOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0) +
+                  monthPayments.reduce((sum, p) => sum + p.amount, 0),
+          orders: monthOrders.length,
+          payments: monthPayments.length
+        });
+      });
+    }
+
+    const dashboardData = {
+      summary: {
+        totalRevenue,
+        orderRevenue: orderRevenue.totalAmount,
+        paymentRevenue: paymentRevenue.totalAmount,
+        eventPaymentRevenue: eventPaymentRevenue.totalAmount,
+        premiumMemberCount: premiumMembers.length,
+        totalActiveCoaches: activeCoaches,
+        premiumPercentage: activeCoaches > 0 ? (premiumMembers.length / activeCoaches * 100).toFixed(2) : 0
+      },
+      membership: membershipRevenue,
+      orders: orderRevenue,
+      payments: paymentRevenue,
+      eventPayments: eventPaymentRevenue,
+      premiumMembers: premiumMembers.slice(0, 20), // Top 20
+      topSpenders,
+      recentTransactions,
+      dailyRevenue,
+      dateRange: {
+        from: startDate.toISOString(),
+        to: new Date().toISOString(),
+        days: daysBack
+      }
+    };
+
+    console.log(`✅ Revenue dashboard data compiled successfully`);
+    console.log(`💰 Total Revenue: ₹${totalRevenue.toFixed(2)}`);
+    console.log(`👥 Premium Members: ${premiumMembers.length} / ${activeCoaches} coaches`);
+    console.log(`📦 Orders: ${orderRevenue.totalOrders} orders worth ₹${orderRevenue.totalAmount.toFixed(2)}`);
+    console.log(`📈 Daily Revenue Data Points: ${dailyRevenue.length}`);
+    console.log(`📊 Sample Daily Revenue:`, dailyRevenue.slice(0, 3));
+
+    res.json(successResponse(dashboardData, 'Revenue dashboard data retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get revenue dashboard error:', error);
+    console.error(error.stack);
+    res.status(500).json(errorResponse('Failed to retrieve revenue dashboard data.', 500));
   }
 });
 

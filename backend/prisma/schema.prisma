@@ -9,7 +9,8 @@ datasource db {
 
 model User {
   id               String         @id @default(cuid())
-  uniqueId         String?        @unique
+  /// Custom UID for user, visible in admin and frontend
+  uniqueId         String?        @unique @map("unique_id")
   email            String?        @unique
   phone            String?        @unique
   password         String?
@@ -329,6 +330,24 @@ model EventResultFile {
   event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@map("event_result_files")
+}
+
+model Certificate {
+  id              String   @id @default(cuid())
+  studentId       String
+  eventId         String
+  orderId         String
+  certificateUrl  String
+  participantName String
+  sportName       String
+  eventName       String
+  issueDate       DateTime @default(now())
+  uid             String   @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([studentId, eventId, orderId])
+  @@map("certificates")
 }
 
 model EventOrder {

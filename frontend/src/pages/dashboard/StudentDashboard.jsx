@@ -412,7 +412,7 @@ const StudentDashboard = () => {
               </div>
             </div>
           </div>
-          {/* Events Registered */}
+          {/* Events Regiastered */}
           <div 
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
             onClick={() => {

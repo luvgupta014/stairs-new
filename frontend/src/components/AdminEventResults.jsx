@@ -402,6 +402,11 @@ const AdminEventResults = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{file.coach?.name || 'Unknown Coach'}</div>
+                        {file.coach?.user?.uniqueId && (
+                          <div className="text-xs text-blue-600 font-mono font-medium">
+                            UID: {file.coach.user.uniqueId}
+                          </div>
+                        )}
                         <div className="text-sm text-gray-500">{file.coach?.email || 'No email'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

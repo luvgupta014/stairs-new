@@ -1,3 +1,22 @@
+// Admin: Get all users with filters, pagination, search
+export const getAllUsers = async (params = {}) => {
+  try {
+    const response = await api.get('/api/admin/users', { params });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Admin: Get single user details by uniqueId
+export const getUserByUniqueId = async (uniqueId) => {
+  try {
+    const response = await api.get(`/api/admin/users/${uniqueId}/details`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
 import axios from 'axios';
 
 // Debug function to help diagnose connection issues

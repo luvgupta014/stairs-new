@@ -139,6 +139,11 @@ const ParticipantsModal = ({
                           <p className="text-sm text-gray-600">
                             Registered on {formatDate(participant.registeredAt || participant.createdAt)}
                           </p>
+                          {participant.student?.user?.uniqueId && (
+                            <p className="text-xs text-blue-600 font-mono font-medium mt-1">
+                              UID: {participant.student.user.uniqueId}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
