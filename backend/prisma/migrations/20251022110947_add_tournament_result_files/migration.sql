@@ -8,8 +8,8 @@ CREATE TABLE "users" (
     "role" TEXT NOT NULL,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "isVerified" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP NOT NULL
 );
 
 -- CreateTable
@@ -18,9 +18,9 @@ CREATE TABLE "otp_records" (
     "userId" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "type" TEXT NOT NULL,
-    "expiresAt" DATETIME NOT NULL,
+    "expiresAt" TIMESTAMP NOT NULL,
     "isUsed" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "otp_records_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -32,7 +32,7 @@ CREATE TABLE "students" (
     "fatherName" TEXT,
     "aadhaar" TEXT,
     "gender" TEXT,
-    "dateOfBirth" DATETIME,
+    "dateOfBirth" TIMESTAMP,
     "state" TEXT,
     "district" TEXT,
     "address" TEXT,
@@ -47,8 +47,8 @@ CREATE TABLE "students" (
     "coachMobile" TEXT,
     "achievements" TEXT,
     "profileCompletion" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP NOT NULL,
     CONSTRAINT "students_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -61,7 +61,7 @@ CREATE TABLE "coaches" (
     "motherName" TEXT,
     "aadhaar" TEXT,
     "gender" TEXT,
-    "dateOfBirth" DATETIME,
+    "dateOfBirth" TIMESTAMP,
     "state" TEXT,
     "district" TEXT,
     "address" TEXT,
@@ -80,12 +80,12 @@ CREATE TABLE "coaches" (
     "city" TEXT,
     "paymentStatus" TEXT NOT NULL DEFAULT 'PENDING',
     "subscriptionType" TEXT,
-    "subscriptionExpiresAt" DATETIME,
+    "subscriptionExpiresAt" TIMESTAMP,
     "isActive" BOOLEAN NOT NULL DEFAULT false,
     "rating" REAL DEFAULT 0,
     "totalStudents" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP NOT NULL,
     CONSTRAINT "coaches_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -103,8 +103,8 @@ CREATE TABLE "institutes" (
     "sportsOffered" TEXT,
     "studentsCount" INTEGER NOT NULL DEFAULT 0,
     "coachesCount" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP NOT NULL,
     CONSTRAINT "institutes_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -121,8 +121,8 @@ CREATE TABLE "clubs" (
     "facilities" TEXT,
     "membershipTypes" TEXT,
     "membersCount" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP NOT NULL,
     CONSTRAINT "clubs_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -133,8 +133,8 @@ CREATE TABLE "admins" (
     "name" TEXT NOT NULL,
     "role" TEXT NOT NULL DEFAULT 'ADMIN',
     "permissions" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP NOT NULL,
     CONSTRAINT "admins_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -146,8 +146,8 @@ CREATE TABLE "student_coach_connections" (
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "initiatedBy" TEXT NOT NULL,
     "message" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP NOT NULL,
     CONSTRAINT "student_coach_connections_studentId_fkey" FOREIGN KEY ("studentId") REFERENCES "students" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "student_coach_connections_coachId_fkey" FOREIGN KEY ("coachId") REFERENCES "coaches" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
@@ -157,7 +157,7 @@ CREATE TABLE "institute_students" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "instituteId" TEXT NOT NULL,
     "studentId" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "institute_students_instituteId_fkey" FOREIGN KEY ("instituteId") REFERENCES "institutes" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "institute_students_studentId_fkey" FOREIGN KEY ("studentId") REFERENCES "students" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
@@ -167,7 +167,7 @@ CREATE TABLE "institute_coaches" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "instituteId" TEXT NOT NULL,
     "coachId" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "institute_coaches_instituteId_fkey" FOREIGN KEY ("instituteId") REFERENCES "institutes" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "institute_coaches_coachId_fkey" FOREIGN KEY ("coachId") REFERENCES "coaches" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
@@ -179,7 +179,7 @@ CREATE TABLE "club_members" (
     "studentId" TEXT NOT NULL,
     "membershipType" TEXT,
     "status" TEXT NOT NULL DEFAULT 'ACTIVE',
-    "joinedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "joinedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "club_members_clubId_fkey" FOREIGN KEY ("clubId") REFERENCES "clubs" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "club_members_studentId_fkey" FOREIGN KEY ("studentId") REFERENCES "students" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
@@ -196,15 +196,15 @@ CREATE TABLE "events" (
     "state" TEXT NOT NULL,
     "latitude" REAL,
     "longitude" REAL,
-    "startDate" DATETIME NOT NULL,
-    "endDate" DATETIME,
+    "startDate" TIMESTAMP NOT NULL,
+    "endDate" TIMESTAMP,
     "maxParticipants" INTEGER NOT NULL DEFAULT 50,
     "currentParticipants" INTEGER NOT NULL DEFAULT 0,
     "eventFee" REAL NOT NULL DEFAULT 0,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "adminNotes" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP NOT NULL,
     "coachId" TEXT NOT NULL,
     CONSTRAINT "events_coachId_fkey" FOREIGN KEY ("coachId") REFERENCES "coaches" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
@@ -216,8 +216,8 @@ CREATE TABLE "event_registrations" (
     "studentId" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "message" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP NOT NULL,
     CONSTRAINT "event_registrations_eventId_fkey" FOREIGN KEY ("eventId") REFERENCES "events" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "event_registrations_studentId_fkey" FOREIGN KEY ("studentId") REFERENCES "students" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
@@ -234,8 +234,8 @@ CREATE TABLE "payments" (
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "description" TEXT,
     "metadata" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP NOT NULL,
     CONSTRAINT "payments_coachId_fkey" FOREIGN KEY ("coachId") REFERENCES "coaches" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -249,8 +249,8 @@ CREATE TABLE "event_payments" (
     "razorpayPaymentId" TEXT,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "description" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP NOT NULL,
     CONSTRAINT "event_payments_eventId_fkey" FOREIGN KEY ("eventId") REFERENCES "events" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -265,11 +265,11 @@ CREATE TABLE "tournament_result_files" (
     "mimeType" TEXT NOT NULL,
     "description" TEXT,
     "tournamentName" TEXT,
-    "tournamentDate" DATETIME,
-    "uploadDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "tournamentDate" TIMESTAMP,
+    "uploadDate" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "isPublic" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP NOT NULL,
     CONSTRAINT "tournament_result_files_coachId_fkey" FOREIGN KEY ("coachId") REFERENCES "coaches" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
