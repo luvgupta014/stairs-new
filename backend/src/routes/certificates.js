@@ -243,6 +243,8 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
   try {
     const { eventId } = req.params;
 
+    console.log(`📜 Fetching issued certificates for event: ${eventId}`);
+
     // Find event by id or uniqueId
     const event = await prisma.event.findFirst({
       where: {
@@ -251,35 +253,83 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
           { uniqueId: eventId }
         ]
       },
-      select: { id: true, name: true }
+      select: { id: true, uniqueId: true, name: true }
     });
 
+    console.log(`🔍 Event lookup result:`, event);
+
     if (!event) {
+      console.log(`❌ Event not found for ID: ${eventId}`);
       return res.status(404).json(errorResponse('Event not found'));
     }
 
-    // Get all certificates for this event, including student uniqueId
+    // Get all certificates for this event - check both database ID and uniqueId
     const certificatesRaw = await prisma.certificate.findMany({
-      where: { eventId: event.id },
+      where: {
+        OR: [
+          { eventId: event.id },
+          { eventId: event.uniqueId }
+        ]
+      },
       orderBy: { issueDate: 'desc' }
     });
 
-    // Fetch student uniqueIds for each certificate
+    console.log(`📋 Found ${certificatesRaw.length} certificates`);
+
+    // Fetch student details for each certificate
     const certificates = await Promise.all(certificatesRaw.map(async cert => {
-      const student = await prisma.student.findUnique({
-        where: { id: cert.studentId },
-        select: {
-          name: true,
-          user: { select: { uniqueId: true, email: true } }
+      try {
+        // Try to find student by database ID first, then by uniqueId
+        let student = await prisma.student.findUnique({
+          where: { id: cert.studentId },
+          select: {
+            name: true,
+            user: { select: { uniqueId: true, email: true } }
+          }
+        });
+
+        // If not found by ID, try finding by uniqueId through user
+        if (!student) {
+          const user = await prisma.user.findUnique({
+            where: { uniqueId: cert.studentId },
+            include: {
+              studentProfile: {
+                select: {
+                  name: true
+                }
+              }
+            }
+          });
+          
+          if (user?.studentProfile) {
+            student = {
+              name: user.studentProfile.name,
+              user: {
+                uniqueId: user.uniqueId,
+                email: user.email
+              }
+            };
+          }
         }
-      });
-      return {
-        ...cert,
-        studentName: student?.name || 'Unknown',
-        studentUniqueId: student?.user?.uniqueId || '',
-        studentEmail: student?.user?.email || ''
-      };
+
+        return {
+          ...cert,
+          studentName: student?.name || 'Unknown',
+          studentUniqueId: student?.user?.uniqueId || cert.studentId,
+          studentEmail: student?.user?.email || ''
+        };
+      } catch (err) {
+        console.error(`⚠️ Error fetching student ${cert.studentId}:`, err);
+        return {
+          ...cert,
+          studentName: 'Unknown',
+          studentUniqueId: cert.studentId,
+          studentEmail: ''
+        };
+      }
     }));
+
+    console.log(`✅ Successfully retrieved ${certificates.length} certificates`);
 
     res.json(successResponse({
       certificates,
@@ -289,6 +339,7 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
 
   } catch (error) {
     console.error('❌ Error fetching event certificates:', error);
+    console.error('Stack trace:', error.stack);
     res.status(500).json(errorResponse('Failed to fetch certificates', 500));
   }
 });
