@@ -264,17 +264,19 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
     }
 
     // Get all certificates for this event - check both database ID and uniqueId
+    // Some old certificates might have uniqueId stored, newer ones have database ID
     const certificatesRaw = await prisma.certificate.findMany({
       where: {
         OR: [
           { eventId: event.id },
-          { eventId: event.uniqueId }
+          { eventId: event.uniqueId },
+          { eventId: eventId } // Also check if eventId param was stored directly
         ]
       },
       orderBy: { issueDate: 'desc' }
     });
 
-    console.log(`📋 Found ${certificatesRaw.length} certificates`);
+    console.log(`📋 Found ${certificatesRaw.length} certificates for event ${event.name}`);
 
     // Fetch student details for each certificate
     const certificates = await Promise.all(certificatesRaw.map(async cert => {
@@ -424,18 +426,45 @@ router.get('/event/:eventId/eligible-students', authenticate, requireAdmin, asyn
       }
     });
 
-    // Get already issued certificates for this event (without orderId constraint)
+    // Get already issued certificates for this event - check all possible ID formats
     const issuedCertificates = await prisma.certificate.findMany({
       where: {
-        eventId: event.id
-        // orderId // Removed orderId constraint
+        OR: [
+          { eventId: event.id },
+          { eventId: event.uniqueId },
+          { eventId: eventId } // Also check if eventId param was stored directly
+        ]
       },
       select: {
         studentId: true
       }
     });
 
-    const issuedStudentIds = new Set(issuedCertificates.map(cert => cert.studentId));
+    console.log(`📋 Found ${issuedCertificates.length} issued certificates for event ${event.name}`);
+
+    // Build a set of issued student IDs - check both database ID and uniqueId
+    const issuedStudentIds = new Set();
+    
+    for (const cert of issuedCertificates) {
+      issuedStudentIds.add(cert.studentId);
+      
+      // Also try to find the database ID if cert.studentId is a uniqueId
+      const student = await prisma.student.findFirst({
+        where: {
+          OR: [
+            { id: cert.studentId },
+            { user: { uniqueId: cert.studentId } }
+          ]
+        },
+        select: { id: true }
+      });
+      
+      if (student) {
+        issuedStudentIds.add(student.id);
+      }
+    }
+
+    console.log(`🔍 Total student IDs to exclude (including uniqueIds): ${issuedStudentIds.size}`);
 
     // Filter out students who already have certificates
     const eligibleStudents = registrations

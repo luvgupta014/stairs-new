@@ -762,7 +762,7 @@ const AdminEventsManagement = () => {
                             onClick={() => handleViewEventDetails(event)}
                             className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors h-6"
                           >
-                            👁️ View Events
+                            👁️ View Details
                           </button>
                           
                           {/* Moderation Actions */}
