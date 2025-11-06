@@ -10,6 +10,7 @@ export default defineConfig({
     outDir: 'dist'
   },
   server: {
+    host: true,
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
@@ -18,4 +19,12 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    host: true,
+    allowedHosts: [
+      'stairs.astroraag.com',
+      'localhost',
+      '.astroraag.com' // Allow all subdomains
+    ]
+  }
 })
