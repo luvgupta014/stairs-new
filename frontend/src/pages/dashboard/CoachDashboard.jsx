@@ -113,60 +113,7 @@ const CoachDashboard = () => {
       }
     } catch (error) {
       console.error('Failed to load dashboard:', error);
-      // Using mock data for demo when API fails
-      setDashboardData({
-        coach: {
-          name: 'Mike Johnson',
-          specialization: 'Football Training',
-          studentsCount: 24,
-          eventsCreated: 12,
-          rating: 4.8,
-          totalRevenue: 45000,
-          joinedDate: '2024-01-15'
-        },
-        students: [
-          {
-            id: 1,
-            name: 'John Doe',
-            sport: 'Football',
-            level: 'Intermediate',
-            location: 'New York',
-            achievements: ['Regional Champion', 'Team Captain'],
-            joinedDate: '2024-03-01',
-            performance: 85
-          },
-          {
-            id: 2,
-            name: 'Jane Smith',
-            sport: 'Football',
-            level: 'Advanced',
-            location: 'Brooklyn',
-            achievements: ['State Qualifier', 'MVP'],
-            joinedDate: '2024-02-15',
-            performance: 92
-          },
-          {
-            id: 3,
-            name: 'Alex Johnson',
-            sport: 'Football',
-            level: 'Beginner',
-            location: 'Queens',
-            achievements: ['Best Improvement'],
-            joinedDate: '2024-04-01',
-            performance: 78
-          }
-        ],
-        recentEvents: [
-          { id: 1, name: 'Youth Championship', date: '2025-12-15', participants: 24, status: 'upcoming' },
-          { id: 2, name: 'Skills Development Camp', date: '2025-11-20', participants: 18, status: 'completed' },
-          { id: 3, name: 'Weekend Training', date: '2025-10-30', participants: 15, status: 'ongoing' }
-        ],
-        notifications: [
-          { id: 1, type: 'student', message: 'New student request from Sarah Wilson', time: '2 hours ago' },
-          { id: 2, type: 'event', message: 'Youth Championship registration deadline tomorrow', time: '5 hours ago' },
-          { id: 3, type: 'payment', message: 'Monthly payment received from 3 students', time: '1 day ago' }
-        ]
-      });
+      setError('Unable to load dashboard data. Please refresh the page.');
     } finally {
       setLoading(false);
     }
