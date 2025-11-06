@@ -388,8 +388,13 @@ class EventService {
    */
   async getEventById(eventId, userRole = null, userId = null) {
     try {
-      const event = await prisma.event.findUnique({
-        where: { id: eventId },
+      const event = await prisma.event.findFirst({
+        where: {
+          OR: [
+            { id: eventId },
+            { uniqueId: eventId }
+          ]
+        },
         include: {
           coach: {
             select: {

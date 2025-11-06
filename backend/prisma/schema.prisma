@@ -9,8 +9,6 @@ datasource db {
 
 model User {
   id               String         @id @default(cuid())
-  /// Custom UID for user, visible in admin and frontend
-  uniqueId         String?        @unique @map("unique_id")
   email            String?        @unique
   phone            String?        @unique
   password         String?
@@ -19,6 +17,8 @@ model User {
   isVerified       Boolean        @default(false)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+  /// Custom UID for user, visible in admin and frontend
+  uniqueId         String?        @unique @map("unique_id")
   adminProfile     Admin?
   clubProfile      Club?
   coachProfile     Coach?
@@ -235,8 +235,6 @@ model ClubMember {
 
 model Event {
   id                  String              @id @default(cuid())
-  /// Custom UID for event in format: <serial>-<sportCode>-EVT-<locationCode>-<MMYYYY>
-  uniqueId            String?             @unique @map("unique_id")
   name                String
   description         String?
   sport               String
@@ -256,6 +254,8 @@ model Event {
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   coachId             String
+  /// Custom UID for event in format: <serial>-<sportCode>-EVT-<locationCode>-<MMYYYY>
+  uniqueId            String?             @unique @map("unique_id") @db.VarChar(255)
   orders              EventOrder[]
   payments            EventPayment[]
   registrations       EventRegistration[]
@@ -281,21 +281,21 @@ model EventRegistration {
 }
 
 model Payment {
-  id                String        @id @default(cuid())
+  id                String        @id(map: "new_payments_pkey") @default(cuid())
   userId            String?
   userType          UserRole?
   coachId           String?
   type              PaymentType
-  amount            Float
+  amount            Float         @db.Real
   currency          String        @default("INR")
   razorpayOrderId   String?
   razorpayPaymentId String?
-  status            PaymentStatus @default(PENDING)
+  status            String        @default("PENDING")
   description       String?
   metadata          String?
-  expiresAt         DateTime?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  expiresAt         DateTime?     @db.Timestamp(6)
+  createdAt         DateTime      @default(now()) @db.Timestamp(6)
+  updatedAt         DateTime      @updatedAt @db.Timestamp(6)
   coach             Coach?        @relation(fields: [coachId], references: [id])
   user              User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -338,7 +338,7 @@ model Certificate {
   id              String   @id @default(cuid())
   studentId       String
   eventId         String
-  orderId         String
+  orderId         String?
   certificateUrl  String
   participantName String
   sportName       String
@@ -348,6 +348,7 @@ model Certificate {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  @@unique([studentId, eventId])
   @@unique([studentId, eventId, orderId])
   @@map("certificates")
 }

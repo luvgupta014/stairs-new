@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getEventById, getEventOrders, getEligibleStudents, issueCertificates, getEventCertificates } from '../api';
+import { getEventById, getEligibleStudents, issueCertificates, getEventCertificates } from '../api';
 import Spinner from '../components/Spinner';
 
 const IssueCertificates = () => {
@@ -9,8 +9,6 @@ const IssueCertificates = () => {
   
   const [loading, setLoading] = useState(true);
   const [event, setEvent] = useState(null);
-  const [orders, setOrders] = useState([]);
-  const [selectedOrder, setSelectedOrder] = useState(null);
   const [eligibleStudents, setEligibleStudents] = useState([]);
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [issuedCertificates, setIssuedCertificates] = useState([]);
@@ -22,40 +20,24 @@ const IssueCertificates = () => {
   const [activeTab, setActiveTab] = useState('issue'); // 'issue' or 'history'
 
   useEffect(() => {
-    loadEventAndOrders();
+    loadEvent();
     loadIssuedCertificates();
+    loadEligibleStudentsDirectly();
   }, [eventId]);
 
-  const loadEventAndOrders = async () => {
+  const loadEvent = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // Load event details
       const eventResponse = await getEventById(eventId);
       if (eventResponse.success) {
         setEvent(eventResponse.data);
       } else {
         throw new Error(eventResponse.message || 'Failed to load event');
       }
-
-      // Load orders for this event
-      const ordersResponse = await getEventOrders(eventId);
-      if (ordersResponse.success) {
-        // Filter only completed orders with SUCCESS payment
-        const completedOrders = (ordersResponse.data.orders || []).filter(
-          order => order.status === 'COMPLETED' && order.paymentStatus === 'SUCCESS'
-        );
-        setOrders(completedOrders);
-        
-        if (completedOrders.length === 0) {
-          setError('No completed orders found for this event. Please place and complete an order first.');
-        }
-      } else {
-        throw new Error(ordersResponse.message || 'Failed to load orders');
-      }
     } catch (err) {
-      console.error('Error loading event and orders:', err);
+      console.error('Error loading event:', err);
       setError(err.message || 'Failed to load event details');
     } finally {
       setLoading(false);
@@ -80,6 +62,33 @@ const IssueCertificates = () => {
     }
   };
 
+  // NEW: Load eligible students directly without order requirement
+  const loadEligibleStudentsDirectly = async () => {
+    try {
+      setLoadingStudents(true);
+      setError(null);
+
+      const response = await getEligibleStudents(eventId, null); // null orderId
+      
+      if (response.success) {
+        setEligibleStudents(response.data.eligibleStudents || []);
+        
+        if (response.data.eligibleStudents.length === 0) {
+          setError('No eligible students found. All certificates may have been issued already.');
+        }
+      } else {
+        throw new Error(response.message || 'Failed to load eligible students');
+      }
+    } catch (err) {
+      console.error('Error loading eligible students:', err);
+      setError(err.message || 'Failed to load eligible students');
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  // COMMENTED OUT: Order selection no longer needed
+  /*
   const handleOrderSelect = async (order) => {
     try {
       setSelectedOrder(order);
@@ -105,17 +114,22 @@ const IssueCertificates = () => {
       setLoadingStudents(false);
     }
   };
+  */
 
   const handleStudentToggle = (studentId) => {
     setSelectedStudents(prev => {
       if (prev.includes(studentId)) {
         return prev.filter(id => id !== studentId);
       } else {
+        // COMMENTED OUT: No longer limit based on order certificates
+        // Admin can select any number of eligible students
+        /*
         // Check if we've reached the limit
         if (selectedOrder && prev.length >= selectedOrder.certificates) {
           setError(`You can only select up to ${selectedOrder.certificates} students based on your order.`);
           return prev;
         }
+        */
         setError(null);
         return [...prev, studentId];
       }
@@ -126,6 +140,13 @@ const IssueCertificates = () => {
     if (selectedStudents.length === eligibleStudents.length) {
       setSelectedStudents([]);
     } else {
+      // UPDATED: Select all eligible students without order limit
+      const studentsToSelect = eligibleStudents.map(s => s.id);
+      setSelectedStudents(studentsToSelect);
+      setError(null);
+      
+      // COMMENTED OUT: No longer limit based on order
+      /*
       const maxAllowed = selectedOrder?.certificates || eligibleStudents.length;
       const studentsToSelect = eligibleStudents.slice(0, maxAllowed).map(s => s.id);
       setSelectedStudents(studentsToSelect);
@@ -135,10 +156,18 @@ const IssueCertificates = () => {
       } else {
         setError(null);
       }
+      */
     }
   };
 
   const handleIssueCertificates = async () => {
+    if (selectedStudents.length === 0) {
+      setError('Please select at least one student');
+      return;
+    }
+
+    // COMMENTED OUT: No longer check against order limit
+    /*
     if (!selectedOrder || selectedStudents.length === 0) {
       setError('Please select at least one student');
       return;
@@ -148,6 +177,7 @@ const IssueCertificates = () => {
       setError(`You can only issue ${selectedOrder.certificates} certificates based on your order.`);
       return;
     }
+    */
 
     const confirmMsg = `Are you sure you want to issue certificates to ${selectedStudents.length} student(s)? This action cannot be undone.`;
     if (!window.confirm(confirmMsg)) {
@@ -160,7 +190,7 @@ const IssueCertificates = () => {
 
       const response = await issueCertificates({
         eventId,
-        orderId: selectedOrder.id,
+        orderId: null, // No orderId required
         selectedStudents
       });
 
@@ -170,7 +200,8 @@ const IssueCertificates = () => {
         
         // Reload eligible students to reflect the changes
         setTimeout(() => {
-          handleOrderSelect(selectedOrder);
+          loadEligibleStudentsDirectly();
+          loadIssuedCertificates();
           setSuccess(null);
         }, 2000);
       } else {
@@ -275,112 +306,45 @@ const IssueCertificates = () => {
 
         {/* Issue Tab Content */}
         {activeTab === 'issue' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Step 1: Select Order */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <span className="bg-teal-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm mr-2">1</span>
-                Select Order
-              </h2>
-              
-              {orders.length === 0 ? (
-                <div className="text-center py-8">
-                  <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <p className="text-gray-600 mb-4">No completed orders found</p>
-                  <Link
-                    to={`/coach/event/${eventId}/orders`}
-                    className="text-teal-600 hover:text-teal-700 font-medium"
-                  >
-                    Place an Order →
-                  </Link>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {orders.map((order) => (
-                    <button
-                      key={order.id}
-                      onClick={() => handleOrderSelect(order)}
-                      className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                        selectedOrder?.id === order.id
-                          ? 'border-teal-600 bg-teal-50'
-                          : 'border-gray-200 hover:border-teal-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-gray-900">Order #{order.orderNumber}</span>
-                        {selectedOrder?.id === order.id && (
-                          <svg className="w-5 h-5 text-teal-600" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                        )}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        <p>Certificates: <span className="font-medium">{order.certificates}</span></p>
-                        <p>Status: <span className="font-medium text-green-600">{order.status}</span></p>
-                        <p>Payment: <span className="font-medium text-green-600">{order.paymentStatus}</span></p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+        <div className="grid grid-cols-1 gap-6">
+          {/* Eligible Students Section - No order required */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Select Students for Certificates
+            </h2>
 
-          {/* Step 2: Select Students */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-                  <span className="bg-teal-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm mr-2">2</span>
-                  Select Athletes
-                </h2>
-                
-                {selectedOrder && eligibleStudents.length > 0 && (
-                  <div className="text-sm text-gray-600">
-                    Selected: <span className="font-semibold text-teal-600">{selectedStudents.length}</span> / {selectedOrder.certificates}
-                  </div>
-                )}
+            {loadingStudents ? (
+              <div className="text-center py-12">
+                <Spinner />
+                <p className="text-gray-600 mt-4">Loading eligible students...</p>
               </div>
-
-              {!selectedOrder ? (
-                <div className="text-center py-12 text-gray-500">
-                  <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  <p>Please select an order first</p>
-                </div>
-              ) : loadingStudents ? (
-                <div className="text-center py-12">
-                  <Spinner />
-                  <p className="text-gray-600 mt-4">Loading eligible students...</p>
-                </div>
-              ) : eligibleStudents.length === 0 ? (
-                <div className="text-center py-12">
-                  <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                  </svg>
-                  <p className="text-gray-600 mb-2">No eligible students</p>
-                  <p className="text-sm text-gray-500">All certificates have been issued for this order</p>
-                </div>
-              ) : (
-                <>
-                  {/* Select All Checkbox */}
-                  <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedStudents.length === eligibleStudents.length && eligibleStudents.length > 0}
-                        onChange={handleSelectAll}
-                        className="w-5 h-5 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
-                      />
-                      <span className="ml-3 font-medium text-gray-900">
-                        Select All ({Math.min(eligibleStudents.length, selectedOrder.certificates)} students)
-                      </span>
-                    </label>
+            ) : eligibleStudents.length === 0 ? (
+              <div className="text-center py-12">
+                <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                </svg>
+                <p className="text-gray-600 mb-2">No eligible students</p>
+                <p className="text-sm text-gray-500">All certificates have been issued for this event</p>
+              </div>
+            ) : (
+              <>
+                {/* Select All Checkbox */}
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg flex items-center justify-between">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedStudents.length === eligibleStudents.length && eligibleStudents.length > 0}
+                      onChange={handleSelectAll}
+                      className="w-5 h-5 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                    />
+                    <span className="ml-3 font-medium text-gray-900">
+                      Select All ({eligibleStudents.length} students)
+                    </span>
+                  </label>
+                  <div className="text-sm text-gray-600">
+                    Selected: <span className="font-semibold text-teal-600">{selectedStudents.length}</span> / {eligibleStudents.length}
                   </div>
+                </div>
 
                   {/* Students List */}
                   <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -453,7 +417,6 @@ const IssueCertificates = () => {
               )}
             </div>
           </div>
-        </div>
         )}
 
         {/* History Tab Content */}

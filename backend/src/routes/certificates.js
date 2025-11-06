@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, requireCoach } = require('../utils/authMiddleware');
+const { authenticate, requireCoach, requireAdmin } = require('../utils/authMiddleware');
 const certificateService = require('../services/certificateService');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
@@ -11,26 +11,27 @@ const errorResponse = (message, statusCode = 400) => ({ success: false, message,
 
 /**
  * @route   POST /api/certificates/issue
- * @desc    Issue certificates to selected students (Coach only)
- * @access  Private (Coach)
+ * @desc    Issue certificates to selected students (Admin only)
+ * @access  Private (Admin)
  */
-router.post('/issue', authenticate, requireCoach, async (req, res) => {
+router.post('/issue', authenticate, requireAdmin, async (req, res) => {
   try {
     const { eventId, orderId, selectedStudents } = req.body;
-    const coachId = req.user.coachProfile.id;
 
     console.log(`📜 Certificate issuance request:`, { eventId, orderId, selectedStudents: selectedStudents?.length });
 
     // Validate input
-    if (!eventId || !orderId || !selectedStudents || selectedStudents.length === 0) {
-      return res.status(400).json(errorResponse('Missing required fields: eventId, orderId, or selectedStudents'));
+    if (!eventId || !selectedStudents || selectedStudents.length === 0) {
+      return res.status(400).json(errorResponse('Missing required fields: eventId or selectedStudents'));
     }
 
-    // Verify the event belongs to the coach
+    // Find event by id or uniqueId
     const event = await prisma.event.findFirst({
       where: {
-        id: eventId,
-        coachId
+        OR: [
+          { id: eventId },
+          { uniqueId: eventId }
+        ]
       },
       select: {
         id: true,
@@ -45,12 +46,14 @@ router.post('/issue', authenticate, requireCoach, async (req, res) => {
       return res.status(404).json(errorResponse('Event not found or you do not have permission'));
     }
 
+    // COMMENTED OUT: Order verification and payment check
+    // Admin can now issue certificates without order completion constraint
+    /*
     // Verify the order and check payment status
     const order = await prisma.eventOrder.findFirst({
       where: {
         id: orderId,
         eventId,
-        coachId,
         paymentStatus: 'SUCCESS'
       },
       select: {
@@ -64,12 +67,13 @@ router.post('/issue', authenticate, requireCoach, async (req, res) => {
       return res.status(404).json(errorResponse('Order not found or payment not completed'));
     }
 
-    // Check if coach is trying to issue more certificates than paid for
+    // Check if trying to issue more certificates than paid for
     if (selectedStudents.length > order.certificates) {
       return res.status(400).json(errorResponse(
         `You can only issue ${order.certificates} certificate(s). You selected ${selectedStudents.length} students.`
       ));
     }
+    */
 
     // Get student details for selected students
     const students = await prisma.student.findMany({
@@ -91,11 +95,11 @@ router.post('/issue', authenticate, requireCoach, async (req, res) => {
       return res.status(400).json(errorResponse('Some selected students were not found'));
     }
 
-    // Check for already issued certificates
+    // Check for already issued certificates (without orderId constraint)
     const existingCertificates = await prisma.certificate.findMany({
       where: {
-        eventId,
-        orderId,
+        eventId: event.id,
+        // orderId, // Removed orderId constraint
         studentId: { in: selectedStudents }
       },
       select: {
@@ -125,7 +129,7 @@ router.post('/issue', authenticate, requireCoach, async (req, res) => {
       date: eventDate, // For backwards compatibility
       studentId: student.user.uniqueId, // Use custom formatted athlete UID
       eventId: event.uniqueId, // Use custom formatted event UID
-      orderId: order.id
+      orderId: orderId || null // Optional orderId
     }));
 
     // Generate certificates
@@ -231,27 +235,32 @@ router.get('/verify/:uid', async (req, res) => {
 
 /**
  * @route   GET /api/certificates/event/:eventId/issued
- * @desc    Get all issued certificates for an event (Coach only)
- * @access  Private (Coach)
+ * @desc    Get all issued certificates for an event (Admin only)
+ * @access  Private (Admin)
+ * @note    Returns all certificates for the event regardless of order
  */
-router.get('/event/:eventId/issued', authenticate, requireCoach, async (req, res) => {
+router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res) => {
   try {
     const { eventId } = req.params;
-    const coachId = req.user.coachProfile.id;
 
-    // Verify event belongs to coach
+    // Find event by id or uniqueId
     const event = await prisma.event.findFirst({
-      where: { id: eventId, coachId },
+      where: {
+        OR: [
+          { id: eventId },
+          { uniqueId: eventId }
+        ]
+      },
       select: { id: true, name: true }
     });
 
     if (!event) {
-      return res.status(404).json(errorResponse('Event not found or access denied'));
+      return res.status(404).json(errorResponse('Event not found'));
     }
 
     // Get all certificates for this event, including student uniqueId
     const certificatesRaw = await prisma.certificate.findMany({
-      where: { eventId },
+      where: { eventId: event.id },
       orderBy: { issueDate: 'desc' }
     });
 
@@ -260,12 +269,15 @@ router.get('/event/:eventId/issued', authenticate, requireCoach, async (req, res
       const student = await prisma.student.findUnique({
         where: { id: cert.studentId },
         select: {
-          user: { select: { uniqueId: true } }
+          name: true,
+          user: { select: { uniqueId: true, email: true } }
         }
       });
       return {
         ...cert,
-        studentUniqueId: student?.user?.uniqueId || ''
+        studentName: student?.name || 'Unknown',
+        studentUniqueId: student?.user?.uniqueId || '',
+        studentEmail: student?.user?.email || ''
       };
     }));
 
@@ -283,40 +295,47 @@ router.get('/event/:eventId/issued', authenticate, requireCoach, async (req, res
 
 /**
  * @route   GET /api/certificates/event/:eventId/eligible-students
- * @desc    Get eligible students for certificate issuance for an event (Coach only)
- * @access  Private (Coach)
+ * @desc    Get eligible students for certificate issuance for an event (Admin only)
+ * @access  Private (Admin)
+ * @note    Order verification commented out - Admin can issue certificates without order completion
  */
-router.get('/event/:eventId/eligible-students', authenticate, requireCoach, async (req, res) => {
+router.get('/event/:eventId/eligible-students', authenticate, requireAdmin, async (req, res) => {
   try {
     const { eventId } = req.params;
     const { orderId } = req.query;
-    const coachId = req.user.coachProfile.id;
 
-    console.log(`📋 Fetching eligible students for event: ${eventId}, order: ${orderId}`);
+    console.log(`📋 Fetching eligible students for event: ${eventId}${orderId ? `, order: ${orderId}` : ''}`);
 
-    // Verify the event belongs to the coach
+    // Find event by id or uniqueId
     const event = await prisma.event.findFirst({
       where: {
-        id: eventId,
-        coachId
+        OR: [
+          { id: eventId },
+          { uniqueId: eventId }
+        ]
       },
       select: {
         id: true,
+        uniqueId: true,
         name: true,
         status: true
       }
     });
 
+    console.log('[DEBUG] Eligible students eventId param:', eventId);
+    console.log('[DEBUG] Event found:', event);
     if (!event) {
-      return res.status(404).json(errorResponse('Event not found or you do not have permission'));
+      return res.status(404).json(errorResponse('Event not found'));
     }
 
+    // COMMENTED OUT: Order verification and payment check
+    // Admin can now view and issue certificates without order completion constraint
+    /*
     // Verify the order and check payment status
     const order = await prisma.eventOrder.findFirst({
       where: {
         id: orderId,
         eventId,
-        coachId,
         paymentStatus: 'SUCCESS'
       },
       select: {
@@ -329,11 +348,12 @@ router.get('/event/:eventId/eligible-students', authenticate, requireCoach, asyn
     if (!order) {
       return res.status(404).json(errorResponse('Order not found or payment not completed'));
     }
+    */
 
     // Get all students registered for this event
     const registrations = await prisma.eventRegistration.findMany({
       where: {
-        eventId,
+        eventId: event.id,
         status: { in: ['REGISTERED', 'APPROVED'] }
       },
       include: {
@@ -353,11 +373,11 @@ router.get('/event/:eventId/eligible-students', authenticate, requireCoach, asyn
       }
     });
 
-    // Get already issued certificates for this event and order
+    // Get already issued certificates for this event (without orderId constraint)
     const issuedCertificates = await prisma.certificate.findMany({
       where: {
-        eventId,
-        orderId
+        eventId: event.id
+        // orderId // Removed orderId constraint
       },
       select: {
         studentId: true
@@ -382,12 +402,11 @@ router.get('/event/:eventId/eligible-students', authenticate, requireCoach, asyn
     res.json(successResponse({
       eligibleStudents,
       totalEligible: eligibleStudents.length,
-      certificatesAllowed: order.certificates,
+      totalRegistered: registrations.length,
       certificatesIssued: issuedCertificates.length,
-      certificatesRemaining: order.certificates - issuedCertificates.length,
+      certificatesRemaining: eligibleStudents.length, // All eligible students can get certificates
       eventName: event.name,
-      eventStatus: event.status,
-      orderNumber: order.orderNumber
+      eventStatus: event.status
     }, 'Eligible students retrieved successfully'));
 
   } catch (error) {

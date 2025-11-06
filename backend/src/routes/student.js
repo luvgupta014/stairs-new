@@ -530,6 +530,7 @@ router.get('/events', authenticate, requireStudent, async (req, res) => {
     // Format events for frontend compatibility  
     const formattedEvents = result.events.map(event => ({
       id: event.id,
+      uniqueId: event.uniqueId, // Custom event UID
       title: event.name,                    // Map name to title for frontend
       name: event.name,
       description: event.description,
@@ -639,6 +640,7 @@ router.get('/events/:eventId', authenticate, requireStudent, async (req, res) =>
     // Format event details for frontend
     const eventDetails = {
       id: event.id,
+      uniqueId: event.uniqueId, // Custom event UID
       title: event.name,
       name: event.name,
       description: event.description,
@@ -871,6 +873,7 @@ router.get('/event-registrations', authenticate, requireStudent, async (req, res
       updatedAt: reg.updatedAt,
       event: {
         id: reg.event.id,
+        uniqueId: reg.event.uniqueId, // Custom event UID
         title: reg.event.name,      // Map name to title
         name: reg.event.name,
         description: reg.event.description,
@@ -1000,6 +1003,7 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
         registrationStatus: reg.status,
         event: {
           id: reg.event.id,
+          uniqueId: reg.event.uniqueId, // Custom event UID
           title: reg.event.name,
           name: reg.event.name,
           sport: reg.event.sport,

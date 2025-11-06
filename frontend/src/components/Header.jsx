@@ -375,11 +375,9 @@ const Header = () => {
                         <span>{getDisplayName()}</span>
                         <span className="text-xs text-gray-500">({user.role})</span>
                       </div>
-                      {user.uniqueId && (
-                        <div className="text-xs text-blue-600 font-medium">
-                          ID: {user.uniqueId}
-                        </div>
-                      )}
+                      <div className="text-xs text-blue-600 font-medium">
+                        ID: {user.role === 'ADMIN' ? 'ADMIN' : user.uniqueId}
+                      </div>
                     </div>
                   </button>
                   

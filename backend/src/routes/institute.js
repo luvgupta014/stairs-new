@@ -386,9 +386,9 @@ router.post('/bulk-upload/students', authenticate, requireInstitute, requireAppr
         const password = rowData.firstName.toLowerCase() + rowData.phone.slice(-4);
         const hashedPassword = await hashPassword(password);
 
-        // Generate uniqueId with new UID format
-        const studentState = rowData.state || 'Delhi'; // Default to Delhi if no state provided
-        const uniqueId = await generateUID('STUDENT', studentState);
+        // Generate UID with format: A0001DL1124 (Type + Serial + State + MMYY)
+        // Use institute's state
+        const uniqueId = await generateUID('STUDENT', req.institute.state || 'Delhi');
         console.log('Generated UID for student:', uniqueId);
 
         // Create user and student
@@ -566,9 +566,9 @@ router.post('/bulk-upload/coaches', authenticate, requireInstitute, requireAppro
         const certifications = rowData.certifications ? 
           rowData.certifications.split(',').map(cert => cert.trim()).filter(cert => cert) : [];
 
-        // Generate uniqueId with new UID format
-        const coachState = rowData.state || 'Delhi'; // Default to Delhi if no state provided
-        const uniqueId = await generateUID('COACH', coachState);
+        // Generate UID with format: C0001DL1124 (Type + Serial + State + MMYY)
+        // Use institute's state
+        const uniqueId = await generateUID('COACH', req.institute.state || 'Delhi');
         console.log('Generated UID for coach:', uniqueId);
 
         // Create user and coach

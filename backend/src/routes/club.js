@@ -268,14 +268,9 @@ router.post('/members', authenticate, requireClub, async (req, res) => {
         return res.status(409).json(errorResponse('User is already a member of this club.', 409));
       }
     } else {
-      // Get club's state for UID generation
-      const clubProfile = await prisma.club.findUnique({
-        where: { userId: req.user.id }
-      });
-      const clubState = clubProfile?.state || 'Delhi';
-      
-      // Generate uniqueId with new UID format
-      const uniqueId = await generateUID('STUDENT', clubState);
+      // Generate UID with format: A0001DL1124 (Type + Serial + State + MMYY)
+      // Use club's state
+      const uniqueId = await generateUID('STUDENT', req.club.state || 'Delhi');
       console.log('Generated UID for club member:', uniqueId);
       
       // Create new user without password (they can set it later)

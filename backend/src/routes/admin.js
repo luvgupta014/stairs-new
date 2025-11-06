@@ -23,6 +23,7 @@ router.get('/profile', authenticate, requireAdmin, async (req, res) => {
         user: {
           select: {
             id: true,
+            uniqueId: true,
             email: true,
             phone: true,
             isActive: true,
@@ -270,6 +271,7 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
     // Format recent events
     const formattedRecentEvents = recentEvents.map(event => ({
       id: event.id,
+      uniqueId: event.uniqueId, // Custom event UID
       name: event.name,
       sport: event.sport,
       venue: event.venue,
@@ -1478,7 +1480,9 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
               user: {
                 select: {
                   id: true,
+                  uniqueId: true,
                   email: true,
+                  phone: true,
                   role: true
                 }
               }
@@ -1497,6 +1501,7 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
     // Format events for admin view with correct field names
     const formattedEvents = events.map(event => ({
       id: event.id,
+      uniqueId: event.uniqueId, // Custom event UID
       title: event.name,                                            // FIXED: Map name to title for frontend
       name: event.name,
       description: event.description,
@@ -1525,7 +1530,8 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
         id: event.coach?.id,
         name: event.coach?.name,
         primarySport: event.coach?.primarySport,
-        city: event.coach?.city
+        city: event.coach?.city,
+        user: event.coach?.user // Include user object with uniqueId, email, phone
       }
     }));
 
@@ -1729,6 +1735,7 @@ router.get('/pending-events', authenticate, requireAdmin, async (req, res) => {
 
     const formattedEvents = events.map(event => ({
       id: event.id,
+      uniqueId: event.uniqueId, // Custom event UID
       title: event.name,
       name: event.name,
       description: event.description,
@@ -1878,6 +1885,7 @@ router.get('/events/:eventId/participants', authenticate, requireAdmin, async (r
               coachMobile: true,
               user: {
                 select: {
+                  uniqueId: true,
                   email: true,
                   phone: true
                 }
@@ -1901,6 +1909,7 @@ router.get('/events/:eventId/participants', authenticate, requireAdmin, async (r
     res.json(successResponse({
       event: {
         id: event.id,
+        uniqueId: event.uniqueId, // Custom event UID
         name: event.name,
         startDate: event.startDate,
         endDate: event.endDate,
@@ -2618,6 +2627,7 @@ router.get('/event-results', authenticate, requireAdmin, async (req, res) => {
       isExcel: file.mimeType.includes('spreadsheet') || file.originalName.toLowerCase().endsWith('.xlsx') || file.originalName.toLowerCase().endsWith('.xls'),
       event: {
         id: file.event.id,
+        uniqueId: file.event.uniqueId, // Custom event UID
         name: file.event.name,
         sport: file.event.sport,
         startDate: file.event.startDate,
@@ -3203,9 +3213,13 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
         orderBy: { subscriptionExpiresAt: 'desc' }
       }),
 
-      // Total active coaches
+      // Total active coaches (coaches with users that are active)
       prisma.coach.count({
-        where: { isActive: true }
+        where: { 
+          user: {
+            isActive: true
+          }
+        }
       }),
 
       // Top spending coaches (by event orders)
@@ -3255,9 +3269,9 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
     const orderRevenue = {
       totalOrders: eventOrders.length,
       totalAmount: eventOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0),
-      certificates: eventOrders.reduce((sum, order) => sum + order.certificates, 0),
-      medals: eventOrders.reduce((sum, order) => sum + order.medals, 0),
-      trophies: eventOrders.reduce((sum, order) => sum + order.trophies, 0)
+      certificates: eventOrders.reduce((sum, order) => sum + (order.certificates || 0), 0),
+      medals: eventOrders.reduce((sum, order) => sum + (order.medals || 0), 0),
+      trophies: eventOrders.reduce((sum, order) => sum + (order.trophies || 0), 0)
     };
 
     const eventPaymentRevenue = {
@@ -3337,18 +3351,18 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
       ...eventOrders.map(order => ({
         id: order.id,
         type: 'ORDER',
-        description: `Order #${order.orderNumber} - ${order.certificates} certificates, ${order.medals} medals, ${order.trophies} trophies`,
+        description: `Order #${order.orderNumber || ''} - ${(order.certificates || 0)} certificates, ${(order.medals || 0)} medals, ${(order.trophies || 0)} trophies`,
         amount: order.totalAmount || 0,
-        status: order.paymentStatus,
+        status: order.paymentStatus || '',
         date: order.paymentDate || order.createdAt,
         customer: {
-          name: order.coach?.name,
-          uniqueId: order.coach?.user?.uniqueId,
-          email: order.coach?.user?.email,
+          name: order.coach?.name || '',
+          uniqueId: order.coach?.user?.uniqueId || '',
+          email: order.coach?.user?.email || '',
           type: 'COACH'
         },
-        eventName: order.event?.name,
-        sport: order.event?.sport
+        eventName: order.event?.name || '',
+        sport: order.event?.sport || ''
       })),
       ...eventPayments.map(payment => ({
         id: payment.id,
@@ -3569,8 +3583,15 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
 
   } catch (error) {
     console.error('❌ Get revenue dashboard error:', error);
-    console.error(error.stack);
-    res.status(500).json(errorResponse('Failed to retrieve revenue dashboard data.', 500));
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    if (error.stack) {
+      console.error('Error stack:', error.stack);
+    }
+    if (error.meta) {
+      console.error('Prisma error meta:', JSON.stringify(error.meta, null, 2));
+    }
+    res.status(500).json(errorResponse(`Failed to retrieve revenue dashboard data: ${error.message}`, 500));
   }
 });
 

@@ -49,6 +49,7 @@ import CoachDashboard from "./pages/dashboard/CoachDashboard";
 import ClubDashboard from "./pages/dashboard/ClubDashboard";
 import InstituteDashboard from "./pages/dashboard/InstituteDashboard";
 import AdminDashboard from "./pages/dashboard/AdminDashboard";
+import AdminEventsManagement from "./pages/dashboard/AdminEventsManagement";
 
 // Other Pages
 import Events from "./pages/events/Events";
@@ -174,6 +175,20 @@ function App() {
                   <main className="flex-grow">
                     <ProtectedRoute role="ADMIN">
                       <AdminDashboard />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/admin/events"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute role="ADMIN">
+                      <AdminEventsManagement />
                     </ProtectedRoute>
                   </main>
                   <Footer />
@@ -515,12 +530,12 @@ function App() {
               }
             />
             <Route
-              path="/coach/event/:eventId/certificates"
+              path="/admin/event/:eventId/certificates"
               element={
                 <>
                   <Header />
                   <main className="flex-grow">
-                    <ProtectedRoute role="COACH">
+                    <ProtectedRoute role="ADMIN">
                       <IssueCertificates />
                     </ProtectedRoute>
                   </main>

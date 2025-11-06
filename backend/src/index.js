@@ -48,6 +48,7 @@ app.use(limiter);
 // CORS configuration - Allow specific origins
 const allowedOrigins = [
   'http://localhost:5173',      // Local dev
+  'http://localhost:5174',      // Local dev (vite alt port)
   'http://localhost:3000',      // Local dev (alternative)
   'http://160.187.22.41:3008',  // Local server
   'https://stairs.astroraag.com',      // Production frontend

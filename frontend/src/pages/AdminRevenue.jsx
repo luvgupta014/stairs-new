@@ -453,30 +453,40 @@ const AdminRevenue = () => {
                                       )}
                                       {/* Tooltip group */}
                                       <g className="opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
-                                        <rect
-                                          x={`calc(${x}% - 60px)`}
-                                          y={`calc(${y}% - 50px)`}
-                                          width="120"
-                                          height="40"
-                                          fill="#1f2937"
-                                          rx="4"
-                                        />
-                                        <text
-                                          x={`${x}%`}
-                                          y={`calc(${y}% - 35px)`}
-                                          textAnchor="middle"
-                                          className="text-xs fill-white font-semibold"
-                                        >
-                                          {day.label || formatDate(day.date)}
-                                        </text>
-                                        <text
-                                          x={`${x}%`}
-                                          y={`calc(${y}% - 20px)`}
-                                          textAnchor="middle"
-                                          className="text-xs fill-green-300"
-                                        >
-                                          {formatCurrency(day.revenue)}
-                                        </text>
+                                        {(() => {
+                                          // Assume SVG height is 200px for calculation, or get dynamically if needed
+                                          const svgHeight = 200;
+                                          const yPx = (svgHeight * y) / 100;
+                                          const xPx = (svgHeight * x) / 100; // If needed for x
+                                          return (
+                                            <>
+                                              <rect
+                                                x={xPx - 60}
+                                                y={yPx - 50}
+                                                width="120"
+                                                height="40"
+                                                fill="#1f2937"
+                                                rx="4"
+                                              />
+                                              <text
+                                                x={xPx}
+                                                y={yPx - 35}
+                                                textAnchor="middle"
+                                                className="text-xs fill-white font-semibold"
+                                              >
+                                                {day.label || formatDate(day.date)}
+                                              </text>
+                                              <text
+                                                x={xPx}
+                                                y={yPx - 20}
+                                                textAnchor="middle"
+                                                className="text-xs fill-green-300"
+                                              >
+                                                {formatCurrency(day.revenue)}
+                                              </text>
+                                            </>
+                                          );
+                                        })()}
                                       </g>
                                     </g>
                                   );

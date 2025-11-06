@@ -1,13 +1,20 @@
 /**
- * UID Generator Utility
- * Generates unique IDs in format: [prefix][sequence][stateCode][month][year]
- * Example: a00001DL112025 (athlete from Delhi, November 2025)
+ * UID Generator - Custom Format
+ * Format: <Type><Serial><StateCode><MMYY>
+ * Example: A0001DL1124 (Student #1 from Delhi, Nov 2024)
+ * 
+ * Type Prefixes:
+ * - Students: A
+ * - Coaches: C
+ * - Institutes: I
+ * - Clubs: B
+ * - Admin: ADMIN
  */
 
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// State and Union Territory codes
+// State codes mapping
 const STATE_CODES = {
   'Andhra Pradesh': 'AP',
   'Arunachal Pradesh': 'AR',
@@ -47,68 +54,27 @@ const STATE_CODES = {
   'Puducherry': 'PY'
 };
 
-// User type prefixes
-const USER_TYPE_PREFIX = {
-  'STUDENT': 'A',  // athlete/student
-  'COACH': 'C',    // coach/coordinator
-  'INSTITUTE': 'I',
-  'CLUB': 'B'
-};
-
 /**
  * Get state code from state name
- * @param {string} stateName - Full state name
- * @returns {string} Two-letter state code
  */
 const getStateCode = (stateName) => {
-  if (!stateName) {
-    throw new Error('State name is required for UID generation');
-  }
+  if (!stateName) return 'DL'; // Default to Delhi
   
   const code = STATE_CODES[stateName];
-  if (!code) {
-    // Fallback: use first 2 letters in uppercase
-    console.warn(`State code not found for: ${stateName}, using fallback`);
-    return stateName.substring(0, 2).toUpperCase();
-  }
+  if (code) return code;
   
-  return code;
+  // Fallback: use first 2 letters uppercase
+  return stateName.substring(0, 2).toUpperCase();
 };
 
 /**
- * Get user type prefix
- * @param {string} userType - User role (STUDENT, COACH, INSTITUTE, CLUB)
- * @returns {string} Single character prefix
+ * Get next serial number for a user type, state, and month/year
  */
-const getUserTypePrefix = (userType) => {
-  const prefix = USER_TYPE_PREFIX[userType];
-  
-  if (!prefix) {
-    throw new Error(`Invalid user type: ${userType}. Must be STUDENT, COACH, INSTITUTE, or CLUB`);
-  }
-  
-  return prefix;
-};
-
-/**
- * Get next sequence number for the given combination
- * Uses database lock to ensure uniqueness
- * @param {string} prefix - User type prefix
- * @param {string} stateCode - Two-letter state code
- * @param {string} month - Two-digit month (01-12)
- * @param {string} year - Four-digit year
- * @returns {Promise<string>} Five-digit sequence number
- */
-const getNextSequenceNumber = async (prefix, stateCode, month, year) => {
+const getNextSerial = async (prefix, stateCode, mmyy) => {
   try {
-    // Pattern to match UIDs with same prefix, state, month, year
-    // Format: a00001DL112025
-    const pattern = `${prefix}%${stateCode}${month}${year}`;
+    // Pattern to match: A0001DL1124
+    const pattern = `${prefix}%${stateCode}${mmyy}`;
     
-    console.log(`🔍 Looking for existing UIDs matching pattern: ${pattern}`);
-    
-    // Query to get the latest UID with this pattern
-    // Using raw query for better control and to ensure proper sorting
     const result = await prisma.$queryRaw`
       SELECT unique_id 
       FROM users 
@@ -118,183 +84,74 @@ const getNextSequenceNumber = async (prefix, stateCode, month, year) => {
     `;
     
     if (!result || result.length === 0) {
-      // First user for this combination
-      console.log('✨ First UID for this combination, starting at 00001');
-      return '00001';
+      return 1; // First user
     }
     
-    // Extract the sequence number from existing UID
-    // Format: A00001DL112025
-    //         ^^^^^
     const lastUID = result[0].unique_id;
-    console.log(`📋 Last UID found: ${lastUID}`);
+    // Extract serial: A0001DL1124 -> 0001
+    const serialStr = lastUID.substring(1, 5); // Characters 1-4 (0001)
+    const lastSerial = parseInt(serialStr, 10);
     
-    const sequenceStr = lastUID.substring(1, 6); // Get 5 digits after prefix
-    const lastSequence = parseInt(sequenceStr, 10);
-    
-    // Increment and format
-    const nextSequence = lastSequence + 1;
-    
-    if (nextSequence > 99999) {
-      throw new Error(`Sequence number limit reached for ${prefix}${stateCode}${month}${year}. Maximum 99999 users per month/state/type.`);
-    }
-    
-    const formattedSequence = nextSequence.toString().padStart(5, '0');
-    console.log(`➕ Next sequence number: ${formattedSequence}`);
-    
-    return formattedSequence;
+    return lastSerial + 1;
   } catch (error) {
-    console.error('❌ Error getting sequence number:', error);
-    throw error;
+    console.error('Error getting next serial:', error);
+    return 1;
   }
 };
 
 /**
- * Main UID Generator Function
- * Format: [prefix][00001-99999][StateCode][MM][YYYY]
- * Example: a00001DL112025
- * 
- * @param {string} userType - User role (STUDENT, COACH, INSTITUTE, CLUB)
- * @param {string} state - Full state name
- * @returns {Promise<string>} Generated UID
+ * Generate UID
+ * @param {string} userType - STUDENT, COACH, INSTITUTE, CLUB, ADMIN
+ * @param {string} state - State name (e.g., "Delhi", "Maharashtra")
+ * @param {Date} registrationDate - Date of registration (optional, defaults to now)
+ * @returns {Promise<string>} Generated UID (e.g., A0001DL1124)
  */
-const generateUID = async (userType, state) => {
-  try {
-    console.log(`🆔 === GENERATING UID ===`);
-    console.log(`User Type: ${userType}, State: ${state}`);
-    
-    // Get components
-    const prefix = getUserTypePrefix(userType);
-    const stateCode = getStateCode(state);
-    const now = new Date();
-    const month = (now.getMonth() + 1).toString().padStart(2, '0'); // 01-12
-    const year = now.getFullYear().toString(); // 2025
-    
-    console.log(`📋 UID Components:`, {
-      prefix,
-      stateCode,
-      month,
-      year
-    });
-    
-    // Get next sequence number (with retry logic for concurrency)
-    let sequence;
-    let attempts = 0;
-    const maxAttempts = 5;
-    
-    while (attempts < maxAttempts) {
-      try {
-        sequence = await getNextSequenceNumber(prefix, stateCode, month, year);
-        break;
-      } catch (error) {
-        attempts++;
-        if (attempts >= maxAttempts) {
-          throw error;
-        }
-        // Wait a bit before retrying
-        await new Promise(resolve => setTimeout(resolve, 100 * attempts));
-      }
-    }
-    
-    // Construct UID: A00001DL112025
-    const uid = `${prefix}${sequence}${stateCode}${month}${year}`;
-    
-    console.log(`✅ Generated UID: ${uid}`);
-    
-    return uid;
-  } catch (error) {
-    console.error('❌ UID Generation Error:', error);
-    throw new Error(`Failed to generate UID: ${error.message}`);
-  }
-};
-
-/**
- * Validate UID format
- * @param {string} uid - UID to validate
- * @returns {object} Validation result with details
- */
-const validateUID = (uid) => {
-  // Pattern: A00001DL112025 (1 char + 5 digits + 2 chars + 2 digits + 4 digits = 14 chars)
-  const uidPattern = /^[ACIB]\d{5}[A-Z]{2}\d{6}$/;
-  
-  if (!uidPattern.test(uid)) {
-    return {
-      valid: false,
-      error: 'Invalid UID format. Expected format: [A/C/I/B][00001-99999][StateCode][MM][YYYY]'
-    };
+const generateUID = async (userType, state = 'Delhi', registrationDate = null) => {
+  // Admin gets special UID
+  if (userType === 'ADMIN') {
+    return 'ADMIN';
   }
   
-  // Extract components for validation
-  const prefix = uid[0];
-  const sequence = uid.substring(1, 6);
-  const stateCode = uid.substring(6, 8);
-  const month = uid.substring(8, 10);
-  const year = uid.substring(10, 14);
-  
-  // Validate month (01-12)
-  const monthNum = parseInt(month, 10);
-  if (monthNum < 1 || monthNum > 12) {
-    return {
-      valid: false,
-      error: 'Invalid month in UID'
-    };
+  // Get prefix
+  let prefix;
+  switch (userType) {
+    case 'STUDENT':
+      prefix = 'A';
+      break;
+    case 'COACH':
+      prefix = 'C';
+      break;
+    case 'INSTITUTE':
+      prefix = 'I';
+      break;
+    case 'CLUB':
+      prefix = 'B';
+      break;
+    default:
+      throw new Error(`Invalid user type: ${userType}`);
   }
   
-  // Validate year (reasonable range)
-  const yearNum = parseInt(year, 10);
-  if (yearNum < 2020 || yearNum > 2100) {
-    return {
-      valid: false,
-      error: 'Invalid year in UID'
-    };
-  }
+  // Get state code
+  const stateCode = getStateCode(state);
   
-  return {
-    valid: true,
-    components: {
-      userType: prefix === 'A' ? 'STUDENT' : prefix === 'C' ? 'COACH' : prefix === 'I' ? 'INSTITUTE' : 'CLUB',
-      sequence,
-      stateCode,
-      month,
-      year
-    }
-  };
-};
-
-/**
- * Parse UID to extract information
- * @param {string} uid - UID to parse
- * @returns {object} Parsed components
- */
-const parseUID = (uid) => {
-  const validation = validateUID(uid);
+  // Get MMYY from registration date
+  const date = registrationDate || new Date();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0'); // 01-12
+  const year = date.getFullYear().toString().slice(-2); // Last 2 digits: 24, 25
+  const mmyy = month + year;
   
-  if (!validation.valid) {
-    throw new Error(validation.error);
-  }
+  // Get next serial number
+  const serial = await getNextSerial(prefix, stateCode, mmyy);
+  const serialStr = serial.toString().padStart(4, '0'); // 0001, 0002, etc.
   
-  return validation.components;
-};
-
-/**
- * Format UID for display
- * @param {string} uid - UID to format
- * @returns {string} Formatted UID
- */
-const formatUID = (uid) => {
-  if (!uid || uid.length !== 14) return uid;
+  // Construct UID: A0001DL1124
+  const uid = `${prefix}${serialStr}${stateCode}${mmyy}`;
   
-  // Format: a-00001-DL-11-2025
-  return `${uid[0]}-${uid.substring(1, 6)}-${uid.substring(6, 8)}-${uid.substring(8, 10)}-${uid.substring(10, 14)}`;
+  return uid;
 };
 
 module.exports = {
   generateUID,
-  validateUID,
-  parseUID,
-  formatUID,
   getStateCode,
-  getUserTypePrefix,
-  STATE_CODES,
-  USER_TYPE_PREFIX
+  STATE_CODES
 };

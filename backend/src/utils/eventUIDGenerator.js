@@ -162,9 +162,9 @@ function getLocationCode(cityOrState) {
 }
 
 /**
- * Generate a unique event UID
+ * Generate a unique event UID with sequential numbering
  * Format: <serial>-<sportCode>-EVT-<locationCode>-<MMYYYY>
- * Example: 07-FB-EVT-DL-112025
+ * Example: 01-FB-EVT-DL-112025
  * 
  * @param {string} sport - Sport name
  * @param {string} city - City name
@@ -180,32 +180,48 @@ async function generateEventUID(sport, city, startDate) {
   const year = date.getFullYear();
   const dateCode = `${month}${year}`;
   
-  // Generate random serial between 01-99
-  let serial;
-  let uid;
-  let attempts = 0;
-  const maxAttempts = 100;
+  // Pattern to match: %-<sportCode>-EVT-<locationCode>-<dateCode>
+  // Example: 01-FB-EVT-DL-112025
+  const pattern = `%-${sportCode}-EVT-${locationCode}-${dateCode}`;
   
-  // Keep trying until we find a unique UID
-  while (attempts < maxAttempts) {
-    serial = String(Math.floor(Math.random() * 99) + 1).padStart(2, '0');
-    uid = `${serial}-${sportCode}-EVT-${locationCode}-${dateCode}`;
+  try {
+    // Get the highest serial number for this sport-location-date combination
+    const existingEvents = await prisma.$queryRaw`
+      SELECT unique_id 
+      FROM events 
+      WHERE unique_id LIKE ${pattern}
+      ORDER BY unique_id DESC 
+      LIMIT 1
+    `;
     
-    // Check if this UID already exists
-    const existingEvent = await prisma.event.findUnique({
-      where: { uniqueId: uid }
-    });
+    let nextSerial = 1;
     
-    if (!existingEvent) {
-      return uid;
+    if (existingEvents && existingEvents.length > 0) {
+      // Extract the serial number from the last UID
+      const lastUID = existingEvents[0].unique_id;
+      const serialStr = lastUID.split('-')[0]; // Get first part before first dash
+      const lastSerial = parseInt(serialStr, 10);
+      
+      if (!isNaN(lastSerial)) {
+        nextSerial = lastSerial + 1;
+      }
     }
     
-    attempts++;
+    // Check if serial exceeds 99
+    if (nextSerial > 99) {
+      throw new Error(`Serial number limit reached for ${sportCode}-EVT-${locationCode}-${dateCode}. Maximum 99 events per sport/location/month.`);
+    }
+    
+    // Format serial as 2-digit number
+    const serial = String(nextSerial).padStart(2, '0');
+    const uid = `${serial}-${sportCode}-EVT-${locationCode}-${dateCode}`;
+    
+    console.log(`✅ Generated sequential event UID: ${uid}`);
+    return uid;
+  } catch (error) {
+    console.error('❌ Error generating event UID:', error);
+    throw error;
   }
-  
-  // If we couldn't find a unique UID after max attempts, use timestamp
-  const timestamp = Date.now().toString().slice(-4);
-  return `${timestamp.substring(0, 2)}-${sportCode}-EVT-${locationCode}-${dateCode}`;
 }
 
 /**

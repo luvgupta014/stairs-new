@@ -863,9 +863,8 @@ async function processBulkStudents(studentData, coachId, results, errors) {
           }
         }
 
-        // Generate uniqueId with new UID format
-        const studentState = state || 'Delhi'; // Default to Delhi if no state provided
-        const uniqueId = await generateUID('STUDENT', studentState);
+        // Generate UID with format: A0001DL1124 (Type + Serial + State + MMYY)
+        const uniqueId = await generateUID('STUDENT', state || 'Delhi');
         console.log('Generated UID for student:', uniqueId);
 
         // Create user with student profile according to Prisma schema
@@ -1191,6 +1190,7 @@ router.get('/events', authenticate, requireCoach, async (req, res) => {
       const dynamicStatus = computeDynamicStatus(event);
       return {
         id: event.id,
+        uniqueId: event.uniqueId, // Custom event UID (e.g., 01-FB-EVT-DL-112025)
         name: event.name,
         description: event.description,
         sport: event.sport,
@@ -1492,6 +1492,7 @@ router.get('/events/:eventId/registrations', authenticate, requireCoach, async (
     res.json(successResponse({
       event: {
         id: event.id,
+        uniqueId: event.uniqueId, // Custom event UID
         name: event.name,
         startDate: event.startDate,
         maxParticipants: event.maxParticipants,
@@ -1641,6 +1642,7 @@ router.get('/events/:eventId/orders', authenticate, requireCoach, async (req, re
     res.json(successResponse({
       event: {
         id: event.id,
+        uniqueId: event.uniqueId, // Custom event UID
         name: event.name,
         startDate: event.startDate,
         endDate: event.endDate
@@ -1916,6 +1918,7 @@ router.get('/dashboard', authenticate, requireCoach, async (req, res) => {
       // Events data
       recentEvents: recentEvents.map(event => ({
         id: event.id,
+        uniqueId: event.uniqueId, // Custom event UID
         name: event.name,
         date: event.startDate,
         participants: event.currentParticipants || 0,
@@ -2390,6 +2393,7 @@ router.get('/event-results', authenticate, requireCoach, async (req, res) => {
       downloadUrl: `/uploads/event-results/${file.filename}`,
       event: {
         id: file.event.id,
+        uniqueId: file.event.uniqueId, // Custom event UID
         name: file.event.name,
         sport: file.event.sport,
         startDate: file.event.startDate,

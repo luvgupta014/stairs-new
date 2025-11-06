@@ -196,7 +196,7 @@ router.post('/student/register', async (req, res) => {
     console.log('🔑 Generated OTP:', otp);
     console.log('⏰ OTP expires at:', otpExpires.toISOString());
 
-    // Generate UID format: a00001DL112025
+    // Generate UID with format: A0001DL1124 (Type + Serial + State + MMYY)
     const uniqueId = await generateUID('STUDENT', state);
     console.log('🆔 Generated UID:', uniqueId);
 
@@ -758,7 +758,7 @@ router.post('/coach/register', async (req, res) => {
     console.log('🔑 Generated OTP:', otp);
     console.log('⏰ OTP expires at:', otpExpires.toISOString());
 
-    // Generate UID format: c00001DL112025
+    // Generate UID with format: C0001DL1124 (Type + Serial + State + MMYY)
     const uniqueId = await generateUID('COACH', state);
     console.log('🆔 Generated UID:', uniqueId);
 
@@ -964,10 +964,8 @@ router.post('/institute/register', async (req, res) => {
     console.log('🔑 Generated OTP:', otp);
     console.log('⏰ OTP expires at:', otpExpires.toISOString());
 
-    // Generate unique ID for institute (new UID format)
-    // Extract state from address or use a default
-    const instituteState = address?.split(',')[2]?.trim() || 'Delhi';
-    const uniqueId = await generateUID('INSTITUTE', instituteState);
+    // Generate UID with format: I0001DL1124 (Type + Serial + State + MMYY)
+    const uniqueId = await generateUID('INSTITUTE', state);
     console.log('🆔 Generated UID:', uniqueId);
 
     // Hash password
@@ -1150,10 +1148,8 @@ router.post('/club/register', async (req, res) => {
     console.log('🔑 Generated OTP:', otp);
     console.log('⏰ OTP expires at:', otpExpires.toISOString());
 
-    // Generate unique ID for club (new UID format)
-    // Extract state from address or use a default
-    const clubState = address?.split(',')[2]?.trim() || 'Delhi';
-    const uniqueId = await generateUID('CLUB', clubState);
+    // Generate UID with format: B0001DL1124 (Type + Serial + State + MMYY)
+    const uniqueId = await generateUID('CLUB', state);
     console.log('🆔 Generated UID:', uniqueId);
 
     // Hash password
