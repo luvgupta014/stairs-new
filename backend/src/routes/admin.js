@@ -3159,14 +3159,21 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
         }
       }),
 
-      // All successful payments
-      prisma.payment.findMany({
-        where: {
-          status: { equals: 'SUCCESS' }, // Use equals to handle string comparison
-          createdAt: { gte: startDate }
-        },
-        include: {
-          user: {
+      // All successful payments - Using raw query to avoid type casting issues
+      prisma.$queryRaw`
+        SELECT 
+          p.id, p."userId", p."userType", p."coachId", p.type, p.amount, 
+          p.currency, p."razorpayOrderId", p."razorpayPaymentId", p.status, 
+          p.description, p.metadata, p."expiresAt", p."createdAt", p."updatedAt"
+        FROM payments p
+        WHERE p.status::text = 'SUCCESS'
+        AND p."createdAt" >= ${startDate}
+        ORDER BY p."createdAt" DESC
+      `.then(async (payments) => {
+        // Fetch related user and coach data for each payment
+        return Promise.all(payments.map(async (payment) => {
+          const user = payment.userId ? await prisma.user.findUnique({
+            where: { id: payment.userId },
             select: {
               role: true,
               email: true,
@@ -3175,14 +3182,19 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
               instituteProfile: { select: { name: true } },
               clubProfile: { select: { name: true } }
             }
-          },
-          coach: {
-            select: {
-              name: true
-            }
-          }
-        },
-        orderBy: { createdAt: 'desc' }
+          }) : null;
+          
+          const coach = payment.coachId ? await prisma.coach.findUnique({
+            where: { id: payment.coachId },
+            select: { name: true }
+          }) : null;
+          
+          return {
+            ...payment,
+            user,
+            coach
+          };
+        }));
       }),
 
       // Premium Coaches (Active subscriptions)
