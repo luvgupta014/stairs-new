@@ -45,15 +45,26 @@ const limiter = rateLimit({
 
 app.use(limiter);
 
-// CORS configuration
-//app.use(cors({
-  //origin: '*',
-  //credentials: true,
-  //methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  //allowedHeaders: ['*']
-//}));
+// CORS configuration - Allow specific origins
+const allowedOrigins = [
+  'http://localhost:5173',      // Local dev
+  'http://localhost:3000',      // Local dev (alternative)
+  'http://160.187.22.41:3008',  // Local server
+  'https://stairs.astroraag.com',      // Production frontend
+  'https://www.stairs.astroraag.com',  // Production frontend with www
+];
+
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  const origin = req.headers.origin;
+  
+  // Check if origin is in allowed list
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else if (process.env.NODE_ENV !== 'production') {
+    // Allow any origin in development
+    res.header('Access-Control-Allow-Origin', origin || '*');
+  }
+  
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
