@@ -206,9 +206,10 @@ const AdminEventsManagement = () => {
       }
     };
 
-    const formatDate = (dateString) => {
+    const formatDateTime = (dateString) => {
       if (!dateString) return 'Not specified';
-      return new Date(dateString).toLocaleDateString();
+      const d = new Date(dateString);
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
     const getStatusBadge = (participant) => {
@@ -294,7 +295,7 @@ const AdminEventsManagement = () => {
                     </svg>
                     <p className="text-xs font-semibold text-gray-500 uppercase">Start Date</p>
                   </div>
-                  <p className="font-semibold text-gray-900">{formatDate(event.startDate)}</p>
+                  <p className="font-semibold text-gray-900">{formatDateTime(event.startDate)}</p>
                 </div>
 
                 <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm hover:shadow-md transition-shadow">
@@ -304,7 +305,7 @@ const AdminEventsManagement = () => {
                     </svg>
                     <p className="text-xs font-semibold text-gray-500 uppercase">End Date</p>
                   </div>
-                  <p className="font-semibold text-gray-900">{formatDate(event.endDate)}</p>
+                  <p className="font-semibold text-gray-900">{formatDateTime(event.endDate)}</p>
                 </div>
 
                 <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm hover:shadow-md transition-shadow">
@@ -368,7 +369,7 @@ const AdminEventsManagement = () => {
                     </svg>
                     <p className="text-xs font-semibold text-gray-500 uppercase">Created</p>
                   </div>
-                  <p className="font-semibold text-gray-900">{formatDate(event.createdAt)}</p>
+                  <p className="font-semibold text-gray-900">{formatDateTime(event.createdAt)}</p>
                 </div>
 
                 {event.uniqueId && (
@@ -509,7 +510,7 @@ const AdminEventsManagement = () => {
                                 {studentName}
                               </h5>
                               <p className="text-sm text-gray-600 mt-1">
-                                📅 Registered on {formatDate(participant.registeredAt || participant.createdAt)}
+                                📅 Registered on {formatDateTime(participant.registeredAt || participant.createdAt)}
                               </p>
                               {studentUID && (
                                 <p className="text-xs text-blue-600 font-mono font-bold mt-1 bg-blue-50 inline-block px-2 py-1 rounded">

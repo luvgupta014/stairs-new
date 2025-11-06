@@ -1288,24 +1288,30 @@ router.put('/events/:eventId', authenticate, requireCoach, async (req, res) => {
       return res.status(400).json(errorResponse('Event end date must be after start date.', 400));
     }
 
+    // Prepare update data object
+    const updateData = {};
+    
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (sport !== undefined) updateData.sport = sport;
+    if (venue !== undefined) updateData.venue = venue;
+    if (address !== undefined) updateData.address = address;
+    if (city !== undefined) updateData.city = city;
+    if (state !== undefined) updateData.state = state;
+    if (latitude !== undefined) updateData.latitude = parseFloat(latitude);
+    if (longitude !== undefined) updateData.longitude = parseFloat(longitude);
+    if (startDate !== undefined) updateData.startDate = new Date(startDate);
+    if (endDate !== undefined) updateData.endDate = new Date(endDate);
+    if (maxParticipants !== undefined) updateData.maxParticipants = parseInt(maxParticipants);
+    
+    // Reset to PENDING if it was APPROVED/ACTIVE and significant changes were made
+    if (existingEvent.status === 'APPROVED' || existingEvent.status === 'ACTIVE') {
+      updateData.status = 'PENDING';
+    }
+
     const updatedEvent = await prisma.event.update({
       where: { id: eventId },
-      data: {
-        name: name || undefined,
-        description: description || undefined,
-        sport: sport || undefined,
-        venue: venue || undefined,
-        address: address || undefined,
-        city: city || undefined,
-        state: state || undefined,
-        latitude: latitude ? parseFloat(latitude) : undefined,
-        longitude: longitude ? parseFloat(longitude) : undefined,
-        startDate: startDate ? new Date(startDate) : undefined,
-        endDate: endDate ? new Date(endDate) : undefined,
-        maxParticipants: maxParticipants ? parseInt(maxParticipants) : undefined,
-        // Reset to PENDING if it was APPROVED/ACTIVE and significant changes were made
-        status: existingEvent.status === 'APPROVED' || existingEvent.status === 'ACTIVE' ? 'PENDING' : undefined
-      },
+      data: updateData,
       include: {
         _count: {
           select: {
