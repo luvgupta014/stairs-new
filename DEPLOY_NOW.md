@@ -1,13 +1,14 @@
-# 🚨 URGENT: Production Fix Instructions
+# 🚨 URGENT: Production Fix Instructions - UPDATED
 
 ## Issues on Production
-1. **Revenue Dashboard**: 500 error - Payment.status type mismatch
-2. **Certificate History**: 500 error - Event lookup or admin permissions
+1. **Revenue Dashboard**: 500 error - Payment.status type mismatch ✅ FIXED
+2. **Certificate History**: 500 error - Event/Student ID lookup issue ✅ FIXED
 
-## ✅ Changes Committed to GitHub
-- Fixed Payment.status query in admin.js to use `{ equals: 'SUCCESS' }`
-- Verified certificate routes use proper event lookup (id or uniqueId)
-- Regenerated Prisma client
+## ✅ Latest Changes (Commit: 04cd02f)
+- Fixed certificate endpoint to handle both database ID and uniqueId
+- Added comprehensive error handling and logging
+- Certificates now look up events and students by both ID types
+- Better fallback for missing student data
 
 ## 📋 Deployment Commands (Run on Production Server)
 
