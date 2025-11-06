@@ -3162,7 +3162,7 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
       // All successful payments
       prisma.payment.findMany({
         where: {
-          status: 'SUCCESS',
+          status: { equals: 'SUCCESS' }, // Use equals to handle string comparison
           createdAt: { gte: startDate }
         },
         include: {
