@@ -1,13 +1,17 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs').promises;
 const path = require('path');
-const prisma = require('../prisma/schema');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 class CertificateService {
   constructor() {
-    this.templatePath = path.join(__dirname, '../../templates/certificate-template.html');
-    this.certificatesDir = path.join(__dirname, '../../../uploads/certificates');
-    this.logoPath = path.join(__dirname, '../../../assets/logo.png');
+  this.templatePath = path.join(__dirname, '../../templates/certificate-template.html');
+  this.certificatesDir = path.join(__dirname, '../../uploads/certificates');
+  // Prefer PNG if available, else JPG
+  const pngPath = path.join(__dirname, '../../../assets/logo.png');
+  const jpgPath = path.join(__dirname, '../../../assets/logo.jpg');
+  this.logoPath = require('fs').existsSync(pngPath) ? pngPath : jpgPath;
   }
 
   /**
@@ -24,14 +28,12 @@ class CertificateService {
   /**
    * Generate a unique certificate UID
    */
-  generateCertificateUID() {
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `STAIRS-CERT-${timestamp}-${random}`;
+  generateCertificateUID(eventId, studentId) {
+    return `STAIRS-CERT-${eventId}-${studentId}`;
   }
 
   /**
-   * Generate certificate for a single student
+   * Generate certificate for a single athlete
    */
   async generateCertificate(data) {
     const {
@@ -39,58 +41,118 @@ class CertificateService {
       sportName,
       eventName,
       date,
-      studentId,
-      eventId,
+      eventDate,
+      studentId, // This is the custom formatted athlete UID
+      eventId, // This is the custom formatted event UID
       orderId
     } = data;
 
     try {
       await this.ensureCertificatesDirectory();
 
-      // Generate unique UID for certificate
-      const uid = this.generateCertificateUID();
+      // Generate unique UID for certificate using custom formatted IDs
+      const uid = this.generateCertificateUID(eventId, studentId);
+
+      // Get database IDs for storing in certificate record
+      const student = await prisma.student.findFirst({
+        where: { user: { uniqueId: studentId } },
+        select: { id: true }
+      });
+
+      const event = await prisma.event.findFirst({
+        where: { uniqueId: eventId },
+        select: { id: true }
+      });
+
+      if (!student || !event) {
+        throw new Error(`Student or Event not found for UIDs: ${studentId}, ${eventId}`);
+      }
+
+      const studentDbId = student.id;
+      const eventDbId = event.id;
 
       // Read template
       let htmlTemplate = await fs.readFile(this.templatePath, 'utf8');
 
+      // Read logo as base64
+      let logoBase64 = '';
+      try {
+        const logoBuffer = await fs.readFile(this.logoPath);
+        const ext = this.logoPath.endsWith('.png') ? 'png' : 'jpeg';
+        logoBase64 = `data:image/${ext};base64,${logoBuffer.toString('base64')}`;
+        console.log(`Logo base64 length: ${logoBase64.length}`);
+      } catch (e) {
+        console.error('❌ Error reading logo file:', e);
+      }
+
       // Replace placeholders with actual data
+      const issueDate = new Date().toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      
       htmlTemplate = htmlTemplate
         .replace(/\[PARTICIPANT_NAME\]/g, participantName)
         .replace(/\[SPORT_NAME\]/g, sportName)
         .replace(/\[EVENT_NAME\]/g, eventName)
+        .replace(/\[EVENT_DATE\]/g, eventDate || date)
+        .replace(/\[ISSUE_DATE\]/g, issueDate)
         .replace(/\[DATE\]/g, date)
         .replace(/\[UID\]/g, uid)
-        .replace(/\[LOGO_PATH\]/g, `file://${this.logoPath}`);
+        .replace(/\[LOGO_PATH\]/g, logoBase64);
 
       // Launch Puppeteer
       const browser = await puppeteer.launch({
         headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security']
       });
 
       const page = await browser.newPage();
-      await page.setContent(htmlTemplate, { waitUntil: 'networkidle0' });
+      
+      // Set content and wait for all resources including images
+      await page.setContent(htmlTemplate, { 
+        waitUntil: ['networkidle0', 'load', 'domcontentloaded'] 
+      });
+
+      // Wait extra time for base64 images to render using setTimeout
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Check if image loaded
+      const imageLoaded = await page.evaluate(() => {
+        const img = document.querySelector('.institute-logo');
+        return img && img.complete && img.naturalHeight !== 0;
+      });
+
+      console.log(`📸 Image loaded status: ${imageLoaded}`);
 
       // Generate PDF filename
       const filename = `${uid}.pdf`;
       const filepath = path.join(this.certificatesDir, filename);
+      
+      // Also save HTML version for backup/debugging
+      const htmlFilename = `${uid}.html`;
+      const htmlFilepath = path.join(this.certificatesDir, htmlFilename);
+      await fs.writeFile(htmlFilepath, htmlTemplate);
+      console.log(`📄 HTML version saved: ${htmlFilename}`);
 
-      // Generate PDF
+      // Generate PDF with optimized settings for images
       await page.pdf({
         path: filepath,
         width: '1123px',
         height: '794px',
         printBackground: true,
-        margin: { top: 0, right: 0, bottom: 0, left: 0 }
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        preferCSSPageSize: false
       });
 
       await browser.close();
 
-      // Save certificate record to database
+      // Save certificate record to database using database IDs
       const certificate = await prisma.certificate.create({
         data: {
-          studentId,
-          eventId,
+          studentId: studentDbId,
+          eventId: eventDbId,
           orderId,
           certificateUrl: `/uploads/certificates/${filename}`,
           participantName,
@@ -111,7 +173,7 @@ class CertificateService {
   }
 
   /**
-   * Generate certificates for multiple students
+   * Generate certificates for multiple athletes
    */
   async generateBulkCertificates(certificatesData) {
     const results = [];
@@ -133,7 +195,7 @@ class CertificateService {
   }
 
   /**
-   * Get certificates for a student
+   * Get certificates for an athlete
    */
   async getStudentCertificates(studentId) {
     try {

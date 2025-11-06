@@ -6,7 +6,8 @@ import {
   getStudentEvents,
   registerForEvent,
   unregisterFromEvent,
-  getStudentEventRegistrations
+  getStudentEventRegistrations,
+  getStudentCertificates
 } from '../../api';
 import CoachCard from '../../components/CoachCard';
 import Spinner from '../../components/Spinner';
@@ -18,8 +19,10 @@ const StudentDashboard = () => {
   const [coaches, setCoaches] = useState([]);
   const [availableEvents, setAvailableEvents] = useState([]);
   const [myEventRegistrations, setMyEventRegistrations] = useState([]);
+  const [certificates, setCertificates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [eventsLoading, setEventsLoading] = useState(false);
+  const [certificatesLoading, setCertificatesLoading] = useState(false);
   const [showCoachModal, setShowCoachModal] = useState(false);
   const [showEventsModal, setShowEventsModal] = useState(false);
   const [connectedCoaches, setConnectedCoaches] = useState([]);
@@ -56,6 +59,7 @@ const StudentDashboard = () => {
     loadCoaches();
     loadAvailableEvents();
     loadMyEventRegistrations();
+    loadCertificates();
   }, []);
 
   const handleUpdateProfile = () => {
@@ -189,6 +193,28 @@ const StudentDashboard = () => {
     } catch (error) {
       console.error('❌ Failed to load event registrations:', error);
       setMyEventRegistrations([]);
+    }
+  };
+
+  // Load student certificates
+  const loadCertificates = async () => {
+    try {
+      setCertificatesLoading(true);
+      console.log('🔄 Loading certificates...');
+      
+      const response = await getStudentCertificates();
+      console.log('✅ Certificates loaded:', response);
+      
+      if (response.success) {
+        setCertificates(response.data?.certificates || []);
+      } else {
+        setCertificates([]);
+      }
+    } catch (error) {
+      console.error('❌ Failed to load certificates:', error);
+      setCertificates([]);
+    } finally {
+      setCertificatesLoading(false);
     }
   };
 
@@ -453,6 +479,29 @@ const StudentDashboard = () => {
               </div>
             </div>
           </div>
+          {/* Certificates */}
+          <div 
+            className="bg-white rounded-xl shadow-md p-6 border-l-4 border-yellow-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            onClick={() => {
+              setActiveTab('certificates');
+              setTimeout(() => {
+                tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 100);
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">My Certificates</p>
+                <p className="text-3xl font-bold text-gray-900">{certificates.length}</p>
+                <p className="text-sm text-yellow-600 mt-1">Earned achievements</p>
+              </div>
+              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                </svg>
+              </div>
+            </div>
+          </div>
           {/* Profile Completion */}
           <div 
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
@@ -486,6 +535,7 @@ const StudentDashboard = () => {
                 { id: 'overview', name: 'Overview', icon: '📊' },
                 { id: 'coaches', name: 'My Coaches', icon: '👨‍🏫' },
                 { id: 'events', name: 'My Events', icon: '🏆' },
+                { id: 'certificates', name: 'My Certificates', icon: '🎓' },
                 { id: 'progress', name: 'Progress', icon: '📈' }
               ].map((tab) => (
                 <button
@@ -765,6 +815,95 @@ const StudentDashboard = () => {
                       {eventsFilter === 'all' ? 'Browse available events and register to participate.' :
                        `You don't have any ${eventsFilter} events.`}
                     </p>
+                    <button
+                      onClick={handleBrowseEvents}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
+                    >
+                      Browse Events
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'certificates' && (
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900">My Certificates ({certificates.length})</h3>
+                  <button
+                    onClick={loadCertificates}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>Refresh</span>
+                  </button>
+                </div>
+
+                {certificatesLoading ? (
+                  <div className="flex justify-center items-center py-12">
+                    <Spinner />
+                    <p className="ml-3 text-gray-600">Loading certificates...</p>
+                  </div>
+                ) : certificates.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {certificates.map((cert) => (
+                      <div key={cert.id} className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-2 border-yellow-400 rounded-lg p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+                        <div className="flex items-center justify-center mb-4">
+                          <div className="w-20 h-20 bg-yellow-400 rounded-full flex items-center justify-center">
+                            <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                            </svg>
+                          </div>
+                        </div>
+                        
+                        <div className="text-center mb-4">
+                          <h4 className="font-bold text-gray-900 text-lg mb-1">{cert.eventName}</h4>
+                          <p className="text-sm text-gray-700 font-medium">{cert.participantName}</p>
+                          <p className="text-sm text-gray-600 mt-1">Sport: {cert.sportName}</p>
+                        </div>
+                        
+                        <div className="space-y-2 text-sm text-gray-700 mb-4">
+                          <div className="flex justify-between">
+                            <span className="font-medium">Certificate ID:</span>
+                            <span className="text-xs">{cert.uid}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-medium">Issue Date:</span>
+                            <span>{new Date(cert.issueDate).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex space-x-2">
+                          <a
+                            href={`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}${cert.certificateUrl}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors text-center font-medium"
+                          >
+                            📄 View PDF
+                          </a>
+                          <a
+                            href={`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}${cert.certificateUrl}`}
+                            download
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 bg-green-600 text-white px-3 py-2 rounded text-sm hover:bg-green-700 transition-colors text-center font-medium"
+                          >
+                            ⬇️ Download
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <span className="text-gray-400 text-5xl">🎓</span>
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Certificates Yet</h3>
+                    <p className="text-gray-600 mb-6">Participate in events and earn certificates to showcase your achievements!</p>
                     <button
                       onClick={handleBrowseEvents}
                       className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"

@@ -1155,35 +1155,72 @@ router.get('/events', authenticate, requireCoach, async (req, res) => {
 
     const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
 
-    // Format events with registration count
-    const formattedEvents = events.map(event => ({
-      id: event.id,
-      name: event.name,
-      description: event.description,
-      sport: event.sport,
-      venue: event.venue,
-      address: event.address,
-      city: event.city,
-      state: event.state,
-      latitude: event.latitude,
-      longitude: event.longitude,
-      startDate: event.startDate,
-      endDate: event.endDate,
-      maxParticipants: event.maxParticipants,
-      currentParticipants: event._count.registrations,
-      eventFee: event.eventFee,
-      status: event.status,
-      adminNotes: event.adminNotes,
-      createdAt: event.createdAt,
-      updatedAt: event.updatedAt,
-      registrations: event.registrations.map(reg => ({
-        id: reg.id,
-        studentId: reg.studentId,
-        studentName: reg.student.name,
-        registrationDate: reg.createdAt,
-        status: reg.status
-      }))
-    }));
+    // Helper function to compute dynamic status
+    const computeDynamicStatus = (event) => {
+      const now = new Date();
+      const start = new Date(event.startDate);
+      const end = new Date(event.endDate);
+      
+      console.log(`🔍 Computing status for event: ${event.name}`);
+      console.log(`   Current time: ${now.toISOString()}`);
+      console.log(`   Start time: ${start.toISOString()}`);
+      console.log(`   End time: ${end.toISOString()}`);
+      console.log(`   Database status: ${event.status}`);
+      
+      if (event.status !== 'APPROVED' && event.status !== 'ACTIVE') {
+        console.log(`   → Keeping status: ${event.status} (not APPROVED/ACTIVE)`);
+        return event.status;
+      }
+      
+      if (now < start) {
+        console.log(`   → Status: about to start`);
+        return 'about to start';
+      } else if (now >= start && now <= end) {
+        console.log(`   → Status: ongoing`);
+        return 'ongoing';
+      } else if (now > end) {
+        console.log(`   → Status: ended`);
+        return 'ended';
+      }
+      console.log(`   → Keeping status: ${event.status}`);
+      return event.status;
+    };
+
+    // Format events with registration count and dynamic status
+    const formattedEvents = events.map(event => {
+      const dynamicStatus = computeDynamicStatus(event);
+      return {
+        id: event.id,
+        name: event.name,
+        description: event.description,
+        sport: event.sport,
+        venue: event.venue,
+        address: event.address,
+        city: event.city,
+        state: event.state,
+        latitude: event.latitude,
+        longitude: event.longitude,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        maxParticipants: event.maxParticipants,
+        currentParticipants: event._count.registrations,
+        eventFee: event.eventFee,
+        status: event.status,
+        dynamicStatus: dynamicStatus,
+        adminNotes: event.adminNotes,
+        createdAt: event.createdAt,
+        updatedAt: event.updatedAt,
+        registrations: event.registrations.map(reg => ({
+          id: reg.id,
+          studentId: reg.studentId,
+          studentName: reg.student.name,
+          registrationDate: reg.createdAt,
+          status: reg.status
+        }))
+      };
+    });
+
+    console.log(`✅ Returning ${formattedEvents.length} events with dynamic status`);
 
     res.json(successResponse({
       events: formattedEvents,

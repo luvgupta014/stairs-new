@@ -15,7 +15,7 @@ import ParticipantsModal from '../../components/ParticipantsModal';
 const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
-    totalStudents: 0,
+     totalAthletes: 0,
     totalCoaches: 0,
     totalInstitutes: 0,
     totalClubs: 0,
@@ -219,7 +219,7 @@ const AdminDashboard = () => {
         });
         
         const statsData = {
-          totalStudents: dashboardStats?.totalStudents || 0,
+          totalAthletes: dashboardStats?.totalStudents || 0,
           totalCoaches: dashboardStats?.totalCoaches || 0,
           totalInstitutes: dashboardStats?.totalInstitutes || 0,
           totalClubs: dashboardStats?.totalClubs || 0,
@@ -267,7 +267,7 @@ const AdminDashboard = () => {
       
       // Set default values on error to prevent crashes
       setStats({
-        totalStudents: 0,
+        totalAthletes: 0,
         totalCoaches: 0,
         totalInstitutes: 0,
         totalClubs: 0,
@@ -642,12 +642,12 @@ const AdminDashboard = () => {
         {/* Secondary Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <StatCard
-            title="Students"
-            value={stats.totalStudents}
-            icon="🎓"
+            title="Athletes"
+            value={stats.totalAthletes}
+            icon="�"
             color="indigo"
             onClick={() => {
-              handleRegistrationFilterChange('role', 'STUDENT');
+              handleRegistrationFilterChange('role', 'ATHLETE');
               setTimeout(() => {
                 recentRegistrationsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }, 100);
@@ -1039,7 +1039,7 @@ const AdminDashboard = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 >
                   <option value="">All Roles</option>
-                  <option value="STUDENT">Students</option>
+                  <option value="ATHLETE">Athletes</option>
                   <option value="COACH">Coaches</option>
                   <option value="INSTITUTE">Institutes</option>
                   <option value="CLUB">Clubs</option>
@@ -1273,7 +1273,7 @@ const StatCard = ({ title, value, icon, color, growth, urgent, onClick }) => {
 // Helper function for role colors
 const getRoleColor = (role) => {
   const colors = {
-    STUDENT: 'bg-blue-100 text-blue-800 border border-blue-300',
+    ATHLETE: 'bg-blue-100 text-blue-800 border border-blue-300',
     COACH: 'bg-green-100 text-green-800 border border-green-300',
     INSTITUTE: 'bg-purple-100 text-purple-800 border border-purple-300',
     CLUB: 'bg-orange-100 text-orange-800 border border-orange-300',

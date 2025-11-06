@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, requireCoach } = require('../utils/authMiddleware');
 const certificateService = require('../services/certificateService');
-const prisma = require('../prisma/schema');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 // Helper functions
 const successResponse = (data, message = 'Success') => ({ success: true, message, data });
@@ -33,6 +34,7 @@ router.post('/issue', authenticate, requireCoach, async (req, res) => {
       },
       select: {
         id: true,
+        uniqueId: true,
         name: true,
         sport: true,
         startDate: true
@@ -109,17 +111,20 @@ router.post('/issue', authenticate, requireCoach, async (req, res) => {
     }
 
     // Prepare certificate data for each student
+    const eventDate = new Date(event.startDate).toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+    
     const certificatesData = students.map(student => ({
       participantName: student.name,
       sportName: event.sport,
       eventName: event.name,
-      date: new Date(event.startDate).toLocaleDateString('en-IN', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      }),
-      studentId: student.id,
-      eventId: event.id,
+      eventDate: eventDate,
+      date: eventDate, // For backwards compatibility
+      studentId: student.user.uniqueId, // Use custom formatted athlete UID
+      eventId: event.uniqueId, // Use custom formatted event UID
       orderId: order.id
     }));
 
@@ -244,11 +249,25 @@ router.get('/event/:eventId/issued', authenticate, requireCoach, async (req, res
       return res.status(404).json(errorResponse('Event not found or access denied'));
     }
 
-    // Get all certificates for this event
-    const certificates = await prisma.certificate.findMany({
+    // Get all certificates for this event, including student uniqueId
+    const certificatesRaw = await prisma.certificate.findMany({
       where: { eventId },
       orderBy: { issueDate: 'desc' }
     });
+
+    // Fetch student uniqueIds for each certificate
+    const certificates = await Promise.all(certificatesRaw.map(async cert => {
+      const student = await prisma.student.findUnique({
+        where: { id: cert.studentId },
+        select: {
+          user: { select: { uniqueId: true } }
+        }
+      });
+      return {
+        ...cert,
+        studentUniqueId: student?.user?.uniqueId || ''
+      };
+    }));
 
     res.json(successResponse({
       certificates,
@@ -259,6 +278,158 @@ router.get('/event/:eventId/issued', authenticate, requireCoach, async (req, res
   } catch (error) {
     console.error('❌ Error fetching event certificates:', error);
     res.status(500).json(errorResponse('Failed to fetch certificates', 500));
+  }
+});
+
+/**
+ * @route   GET /api/certificates/event/:eventId/eligible-students
+ * @desc    Get eligible students for certificate issuance for an event (Coach only)
+ * @access  Private (Coach)
+ */
+router.get('/event/:eventId/eligible-students', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { orderId } = req.query;
+    const coachId = req.user.coachProfile.id;
+
+    console.log(`📋 Fetching eligible students for event: ${eventId}, order: ${orderId}`);
+
+    // Verify the event belongs to the coach
+    const event = await prisma.event.findFirst({
+      where: {
+        id: eventId,
+        coachId
+      },
+      select: {
+        id: true,
+        name: true,
+        status: true
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found or you do not have permission'));
+    }
+
+    // Verify the order and check payment status
+    const order = await prisma.eventOrder.findFirst({
+      where: {
+        id: orderId,
+        eventId,
+        coachId,
+        paymentStatus: 'SUCCESS'
+      },
+      select: {
+        id: true,
+        certificates: true,
+        orderNumber: true
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json(errorResponse('Order not found or payment not completed'));
+    }
+
+    // Get all students registered for this event
+    const registrations = await prisma.eventRegistration.findMany({
+      where: {
+        eventId,
+        status: { in: ['REGISTERED', 'APPROVED'] }
+      },
+      include: {
+        student: {
+          select: {
+            id: true,
+            name: true,
+            sport: true,
+            user: {
+              select: {
+                uniqueId: true,
+                email: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Get already issued certificates for this event and order
+    const issuedCertificates = await prisma.certificate.findMany({
+      where: {
+        eventId,
+        orderId
+      },
+      select: {
+        studentId: true
+      }
+    });
+
+    const issuedStudentIds = new Set(issuedCertificates.map(cert => cert.studentId));
+
+    // Filter out students who already have certificates
+    const eligibleStudents = registrations
+      .filter(reg => !issuedStudentIds.has(reg.student.id))
+      .map(reg => ({
+        id: reg.student.id,
+        name: reg.student.name,
+        uniqueId: reg.student.user.uniqueId,
+        studentId: reg.student.user.uniqueId, // Also provide as studentId for clarity
+        email: reg.student.user.email,
+        sport: reg.student.sport,
+        registrationStatus: reg.status
+      }));
+
+    res.json(successResponse({
+      eligibleStudents,
+      totalEligible: eligibleStudents.length,
+      certificatesAllowed: order.certificates,
+      certificatesIssued: issuedCertificates.length,
+      certificatesRemaining: order.certificates - issuedCertificates.length,
+      eventName: event.name,
+      eventStatus: event.status,
+      orderNumber: order.orderNumber
+    }, 'Eligible students retrieved successfully'));
+
+  } catch (error) {
+    console.error('❌ Error fetching eligible students:', error);
+    res.status(500).json(errorResponse('Failed to fetch eligible students', 500));
+  }
+});
+
+/**
+ * @route   GET /api/certificates/:uid/html
+ * @desc    Get HTML version of certificate (fallback if PDF has issues)
+ * @access  Public
+ */
+router.get('/:uid/html', async (req, res) => {
+  try {
+    const { uid } = req.params;
+
+    const certificate = await prisma.certificate.findUnique({
+      where: { uid }
+    });
+
+    if (!certificate) {
+      return res.status(404).json(errorResponse('Certificate not found'));
+    }
+
+    // Construct HTML file path
+    const htmlPath = certificate.certificateUrl.replace('.pdf', '.html');
+    const fs = require('fs');
+    const path = require('path');
+    const fullPath = path.join(__dirname, '../..', htmlPath);
+
+    // Check if HTML file exists
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json(errorResponse('HTML version not available'));
+    }
+
+    // Send HTML file
+    res.sendFile(fullPath);
+
+  } catch (error) {
+    console.error('❌ Error serving HTML certificate:', error);
+    res.status(500).json(errorResponse('Failed to serve HTML certificate', 500));
   }
 });
 

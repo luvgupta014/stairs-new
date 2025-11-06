@@ -59,6 +59,7 @@ import Payment from "./components/Payment";
 import AdminEventResults from "./components/AdminEventResults";
 import EventResultUpload from "./pages/events/EventResultUpload";
 import EventOrders from "./pages/events/EventOrders";
+import IssueCertificates from "./pages/IssueCertificates";
 import AdminOrders from "./components/AdminOrders";
 import AdminRevenue from "./pages/AdminRevenue";
 
@@ -507,6 +508,20 @@ function App() {
                   <main className="flex-grow">
                     <ProtectedRoute role="COACH">
                       <EventOrders />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/coach/event/:eventId/certificates"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute role="COACH">
+                      <IssueCertificates />
                     </ProtectedRoute>
                   </main>
                   <Footer />

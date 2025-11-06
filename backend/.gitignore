@@ -113,4 +113,4 @@ ecosystem.config.js
 # prisma/generated/
 
 #admin login create
-scripts/createAdmin.js
+scripts/

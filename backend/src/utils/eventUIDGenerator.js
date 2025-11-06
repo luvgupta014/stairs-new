@@ -1,0 +1,227 @@
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
+/**
+ * Sport code mappings for common sports
+ */
+const SPORT_CODES = {
+  'football': 'FB',
+  'soccer': 'FB',
+  'basketball': 'BB',
+  'cricket': 'CR',
+  'tennis': 'TN',
+  'badminton': 'BD',
+  'volleyball': 'VB',
+  'hockey': 'HK',
+  'athletics': 'ATH',
+  'swimming': 'SW',
+  'boxing': 'BX',
+  'wrestling': 'WR',
+  'kabaddi': 'KB',
+  'table tennis': 'TT',
+  'chess': 'CH',
+  'archery': 'AR',
+  'shooting': 'SH',
+  'gymnastics': 'GYM',
+  'weightlifting': 'WL',
+  'judo': 'JD',
+  'taekwondo': 'TK',
+  'karate': 'KR',
+  'cycling': 'CY',
+  'running': 'RN',
+  'marathon': 'MR'
+};
+
+/**
+ * Location code mappings for Indian states and major cities
+ */
+const LOCATION_CODES = {
+  // States
+  'delhi': 'DL',
+  'mumbai': 'MH',
+  'bangalore': 'KA',
+  'bengaluru': 'KA',
+  'hyderabad': 'TS',
+  'chennai': 'TN',
+  'kolkata': 'WB',
+  'pune': 'MH',
+  'ahmedabad': 'GJ',
+  'jaipur': 'RJ',
+  'lucknow': 'UP',
+  'kanpur': 'UP',
+  'nagpur': 'MH',
+  'indore': 'MP',
+  'bhopal': 'MP',
+  'patna': 'BR',
+  'vadodara': 'GJ',
+  'ghaziabad': 'UP',
+  'ludhiana': 'PB',
+  'agra': 'UP',
+  'nashik': 'MH',
+  'faridabad': 'HR',
+  'meerut': 'UP',
+  'rajkot': 'GJ',
+  'varanasi': 'UP',
+  'srinagar': 'JK',
+  'aurangabad': 'MH',
+  'dhanbad': 'JH',
+  'amritsar': 'PB',
+  'allahabad': 'UP',
+  'ranchi': 'JH',
+  'howrah': 'WB',
+  'coimbatore': 'TN',
+  'jabalpur': 'MP',
+  'gwalior': 'MP',
+  'vijayawada': 'AP',
+  'jodhpur': 'RJ',
+  'madurai': 'TN',
+  'raipur': 'CG',
+  'kota': 'RJ',
+  'chandigarh': 'CH',
+  'guwahati': 'AS',
+  'hubli': 'KA',
+  'mysore': 'KA',
+  'mysuru': 'KA',
+  'tiruchirappalli': 'TN',
+  'bareilly': 'UP',
+  'moradabad': 'UP',
+  'gurgaon': 'HR',
+  'gurugram': 'HR',
+  'aligarh': 'UP',
+  'jalandhar': 'PB',
+  'bhubaneswar': 'OR',
+  'salem': 'TN',
+  'warangal': 'TS',
+  'thiruvananthapuram': 'KL',
+  'trivandrum': 'KL',
+  'kochi': 'KL',
+  'cochin': 'KL',
+  // State codes
+  'andhra pradesh': 'AP',
+  'arunachal pradesh': 'AR',
+  'assam': 'AS',
+  'bihar': 'BR',
+  'chhattisgarh': 'CG',
+  'goa': 'GA',
+  'gujarat': 'GJ',
+  'haryana': 'HR',
+  'himachal pradesh': 'HP',
+  'jharkhand': 'JH',
+  'karnataka': 'KA',
+  'kerala': 'KL',
+  'madhya pradesh': 'MP',
+  'maharashtra': 'MH',
+  'manipur': 'MN',
+  'meghalaya': 'ML',
+  'mizoram': 'MZ',
+  'nagaland': 'NL',
+  'odisha': 'OR',
+  'punjab': 'PB',
+  'rajasthan': 'RJ',
+  'sikkim': 'SK',
+  'tamil nadu': 'TN',
+  'telangana': 'TS',
+  'tripura': 'TR',
+  'uttar pradesh': 'UP',
+  'uttarakhand': 'UK',
+  'west bengal': 'WB',
+  'jammu and kashmir': 'JK',
+  'ladakh': 'LA'
+};
+
+/**
+ * Get sport code from sport name
+ * @param {string} sportName - Full sport name
+ * @returns {string} - 2-3 letter sport code
+ */
+function getSportCode(sportName) {
+  const normalized = sportName.toLowerCase().trim();
+  
+  if (SPORT_CODES[normalized]) {
+    return SPORT_CODES[normalized];
+  }
+  
+  // If not found, generate code from first 2-3 letters
+  return sportName.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '');
+}
+
+/**
+ * Get location code from city/state name
+ * @param {string} cityOrState - City or state name
+ * @returns {string} - 2 letter location code
+ */
+function getLocationCode(cityOrState) {
+  const normalized = cityOrState.toLowerCase().trim();
+  
+  if (LOCATION_CODES[normalized]) {
+    return LOCATION_CODES[normalized];
+  }
+  
+  // If not found, generate code from first 2 letters
+  return cityOrState.substring(0, 2).toUpperCase().replace(/[^A-Z]/g, '');
+}
+
+/**
+ * Generate a unique event UID
+ * Format: <serial>-<sportCode>-EVT-<locationCode>-<MMYYYY>
+ * Example: 07-FB-EVT-DL-112025
+ * 
+ * @param {string} sport - Sport name
+ * @param {string} city - City name
+ * @param {Date} startDate - Event start date
+ * @returns {Promise<string>} - Generated unique event UID
+ */
+async function generateEventUID(sport, city, startDate) {
+  const sportCode = getSportCode(sport);
+  const locationCode = getLocationCode(city);
+  
+  const date = new Date(startDate);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  const dateCode = `${month}${year}`;
+  
+  // Generate random serial between 01-99
+  let serial;
+  let uid;
+  let attempts = 0;
+  const maxAttempts = 100;
+  
+  // Keep trying until we find a unique UID
+  while (attempts < maxAttempts) {
+    serial = String(Math.floor(Math.random() * 99) + 1).padStart(2, '0');
+    uid = `${serial}-${sportCode}-EVT-${locationCode}-${dateCode}`;
+    
+    // Check if this UID already exists
+    const existingEvent = await prisma.event.findUnique({
+      where: { uniqueId: uid }
+    });
+    
+    if (!existingEvent) {
+      return uid;
+    }
+    
+    attempts++;
+  }
+  
+  // If we couldn't find a unique UID after max attempts, use timestamp
+  const timestamp = Date.now().toString().slice(-4);
+  return `${timestamp.substring(0, 2)}-${sportCode}-EVT-${locationCode}-${dateCode}`;
+}
+
+/**
+ * Generate event UID for migration (for existing events without uniqueId)
+ * @param {Object} event - Event object with sport, city, startDate
+ * @returns {Promise<string>} - Generated unique event UID
+ */
+async function generateEventUIDForMigration(event) {
+  return generateEventUID(event.sport, event.city, event.startDate);
+}
+
+module.exports = {
+  generateEventUID,
+  generateEventUIDForMigration,
+  getSportCode,
+  getLocationCode,
+  SPORT_CODES,
+  LOCATION_CODES
+};

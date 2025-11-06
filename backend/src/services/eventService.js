@@ -7,6 +7,7 @@ const {
   successResponse,
   errorResponse 
 } = require('../utils/helpers');
+const { generateEventUID } = require('../utils/eventUIDGenerator');
 
 const prisma = new PrismaClient();
 
@@ -21,6 +22,27 @@ if (!fs.existsSync(uploadsDir)) {
  * Handles all event-related business logic for coaches, institutes, clubs, and students
  */
 class EventService {
+  /**
+   * Compute dynamic event status based on current date/time
+   * @param {Object} event - Event object with startDate and endDate
+   * @returns {string} - Status: 'about to start', 'ongoing', 'ended', or event.status
+   */
+  _computeDynamicStatus(event) {
+    const now = new Date();
+    const start = new Date(event.startDate);
+    const end = new Date(event.endDate);
+    if (event.status !== 'APPROVED' && event.status !== 'ACTIVE') {
+      return event.status;
+    }
+    if (now < start) {
+      return 'about to start';
+    } else if (now >= start && now <= end) {
+      return 'ongoing';
+    } else if (now > end) {
+      return 'ended';
+    }
+    return event.status;
+  }
   /**
    * Create a new event
    * @param {Object} eventData - Event data
@@ -59,8 +81,12 @@ class EventService {
         throw new Error('Event end date must be after start date');
       }
 
+      // Generate unique event UID
+      const uniqueId = await generateEventUID(sport, city, start);
+
       // Create event data object based on creator type
       const eventCreateData = {
+        uniqueId,
         name,
         description,
         sport,
@@ -248,11 +274,12 @@ class EventService {
         console.log(`📊 Database stats: Total events: ${totalEventsInDb}, Approved events: ${approvedEvents}, Filtered events: ${total}`);
       }
 
-      // Add isRegistered flag for students
+      // Add isRegistered flag for students and dynamic status
       const eventsWithRegistration = events.map(event => ({
         ...event,
         isRegistered: userRole === 'STUDENT' ? event.registrations?.length > 0 : false,
-        currentParticipants: event._count.registrations
+        currentParticipants: event._count.registrations,
+        dynamicStatus: this._computeDynamicStatus(event)
       }));
 
       const paginationMeta = getPaginationMeta(total, parseInt(page), parseInt(limit));
@@ -337,7 +364,8 @@ class EventService {
 
       const eventsWithParticipants = events.map(event => ({
         ...event,
-        currentParticipants: event._count.registrations
+        currentParticipants: event._count.registrations,
+        dynamicStatus: this._computeDynamicStatus(event)
       }));
 
       const paginationMeta = getPaginationMeta(total, parseInt(page), parseInt(limit));
@@ -374,15 +402,6 @@ class EventService {
               }
             }
           },
-          club: {
-            select: {
-              id: true,
-              name: true,
-              user: {
-                select: { email: true, phone: true }
-              }
-            }
-          },
           registrations: {
             include: {
               student: {
@@ -401,6 +420,7 @@ class EventService {
               }
             }
           },
+          orders: true,
           _count: {
             select: {
               registrations: true
@@ -428,6 +448,7 @@ class EventService {
       }
 
       event.currentParticipants = event._count.registrations;
+      event.dynamicStatus = this._computeDynamicStatus(event);
 
       return event;
     } catch (error) {

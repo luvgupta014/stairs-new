@@ -235,6 +235,8 @@ model ClubMember {
 
 model Event {
   id                  String              @id @default(cuid())
+  /// Custom UID for event in format: <serial>-<sportCode>-EVT-<locationCode>-<MMYYYY>
+  uniqueId            String?             @unique @map("unique_id")
   name                String
   description         String?
   sport               String

@@ -1241,6 +1241,7 @@ router.post('/club/register', async (req, res) => {
 
 // Login (Universal)
 router.post('/login', async (req, res) => {
+  let email, password, role; // Declare outside try block for catch block access
   try {
     console.log('🔐 === LOGIN STARTED ===');
     console.log('📝 Login request received at:', new Date().toISOString());
@@ -1250,7 +1251,7 @@ router.post('/login', async (req, res) => {
       hasPassword: !!req.body.password
     });
     
-    const { email, password, role } = req.body;
+    ({ email, password, role } = req.body);
 
     if (!email || !password) {
       console.log('❌ Login validation failed: Missing email or password');
@@ -1274,6 +1275,7 @@ router.post('/login', async (req, res) => {
         adminProfile: true
       }
     });
+    console.log('🔎 User lookup result:', user);
 
     if (!user) {
       console.log('❌ User not found for email:', email);
@@ -1368,8 +1370,13 @@ router.post('/login', async (req, res) => {
       message: error.message,
       stack: error.stack,
       code: error.code,
-      meta: error.meta
+      meta: error.meta,
+      name: error.name,
+      errno: error.errno
     });
+    console.error('📋 Full error object:', JSON.stringify(error, null, 2));
+    console.error('🔍 Email attempted:', email);
+    console.error('🔍 Role attempted:', role);
     res.status(500).json(errorResponse('An unexpected error occurred during login. Please try again.', 500));
   }
 });

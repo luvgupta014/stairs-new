@@ -238,7 +238,10 @@ const CoachDashboard = () => {
       REJECTED: 'bg-red-100 text-red-800',
       ACTIVE: 'bg-blue-100 text-blue-800',
       CANCELLED: 'bg-gray-100 text-gray-800',
-      COMPLETED: 'bg-purple-100 text-purple-800'
+      COMPLETED: 'bg-purple-100 text-purple-800',
+      'about to start': 'bg-orange-100 text-orange-800',
+      'ongoing': 'bg-blue-100 text-blue-800',
+      'ended': 'bg-purple-100 text-purple-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
@@ -250,7 +253,10 @@ const CoachDashboard = () => {
       REJECTED: '❌',
       ACTIVE: '🔵',
       CANCELLED: '⚫',
-      COMPLETED: '🎉'
+      COMPLETED: '🎉',
+      'about to start': '🔜',
+      'ongoing': '▶️',
+      'ended': '🏁'
     };
     return icons[status] || '❓';
   };
@@ -474,7 +480,7 @@ const CoachDashboard = () => {
                 to="/coach/bulk-upload"
                 className="bg-green-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-400 transition-colors"
               >
-                Add Students
+                Add Athletes
               </Link>
             </div>
           </div>
@@ -607,7 +613,7 @@ const CoachDashboard = () => {
                   Complete Your Payment
                 </h3>
                 <p className="text-amber-700 mb-4">
-                  Your account has limited access. Complete your subscription payment to unlock student management, event creation, and advanced analytics.
+                  Your account has limited access. Complete your subscription payment to unlock athlete management, event creation, and advanced analytics.
                 </p>
                 <div className="flex space-x-3">
                   <button
@@ -635,7 +641,7 @@ const CoachDashboard = () => {
           <div 
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
             onClick={() => {
-              setActiveTab('students');
+              setActiveTab('athletes');
               setTimeout(() => {
                 tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }, 100);
@@ -643,7 +649,7 @@ const CoachDashboard = () => {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Students</p>
+                <p className="text-sm font-medium text-gray-600">Total Athletes</p>
                 <p className="text-3xl font-bold text-gray-900">{dashboardData?.totalStudents || dashboardData?.coach?.studentsCount || 0}</p>
                 <p className="text-sm text-green-600 mt-1">↗ +{dashboardData?.pendingRequests || 0} requests</p>
               </div>
@@ -740,7 +746,7 @@ const CoachDashboard = () => {
             <nav className="-mb-px flex space-x-8 px-6">
               {[
                 { id: 'overview', name: 'Overview', icon: '📊' },
-                { id: 'students', name: 'Students', icon: '👥' },
+                { id: 'athletes', name: 'Athletes', icon: '👥' },
                 { id: 'events', name: 'My Events', icon: '📅' },
                 { id: 'analytics', name: 'Analytics', icon: '📈' }
               ].map((tab) => (
@@ -797,7 +803,7 @@ const CoachDashboard = () => {
                       to="/coach/bulk-upload"
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg text-sm font-medium text-center block transition-colors"
                     >
-                      📥 Add Students (Bulk)
+                      📥 Add Athletes (Bulk)
                     </Link>
                     <Link
                       to="/coach/profile"
@@ -813,14 +819,14 @@ const CoachDashboard = () => {
               </div>
             )}
 
-            {activeTab === 'students' && (
+            {activeTab === 'athletes' && (
               <div>
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900">My Students ({dashboardData?.students?.length || 0})</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">My Athletes ({dashboardData?.students?.length || 0})</h3>
                   <div className="flex space-x-3">
                     <input
                       type="text"
-                      placeholder="Search students..."
+                      placeholder="Search athletes..."
                       className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     />
                     <select className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
@@ -875,13 +881,13 @@ const CoachDashboard = () => {
                     <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                       <span className="text-gray-400 text-4xl">👥</span>
                     </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Students Yet</h3>
-                    <p className="text-gray-600 mb-6">Students will appear here when they connect with you.</p>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Athletes Yet</h3>
+                    <p className="text-gray-600 mb-6">Athletes will appear here when they connect with you.</p>
                     <Link
                       to="/coach/bulk-upload"
                       className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium"
                     >
-                      Add Students
+                      Add Athletes
                     </Link>
                   </div>
                 )}
@@ -1077,8 +1083,9 @@ const CoachDashboard = () => {
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
                               <h4 className="text-xl font-semibold text-gray-900">{event.name}</h4>
-                              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(event.status)}`}>
-                                {getStatusIcon(event.status)} {event.status}
+                              {/* Show both status and dynamicStatus if available */}
+                              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(event.dynamicStatus || event.status)}`}>
+                                {getStatusIcon(event.dynamicStatus || event.status)} {event.dynamicStatus || event.status}
                               </span>
                               
                               {/* Event Type Badge */}
@@ -1222,6 +1229,19 @@ const CoachDashboard = () => {
                                   Place Orders
                                 </Link>
                               </>
+                            )}
+
+                            {/* E-Certificates button - only show for ended events */}
+                            {(event.dynamicStatus === 'ended' || event.status === 'COMPLETED') && (
+                              <Link
+                                to={`/coach/event/${event.id}/certificates`}
+                                className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-teal-700 transition-colors inline-flex items-center"
+                              >
+                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                                </svg>
+                                🎓 Issue E-Certificates
+                              </Link>
                             )}
                           </div>
                           

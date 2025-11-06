@@ -49,10 +49,10 @@ const STATE_CODES = {
 
 // User type prefixes
 const USER_TYPE_PREFIX = {
-  'STUDENT': 'a',  // athlete/student
-  'COACH': 'c',    // coach/coordinator
-  'INSTITUTE': 'i',
-  'CLUB': 'b'
+  'STUDENT': 'A',  // athlete/student
+  'COACH': 'C',    // coach/coordinator
+  'INSTITUTE': 'I',
+  'CLUB': 'B'
 };
 
 /**
@@ -110,10 +110,10 @@ const getNextSequenceNumber = async (prefix, stateCode, month, year) => {
     // Query to get the latest UID with this pattern
     // Using raw query for better control and to ensure proper sorting
     const result = await prisma.$queryRaw`
-      SELECT "uniqueId" 
+      SELECT unique_id 
       FROM users 
-      WHERE "uniqueId" LIKE ${pattern}
-      ORDER BY "uniqueId" DESC 
+      WHERE unique_id LIKE ${pattern}
+      ORDER BY unique_id DESC 
       LIMIT 1
     `;
     
@@ -124,9 +124,9 @@ const getNextSequenceNumber = async (prefix, stateCode, month, year) => {
     }
     
     // Extract the sequence number from existing UID
-    // Format: a00001DL112025
+    // Format: A00001DL112025
     //         ^^^^^
-    const lastUID = result[0].uniqueId;
+    const lastUID = result[0].unique_id;
     console.log(`📋 Last UID found: ${lastUID}`);
     
     const sequenceStr = lastUID.substring(1, 6); // Get 5 digits after prefix
@@ -196,7 +196,7 @@ const generateUID = async (userType, state) => {
       }
     }
     
-    // Construct UID: a00001DL112025
+    // Construct UID: A00001DL112025
     const uid = `${prefix}${sequence}${stateCode}${month}${year}`;
     
     console.log(`✅ Generated UID: ${uid}`);
@@ -214,13 +214,13 @@ const generateUID = async (userType, state) => {
  * @returns {object} Validation result with details
  */
 const validateUID = (uid) => {
-  // Pattern: a00001DL112025 (1 char + 5 digits + 2 chars + 2 digits + 4 digits = 14 chars)
-  const uidPattern = /^[acib]\d{5}[A-Z]{2}\d{6}$/;
+  // Pattern: A00001DL112025 (1 char + 5 digits + 2 chars + 2 digits + 4 digits = 14 chars)
+  const uidPattern = /^[ACIB]\d{5}[A-Z]{2}\d{6}$/;
   
   if (!uidPattern.test(uid)) {
     return {
       valid: false,
-      error: 'Invalid UID format. Expected format: [a/c/i/b][00001-99999][StateCode][MM][YYYY]'
+      error: 'Invalid UID format. Expected format: [A/C/I/B][00001-99999][StateCode][MM][YYYY]'
     };
   }
   
@@ -252,7 +252,7 @@ const validateUID = (uid) => {
   return {
     valid: true,
     components: {
-      userType: prefix === 'a' ? 'STUDENT' : prefix === 'c' ? 'COACH' : prefix === 'i' ? 'INSTITUTE' : 'CLUB',
+      userType: prefix === 'A' ? 'STUDENT' : prefix === 'C' ? 'COACH' : prefix === 'I' ? 'INSTITUTE' : 'CLUB',
       sequence,
       stateCode,
       month,

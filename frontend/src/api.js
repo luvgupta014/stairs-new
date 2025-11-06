@@ -902,6 +902,59 @@ export const deleteEventOrder = async (eventId, orderId) => {
   }
 };
 
+// Certificate API
+export const getEligibleStudents = async (eventId, orderId) => {
+  try {
+    const response = await api.get(`/api/certificates/event/${eventId}/eligible-students`, {
+      params: { orderId }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Get eligible students error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const issueCertificates = async (certificateData) => {
+  try {
+    const response = await api.post('/api/certificates/issue', certificateData);
+    return response.data;
+  } catch (error) {
+    console.error('Issue certificates error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getStudentCertificates = async () => {
+  try {
+    const response = await api.get('/api/certificates/my-certificates');
+    return response.data;
+  } catch (error) {
+    console.error('Get student certificates error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const verifyCertificate = async (uid) => {
+  try {
+    const response = await api.get(`/api/certificates/verify/${uid}`);
+    return response.data;
+  } catch (error) {
+    console.error('Verify certificate error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getEventCertificates = async (eventId) => {
+  try {
+    const response = await api.get(`/api/certificates/event/${eventId}/issued`);
+    return response.data;
+  } catch (error) {
+    console.error('Get event certificates error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 // Admin Order Management API
 export const getAllOrdersForAdmin = async (params = {}) => {
   try {
@@ -1075,5 +1128,16 @@ export const getNotificationCount = async () => {
 
 // Expose health check globally for debugging
 window.testBackendHealth = healthCheck;
+
+// Get event details by ID
+export const getEventById = async (eventId) => {
+  try {
+    const response = await api.get(`/api/events/${eventId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Get event by ID error:', error);
+    throw error.response?.data || error.message;
+  }
+};
 
 export default api;
