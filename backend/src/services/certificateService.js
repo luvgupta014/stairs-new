@@ -42,34 +42,22 @@ class CertificateService {
       eventName,
       date,
       eventDate,
-      studentId, // This is the custom formatted athlete UID
-      eventId, // This is the custom formatted event UID
+      studentId, // Now expects database ID
+      eventId, // Now expects database ID
+      studentUniqueId, // Custom UID for display
+      eventUniqueId, // Custom UID for display
       orderId
     } = data;
 
     try {
       await this.ensureCertificatesDirectory();
 
-      // Generate unique UID for certificate using custom formatted IDs
-      const uid = this.generateCertificateUID(eventId, studentId);
+      // Use database IDs directly (passed from route)
+      const studentDbId = studentId;
+      const eventDbId = eventId;
 
-      // Get database IDs for storing in certificate record
-      const student = await prisma.student.findFirst({
-        where: { user: { uniqueId: studentId } },
-        select: { id: true }
-      });
-
-      const event = await prisma.event.findFirst({
-        where: { uniqueId: eventId },
-        select: { id: true }
-      });
-
-      if (!student || !event) {
-        throw new Error(`Student or Event not found for UIDs: ${studentId}, ${eventId}`);
-      }
-
-      const studentDbId = student.id;
-      const eventDbId = event.id;
+      // Generate unique UID for certificate using custom formatted UIDs
+      const uid = this.generateCertificateUID(eventUniqueId, studentUniqueId);
 
       // Read template
       let htmlTemplate = await fs.readFile(this.templatePath, 'utf8');

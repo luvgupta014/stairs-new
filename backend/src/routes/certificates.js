@@ -121,14 +121,17 @@ router.post('/issue', authenticate, requireAdmin, async (req, res) => {
       day: 'numeric' 
     });
     
+    // CRITICAL: Pass database IDs internally, UIDs only for display
     const certificatesData = students.map(student => ({
       participantName: student.name,
       sportName: event.sport,
       eventName: event.name,
       eventDate: eventDate,
       date: eventDate, // For backwards compatibility
-      studentId: student.user.uniqueId, // Use custom formatted athlete UID
-      eventId: event.uniqueId, // Use custom formatted event UID
+      studentId: student.id, // Use database ID internally
+      studentUniqueId: student.user.uniqueId, // For display on certificate
+      eventId: event.id, // Use database ID internally
+      eventUniqueId: event.uniqueId, // For display on certificate
       orderId: orderId || null // Optional orderId
     }));
 

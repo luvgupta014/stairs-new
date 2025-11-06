@@ -1774,6 +1774,9 @@ router.delete('/events/:eventId/orders/:orderId', authenticate, requireCoach, as
 // Get dashboard analytics
 router.get('/dashboard', authenticate, requireCoach, async (req, res) => {
   try {
+    if (!req.coach || !req.coach.id) {
+      return res.status(401).json(errorResponse('Coach profile not found. Please log in as a coach.', 401));
+    }
     const coachId = req.coach.id;
 
     // Get various analytics
