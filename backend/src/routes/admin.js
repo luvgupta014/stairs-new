@@ -1621,7 +1621,14 @@ router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, 
     // Send email and create notification for coach
     try {
       if (event.coach?.user?.id) {
-        const notificationType = `EVENT_${action}`;
+        // Map action to proper notification type enum
+        const notificationTypeMap = {
+          'APPROVE': 'EVENT_APPROVED',
+          'REJECT': 'EVENT_REJECTED',
+          'SUSPEND': 'EVENT_SUSPENDED',
+          'RESTART': 'EVENT_RESTARTED'
+        };
+        const notificationType = notificationTypeMap[action] || `EVENT_${action}`;
         const notificationTitle = `Event ${action.charAt(0) + action.slice(1).toLowerCase()}d`;
         const notificationMessage = `Your event "${event.name}" has been ${action.toLowerCase()}d by an administrator.${adminNotes || remarks ? ` Reason: ${adminNotes || remarks}` : ''}`;
         

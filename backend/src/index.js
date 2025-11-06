@@ -4,7 +4,6 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const fileUpload = require('express-fileupload');
 const path = require('path');
-const { PrismaClient } = require('@prisma/client');
 require('dotenv').config();
 
 // Import routes
@@ -21,8 +20,13 @@ const certificateRoutes = require('./routes/certificates');
 // Import middleware
 const { errorResponse } = require('./utils/helpers');
 
+// Import Prisma client (optimized for Vercel)
+const prisma = require('./utils/prismaClient');
+
 const app = express();
-const prisma = new PrismaClient();
+
+// Trust proxy - important for production behind load balancer/nginx
+app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet({

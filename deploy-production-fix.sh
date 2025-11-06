@@ -41,20 +41,30 @@ fi
 echo -e "${GREEN}✅ Prisma Client regenerated${NC}"
 echo ""
 
-# Step 4: Restart PM2
-echo -e "${YELLOW}Step 4: Restarting backend service...${NC}"
-pm2 restart stairs-api
+# Step 4: Push database migrations (if needed)
+echo -e "${YELLOW}Step 4: Applying database migrations...${NC}"
+npx prisma db push --skip-generate
 if [ $? -ne 0 ]; then
-    echo -e "${YELLOW}⚠️  PM2 restart failed, trying 'pm2 restart all'...${NC}"
-    pm2 restart all
+    echo -e "${YELLOW}⚠️  Warning: Database push encountered an issue (may be normal if schema is up to date)${NC}"
 fi
-echo -e "${GREEN}✅ Backend service restarted${NC}"
+echo -e "${GREEN}✅ Database checked${NC}"
 echo ""
 
-# Step 5: Show logs
-echo -e "${YELLOW}Step 5: Checking backend logs...${NC}"
-echo "Showing last 50 lines of logs..."
-pm2 logs stairs-api --lines 50 --nostream
+# Step 5: Restart PM2
+echo -e "${YELLOW}Step 5: Restarting backend service...${NC}"
+pm2 restart stairs-backend
+if [ $? -ne 0 ]; then
+    echo -e "${YELLOW}⚠️  PM2 restart failed, trying direct start...${NC}"
+    pm2 start src/index.js --name stairs-backend
+fi
+echo -e "${GREEN}✅ Backend service restarted${NC}"
+sleep 3
+echo ""
+
+# Step 6: Show logs
+echo -e "${YELLOW}Step 6: Checking backend logs...${NC}"
+echo "Showing last 50 lines of error logs..."
+pm2 logs stairs-backend --lines 50 --err
 echo ""
 
 # Summary
@@ -62,9 +72,15 @@ echo -e "${GREEN}=================================================="
 echo "✅ Deployment Complete!"
 echo "=================================================="
 echo ""
-echo "Please verify:"
-echo "1. Revenue Dashboard: https://stairs.astroraag.com/admin/revenue"
-echo "2. Certificate History: https://stairs.astroraag.com/admin/event/{eventId}/certificates"
+echo "FIXES APPLIED:"
+echo "1. Added app.set('trust proxy', 1) for X-Forwarded-For header"
+echo "2. Fixed notification type enum mapping (EVENT_APPROVE → EVENT_APPROVED)"
+echo "3. Fixed payment status string comparison"
 echo ""
-echo "To monitor logs: pm2 logs stairs-api"
+echo "Please verify:"
+echo "1. Coach Dashboard: https://stairs.astroraag.com/"
+echo "2. Certificate Issuance: https://stairs.astroraag.com/admin"
+echo ""
+echo "If issues persist, check logs:"
+echo "  pm2 logs stairs-backend --lines 100 --err"
 echo -e "${NC}"

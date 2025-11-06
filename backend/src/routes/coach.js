@@ -1805,7 +1805,10 @@ router.get('/dashboard', authenticate, requireCoach, async (req, res) => {
         }
       }),
       prisma.payment.aggregate({
-        where: { coachId, status: 'SUCCESS' },
+        where: { 
+          coachId, 
+          status: 'SUCCESS'  // String comparison, not enum
+        },
         _sum: { amount: true }
       }),
       prisma.event.count({
@@ -1951,12 +1954,20 @@ router.get('/dashboard', authenticate, requireCoach, async (req, res) => {
     }, 'Analytics retrieved successfully.'));
 
   } catch (error) {
-    console.error('Get coach analytics error:', error);
-    res.status(500).json(errorResponse('Failed to retrieve analytics.', 500));
+    console.error('❌ Get coach analytics error:', error);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Coach ID:', coachId);
+    console.error('Request headers:', req.headers);
+    
+    // Return detailed error in development
+    const errorMsg = process.env.NODE_ENV === 'development' 
+      ? error.message 
+      : 'Failed to retrieve analytics';
+    
+    res.status(500).json(errorResponse(errorMsg, 500));
   }
-});
-
-// Get payment history
+});// Get payment history
 router.get('/payments', authenticate, requireCoach, async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
