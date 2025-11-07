@@ -129,6 +129,12 @@ router.post('/issue', authenticate, requireAdmin, async (req, res) => {
       orderId: orderId || null // Optional orderId
     }));
 
+    // Log certificate data being prepared
+    console.log(`📋 Certificate data prepared:`);
+    certificatesData.forEach((cert, idx) => {
+      console.log(`   [${idx}] eventUniqueId=${cert.eventUniqueId}, studentUniqueId=${cert.studentUniqueId}`);
+    });
+
     // Generate certificates
     console.log(`🎓 Generating ${certificatesData.length} certificate(s)...`);
     const { results, errors } = await certificateService.generateBulkCertificates(certificatesData);

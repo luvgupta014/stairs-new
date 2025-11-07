@@ -56,6 +56,14 @@ class CertificateService {
       const studentDbId = studentId;
       const eventDbId = eventId;
 
+      // CRITICAL: Validate that UIDs are not null
+      if (!eventUniqueId) {
+        throw new Error(`eventUniqueId is required but got: ${eventUniqueId}`);
+      }
+      if (!studentUniqueId) {
+        throw new Error(`studentUniqueId is required but got: ${studentUniqueId}`);
+      }
+
       // Generate unique UID for certificate using custom formatted UIDs
       const uid = this.generateCertificateUID(eventUniqueId, studentUniqueId);
 
