@@ -241,17 +241,24 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
     const { eventId } = req.params;
 
     console.log(`📜 Fetching issued certificates for event: ${eventId}`);
+    console.log(`   Request URL: ${req.originalUrl}`);
+    console.log(`   Admin ID: ${req.admin?.id || 'N/A'}`);
 
     // Use EventService resolver to handle both database ID and uniqueId
     let event;
     try {
+      console.log(`🔍 Step 1: Resolving event ID...`);
       event = await eventService.resolveEventId(eventId);
+      console.log(`✅ Event resolved: ID=${event.id}, uniqueId=${event.uniqueId}`);
     } catch (error) {
-      console.log(`❌ Event not found for ID: ${eventId}`);
+      console.error(`❌ Event resolution failed for ID: ${eventId}`);
+      console.error(`   Error: ${error.message}`);
+      console.error(`   Stack: ${error.stack}`);
       return res.status(404).json(errorResponse('Event not found'));
     }
 
     // Re-fetch with coach relation
+    console.log(`🔍 Step 2: Fetching event with coach details...`);
     event = await prisma.event.findUnique({
       where: { id: event.id },
       include: {
@@ -267,15 +274,16 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
       }
     });
 
-    console.log(`🔍 Event lookup result:`, event);
+    console.log(`🔍 Event lookup result:`, event ? { id: event.id, name: event.name, uniqueId: event.uniqueId } : 'null');
 
     if (!event) {
-      console.log(`❌ Event not found for ID: ${eventId}`);
+      console.error(`❌ Event not found after re-fetch for ID: ${eventId}`);
       return res.status(404).json(errorResponse('Event not found'));
     }
 
     // Get all certificates for this event - check both database ID and uniqueId
     // Some old certificates might have uniqueId stored, newer ones have database ID
+    console.log(`🔍 Step 3: Building certificate query conditions...`);
     const whereConditions = [
       { eventId: event.id },
       { eventId: eventId } // Also check if eventId param was stored directly
@@ -286,6 +294,9 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
       whereConditions.push({ eventId: event.uniqueId });
     }
     
+    console.log(`   Query conditions:`, JSON.stringify(whereConditions, null, 2));
+    
+    console.log(`🔍 Step 4: Querying certificates...`);
     const certificatesRaw = await prisma.certificate.findMany({
       where: {
         OR: whereConditions
@@ -293,11 +304,17 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
       orderBy: { issueDate: 'desc' }
     });
 
-    console.log(`📋 Found ${certificatesRaw.length} certificates for event ${event.name}`);
+    console.log(`📋 Found ${certificatesRaw.length} raw certificates for event ${event.name}`);
+    if (certificatesRaw.length > 0) {
+      console.log(`   First certificate: ID=${certificatesRaw[0].id}, studentId=${certificatesRaw[0].studentId}, eventId=${certificatesRaw[0].eventId}`);
+    }
 
     // Fetch student details for each certificate
-    const certificates = await Promise.all(certificatesRaw.map(async cert => {
+    console.log(`🔍 Step 5: Enriching certificates with student data...`);
+    const certificates = await Promise.all(certificatesRaw.map(async (cert, index) => {
       try {
+        console.log(`   Processing certificate ${index + 1}/${certificatesRaw.length}: studentId=${cert.studentId}`);
+        
         // Try to find student by database ID first, then by uniqueId
         let student = await prisma.student.findUnique({
           where: { id: cert.studentId },
@@ -309,6 +326,7 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
 
         // If not found by ID, try finding by uniqueId through user
         if (!student) {
+          console.log(`      Student not found by ID, trying uniqueId lookup...`);
           const user = await prisma.user.findUnique({
             where: { uniqueId: cert.studentId },
             include: {
