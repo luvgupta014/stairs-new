@@ -1068,11 +1068,47 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
       return res.status(400).json(errorResponse('Name, description, sport, venue, and start date are required.', 400));
     }
 
-    if (new Date(startDate) <= new Date()) {
+    // Parse dates for India (IST) only platform
+    // Frontend sends: YYYY-MM-DDTHH:mm:ss (IST time, no timezone)
+    // We append IST offset before parsing to preserve the time correctly in PostgreSQL
+    let startDateObj, endDateObj;
+    
+    // Helper: Add IST timezone offset to date string
+    const parseAsIST = (dateString) => {
+      if (!dateString) return null;
+      // If it already has timezone, use as-is
+      if (dateString.includes('+') || dateString.includes('Z')) {
+        return new Date(dateString);
+      }
+      // Append IST offset (+05:30) so JavaScript knows it's IST time
+      return new Date(dateString + '+05:30');
+    };
+    
+    if (startDate) {
+      startDateObj = parseAsIST(startDate);
+      console.log('📅 Start date for event creation:', {
+        input: startDate,
+        withIST: startDate + '+05:30',
+        parsed: startDateObj,
+        iso: startDateObj.toISOString()
+      });
+    }
+    
+    if (endDate) {
+      endDateObj = parseAsIST(endDate);
+      console.log('📅 End date for event creation:', {
+        input: endDate,
+        withIST: endDate + '+05:30',
+        parsed: endDateObj,
+        iso: endDateObj.toISOString()
+      });
+    }
+
+    if (!startDateObj || startDateObj <= new Date()) {
       return res.status(400).json(errorResponse('Event start date must be in the future.', 400));
     }
 
-    if (endDate && new Date(endDate) <= new Date(startDate)) {
+    if (endDateObj && endDateObj <= startDateObj) {
       return res.status(400).json(errorResponse('Event end date must be after start date.', 400));
     }
 
@@ -1091,8 +1127,8 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
         state,
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
-        startDate: new Date(startDate),
-        endDate: endDate ? new Date(endDate) : null,
+        startDate: startDateObj,
+        endDate: endDateObj || null,
         maxParticipants: maxParticipants ? parseInt(maxParticipants) : 50,
         eventFee: 0, // Set to 0 since we're not collecting fees anymore
         status: 'PENDING',
@@ -1206,9 +1242,36 @@ router.get('/events', authenticate, requireCoach, async (req, res) => {
       return event.status;
     };
 
+    // Helper to format date as IST string (India-only platform)
+    // Database stores dates in UTC, but we need to return IST for frontend
+    const formatDateAsIST = (date) => {
+      if (!date) return null;
+      
+      // Convert UTC date to IST by adding 5 hours 30 minutes
+      const istDate = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
+      
+      // Format as YYYY-MM-DDTHH:mm:ss (IST time)
+      const year = istDate.getUTCFullYear();
+      const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(istDate.getUTCDate()).padStart(2, '0');
+      const hours = String(istDate.getUTCHours()).padStart(2, '0');
+      const minutes = String(istDate.getUTCMinutes()).padStart(2, '0');
+      const seconds = String(istDate.getUTCSeconds()).padStart(2, '0');
+      
+      return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+    };
+
     // Format events with registration count and dynamic status
     const formattedEvents = events.map(event => {
       const dynamicStatus = computeDynamicStatus(event);
+      
+      console.log(`📅 Formatting event "${event.name}" dates:`, {
+        raw_startDate_UTC: event.startDate.toISOString(),
+        formatted_startDate_IST: formatDateAsIST(event.startDate),
+        raw_endDate_UTC: event.endDate ? event.endDate.toISOString() : null,
+        formatted_endDate_IST: formatDateAsIST(event.endDate)
+      });
+      
       return {
         id: event.id,
         uniqueId: event.uniqueId, // Custom event UID (e.g., 01-FB-EVT-DL-112025)
@@ -1221,8 +1284,8 @@ router.get('/events', authenticate, requireCoach, async (req, res) => {
         state: event.state,
         latitude: event.latitude,
         longitude: event.longitude,
-        startDate: event.startDate,
-        endDate: event.endDate,
+        startDate: formatDateAsIST(event.startDate),
+        endDate: formatDateAsIST(event.endDate),
         maxParticipants: event.maxParticipants,
         currentParticipants: event._count.registrations,
         eventFee: event.eventFee,
@@ -1300,13 +1363,45 @@ router.put('/events/:eventId', authenticate, requireCoach, async (req, res) => {
       return res.status(400).json(errorResponse('This event cannot be modified.', 400));
     }
 
-    // Validate dates if provided
-    if (startDate && new Date(startDate) <= new Date()) {
-      return res.status(400).json(errorResponse('Event start date must be in the future.', 400));
+    // Helper: Add IST timezone offset to date string
+    // Frontend sends: "2025-11-08T10:00:00" (IST time, no timezone)
+    // We append "+05:30" so JavaScript knows it's IST: "2025-11-08T10:00:00+05:30"
+    const parseAsIST = (dateString) => {
+      if (!dateString) return null;
+      // If it already has timezone, use as-is
+      if (dateString.includes('+') || dateString.includes('Z')) {
+        return new Date(dateString);
+      }
+      // Append IST offset
+      return new Date(dateString + '+05:30');
+    };
+
+    // Validate dates if provided (IST only platform)
+    if (startDate) {
+      const startDateObj = parseAsIST(startDate);
+      console.log('📅 Updating start date:', {
+        input: startDate,
+        withIST: startDate + '+05:30',
+        parsed: startDateObj,
+        iso: startDateObj.toISOString()
+      });
+      if (startDateObj <= new Date()) {
+        return res.status(400).json(errorResponse('Event start date must be in the future.', 400));
+      }
     }
 
-    if (endDate && startDate && new Date(endDate) <= new Date(startDate)) {
-      return res.status(400).json(errorResponse('Event end date must be after start date.', 400));
+    if (endDate && startDate) {
+      const startDateObj = parseAsIST(startDate);
+      const endDateObj = parseAsIST(endDate);
+      console.log('📅 Validating end date:', {
+        endInput: endDate,
+        endWithIST: endDate + '+05:30',
+        endParsed: endDateObj,
+        endISO: endDateObj.toISOString()
+      });
+      if (endDateObj <= startDateObj) {
+        return res.status(400).json(errorResponse('Event end date must be after start date.', 400));
+      }
     }
 
     // Prepare update data object
@@ -1321,8 +1416,8 @@ router.put('/events/:eventId', authenticate, requireCoach, async (req, res) => {
     if (state !== undefined) updateData.state = state;
     if (latitude !== undefined) updateData.latitude = parseFloat(latitude);
     if (longitude !== undefined) updateData.longitude = parseFloat(longitude);
-    if (startDate !== undefined) updateData.startDate = new Date(startDate);
-    if (endDate !== undefined) updateData.endDate = new Date(endDate);
+    if (startDate !== undefined) updateData.startDate = parseAsIST(startDate);
+    if (endDate !== undefined) updateData.endDate = parseAsIST(endDate);
     if (maxParticipants !== undefined) updateData.maxParticipants = parseInt(maxParticipants);
     
     // Reset to PENDING if it was APPROVED/ACTIVE and significant changes were made

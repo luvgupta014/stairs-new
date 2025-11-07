@@ -31,6 +31,33 @@ const EventEdit = () => {
     // Pre-fill form with event data from location state
     if (location.state?.event) {
       const event = location.state.event;
+      
+      // Helper to format datetime for datetime-local input (IST only)
+      // For India-only platform, extract date/time as-is without any conversion
+      const formatForInput = (dateString) => {
+        if (!dateString) return '';
+        
+        console.log('📅 Original date from API:', dateString);
+        
+        // Simply extract YYYY-MM-DDTHH:mm from the ISO string
+        // This assumes the backend is storing times in IST without timezone conversion
+        const formatted = dateString.substring(0, 16);
+        
+        console.log('📅 Formatted for input field:', formatted);
+        
+        return formatted;
+      };
+      
+      const formattedStartDate = formatForInput(event.startDate);
+      const formattedEndDate = formatForInput(event.endDate);
+      
+      console.log('📅 Event dates being loaded:', {
+        originalStart: event.startDate,
+        originalEnd: event.endDate,
+        formattedStart: formattedStartDate,
+        formattedEnd: formattedEndDate
+      });
+      
       setFormData({
         name: event.name || '',
         description: event.description || '',
@@ -41,8 +68,8 @@ const EventEdit = () => {
         state: event.state || '',
         latitude: event.latitude?.toString() || '',
         longitude: event.longitude?.toString() || '',
-        startDate: event.startDate ? new Date(event.startDate).toISOString().slice(0, 16) : '',
-        endDate: event.endDate ? new Date(event.endDate).toISOString().slice(0, 16) : '',
+        startDate: formattedStartDate,
+        endDate: formattedEndDate,
         maxParticipants: event.maxParticipants?.toString() || ''
       });
     }
@@ -54,10 +81,19 @@ const EventEdit = () => {
     setError('');
 
     try {
+      // For India-only platform, we treat all times as IST
+      // Send datetime-local value directly without any timezone conversion
       const eventData = {
         ...formData,
+        startDate: formData.startDate ? formData.startDate + ':00' : '',
+        endDate: formData.endDate ? formData.endDate + ':00' : null,
         maxParticipants: formData.maxParticipants ? parseInt(formData.maxParticipants) : null
       };
+      
+      console.log('📅 Event update - dates being sent (IST):', {
+        startDate: eventData.startDate,
+        endDate: eventData.endDate
+      });
 
       const result = await updateEvent(eventId, eventData);
       

@@ -70,12 +70,20 @@ const EventCreate = () => {
     setError('');
 
     try {
+      // For India-only platform, we treat all times as IST
+      // Send datetime-local value directly without any timezone conversion
+      // Format: YYYY-MM-DDTHH:mm becomes YYYY-MM-DDTHH:mm:ss for backend
       const eventData = {
         ...formData,
-        startDate: formData.startDate,
-        endDate: formData.endDate || null,
+        startDate: formData.startDate ? formData.startDate + ':00' : '',
+        endDate: formData.endDate ? formData.endDate + ':00' : null,
         maxParticipants: formData.maxParticipants ? parseInt(formData.maxParticipants) : null
       };
+      
+      console.log('📅 Event dates being sent (IST):', {
+        startDate: eventData.startDate,
+        endDate: eventData.endDate
+      });
 
       const result = await createEvent(eventData);
       
