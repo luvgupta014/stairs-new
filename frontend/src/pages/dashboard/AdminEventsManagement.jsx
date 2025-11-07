@@ -265,6 +265,18 @@ const AdminEventsManagement = () => {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {event.uniqueId && (
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 p-4 rounded-lg shadow-sm hover:shadow-md transition-shadow md:col-span-2 lg:col-span-3">
+                    <div className="flex items-center mb-2">
+                      <svg className="w-5 h-5 text-blue-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z" clipRule="evenodd"/>
+                      </svg>
+                      <p className="text-xs font-semibold text-blue-700 uppercase">Event ID</p>
+                    </div>
+                    <p className="font-mono font-bold text-blue-900 text-xl tracking-wide">{event.uniqueId}</p>
+                  </div>
+                )}
+                
                 <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm hover:shadow-md transition-shadow">
                   <div className="flex items-center mb-2">
                     <svg className="w-5 h-5 text-blue-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
@@ -707,6 +719,11 @@ const AdminEventsManagement = () => {
                           >
                             {event.name || event.title}
                           </button>
+                          {event.uniqueId && (
+                            <div className="text-xs text-blue-600 font-mono bg-blue-50 px-2 py-0.5 rounded mt-1 inline-block">
+                              ID: {event.uniqueId}
+                            </div>
+                          )}
                           <div className="text-sm text-gray-500">
                             Max: {event.maxParticipants} participants
                           </div>
@@ -815,7 +832,7 @@ const AdminEventsManagement = () => {
                             
                             return eventHasEnded && (
                               <Link
-                                to={`/admin/event/${event.uniqueId}/certificates`}
+                                to={`/admin/event/${event.uniqueId || event.id}/certificates`}
                                 className="bg-teal-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-teal-700 transition-colors inline-flex items-center justify-center"
                               >
                                 🎓 Issue Certificates

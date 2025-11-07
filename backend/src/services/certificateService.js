@@ -147,7 +147,7 @@ class CertificateService {
           sportName,
           eventName,
           issueDate: new Date(date),
-          uid
+          uniqueId: uid
         }
       });
 
@@ -204,7 +204,7 @@ class CertificateService {
   async getCertificateByUID(uid) {
     try {
       const certificate = await prisma.certificate.findUnique({
-        where: { uid }
+        where: { uniqueId: uid }
       });
       return certificate;
     } catch (error) {

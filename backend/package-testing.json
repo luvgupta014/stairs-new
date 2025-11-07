@@ -1,0 +1,19 @@
+{
+  "name": "stairs-backend-testing",
+  "description": "Testing dependencies for Stairs backend",
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3",
+    "@types/jest": "^29.5.11",
+    "@types/supertest": "^6.0.2",
+    "jest-mock-extended": "^3.0.5",
+    "ts-jest": "^29.1.1"
+  },
+  "scripts": {
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "test:integration": "jest --testPathPattern=tests/integration",
+    "test:unit": "jest --testPathPattern=tests/unit",
+    "test:api": "jest --testPathPattern=tests/api"
+  }
+}

@@ -37,11 +37,8 @@ import CoachRegister from "./pages/CoachRegister";
 import InstituteRegister from "./pages/InstituteRegister";
 import VerifyOtp from "./pages/auth/VerifyOtp";
 
-// Premium Registration Pages
-import CoachRegisterPremium from "./pages/CoachRegisterPremium";
-import InstituteRegisterPremium from "./pages/InstituteRegisterPremium";
-import ClubRegisterPremium from "./pages/ClubRegisterPremium";
-import VerifyOtpPremium from "./pages/auth/VerifyOtpPremium";
+// Registration Pages
+import ClubRegister from "./pages/ClubRegister";
 
 // Dashboard Pages
 import StudentDashboard from "./pages/dashboard/StudentDashboard";
@@ -63,6 +60,7 @@ import EventOrders from "./pages/events/EventOrders";
 import IssueCertificates from "./pages/IssueCertificates";
 import AdminOrders from "./components/AdminOrders";
 import AdminRevenue from "./pages/AdminRevenue";
+import BrowseCoaches from "./pages/student/BrowseCoaches";
 
 function App() {
   return (
@@ -83,33 +81,34 @@ function App() {
             <Route path="/register/student" element={<StudentRegister />} />
             <Route
               path="/register/coach"
-              element={<Navigate to="/register/coach-premium" replace />}
+              element={<CoachRegister />}
             />
             <Route
               path="/register/institute"
-              element={<Navigate to="/register/institute-premium" replace />}
+              element={<InstituteRegister />}
             />
             <Route
               path="/register/club"
-              element={<Navigate to="/register/club-premium" replace />}
+              element={<ClubRegister />}
             />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/verify-otp" element={<VerifyOtp />} />
-            {/* Premium Registration Routes (no header/footer) */}
+            {/* Legacy Premium Registration Routes - Redirect to new routes */}
             <Route
               path="/register/coach-premium"
-              element={<CoachRegisterPremium />}
+              element={<Navigate to="/register/coach" replace />}
             />
             <Route
               path="/register/institute-premium"
-              element={<InstituteRegisterPremium />}
+              element={<Navigate to="/register/institute" replace />}
             />
             <Route
               path="/register/club-premium"
-              element={<ClubRegisterPremium />}
+              element={<Navigate to="/register/club" replace />}
             />
-            <Route path="/verify-otp-premium" element={<VerifyOtpPremium />} />
+            {/* Legacy OTP route for backward compatibility */}
+            <Route path="/verify-otp-premium" element={<Navigate to="/verify-otp" replace />} />
             {/* Protected Dashboard Routes with Header and Footer */}
             <Route
               path="/dashboard/student"
@@ -551,6 +550,20 @@ function App() {
                   <main className="flex-grow">
                     <ProtectedRoute role="ADMIN">
                       <AdminOrders />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/student/browse-coaches"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute role="STUDENT">
+                      <BrowseCoaches />
                     </ProtectedRoute>
                   </main>
                   <Footer />

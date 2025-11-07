@@ -23,6 +23,37 @@ if (!fs.existsSync(uploadsDir)) {
  */
 class EventService {
   /**
+   * Resolve event by ID or uniqueId
+   * @param {string} eventIdentifier - Either database ID (cuid) or uniqueId
+   * @returns {Promise<Object>} - Event object
+   */
+  async resolveEventId(eventIdentifier) {
+    // Try to find by uniqueId first (format: XXX-YYY-EVT-ZZZ-MMYYYY)
+    // If not found or looks like a cuid, try by id
+    let event = null;
+    
+    // Check if it looks like a uniqueId (contains hyphens and EVT)
+    if (eventIdentifier.includes('-') && eventIdentifier.includes('EVT')) {
+      event = await prisma.event.findUnique({
+        where: { uniqueId: eventIdentifier }
+      });
+    }
+    
+    // If not found by uniqueId, try by database id
+    if (!event) {
+      event = await prisma.event.findUnique({
+        where: { id: eventIdentifier }
+      });
+    }
+    
+    if (!event) {
+      throw new Error('Event not found');
+    }
+    
+    return event;
+  }
+
+  /**
    * Compute dynamic event status based on current date/time
    * @param {Object} event - Event object with startDate and endDate
    * @returns {string} - Status: 'about to start', 'ongoing', 'ended', or event.status
@@ -894,9 +925,12 @@ class EventService {
       const event = await this._verifyEventAccess(eventId, uploaderId, uploaderType);
 
       console.log(`📄 Processing file for event ${event.name}`);
+      console.log(`📍 Event database ID: ${event.id}`);
+      console.log(`📍 Event uniqueId: ${event.uniqueId}`);
 
-      // Process the uploaded file
-      const uploadResult = await this._processFile(file, eventId, description, uploaderId, uploaderType);
+      // Process the uploaded file - pass actual database ID, not the provided eventId
+      // because eventId might be uniqueId, but we need the actual database id for FK constraint
+      const uploadResult = await this._processFile(file, event.id, description, uploaderId, uploaderType);
 
       return {
         event: {
@@ -922,22 +956,20 @@ class EventService {
       const { page = 1, limit = 20 } = pagination;
       const { skip, take } = getPaginationParams(page, limit);
 
+      // Resolve event ID first
+      const resolvedEvent = await this.resolveEventId(eventId);
+      const actualEventId = resolvedEvent.id;
+
       // Verify access to event (students can view results too)
       if (userType !== 'STUDENT') {
         await this._verifyEventAccess(eventId, userId, userType);
       } else {
-        // For students, just verify event exists
-        const event = await prisma.event.findUnique({
-          where: { id: eventId }
-        });
-        if (!event) {
-          throw new Error('Event not found');
-        }
+        // For students, just verify event exists (already done by resolveEventId)
       }
 
-      // Get event details
+      // Get event details using actual database ID
       const event = await prisma.event.findUnique({
-        where: { id: eventId },
+        where: { id: actualEventId },
         select: {
           id: true,
           name: true,
@@ -948,7 +980,7 @@ class EventService {
 
       const [files, total] = await Promise.all([
         prisma.eventResultFile.findMany({
-          where: { eventId },
+          where: { eventId: actualEventId },
           include: {
             coach: {
               select: {
@@ -961,7 +993,7 @@ class EventService {
           skip,
           take
         }),
-        prisma.eventResultFile.count({ where: { eventId } })
+        prisma.eventResultFile.count({ where: { eventId: actualEventId } })
       ]);
 
       const paginationMeta = getPaginationMeta(total, parseInt(page), parseInt(limit));
@@ -984,8 +1016,9 @@ class EventService {
    */
   async deleteResults(eventId, userId, userType) {
     try {
-      // Verify event access
+      // Verify event access and resolve ID
       const event = await this._verifyEventAccess(eventId, userId, userType);
+      const actualEventId = event.id;
 
       // Check permissions
       if (!this._canModifyFile(event, userId, userType)) {
@@ -994,7 +1027,7 @@ class EventService {
 
       // Get all files for this event
       const files = await prisma.eventResultFile.findMany({
-        where: { eventId }
+        where: { eventId: actualEventId }
       });
 
       // Delete physical files
@@ -1007,7 +1040,7 @@ class EventService {
 
       // Delete database records
       await prisma.eventResultFile.deleteMany({
-        where: { eventId }
+        where: { eventId: actualEventId }
       });
 
       return { 
@@ -1021,12 +1054,16 @@ class EventService {
 
   /**
    * Download result file for an event
-   * @param {string} eventId - Event ID
+   * @param {string} eventId - Event ID (can be database ID or uniqueId)
    */
   async downloadResults(eventId) {
     try {
+      // Resolve eventId to actual database ID (it could be uniqueId)
+      const resolvedEvent = await this.resolveEventId(eventId);
+      const actualEventId = resolvedEvent.id;
+
       const file = await prisma.eventResultFile.findFirst({
-        where: { eventId },
+        where: { eventId: actualEventId },
         orderBy: { uploadedAt: 'desc' }
       });
 
@@ -1054,28 +1091,35 @@ class EventService {
    * Private method to verify event access for file operations
    */
   async _verifyEventAccess(eventId, userId, userType) {
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
+    // Resolve event ID (supports both database ID and uniqueId)
+    const event = await this.resolveEventId(eventId);
+    console.log(`🔍 resolveEventId returned: ID=${event.id}, uniqueId=${event.uniqueId}`);
+    
+    // Re-fetch with includes for permission checking
+    const eventWithDetails = await prisma.event.findUnique({
+      where: { id: event.id },
       include: {
         coach: { select: { id: true, name: true } }
       }
     });
 
-    if (!event) {
+    if (!eventWithDetails) {
       throw new Error('Event not found');
     }
 
+    console.log(`✅ _verifyEventAccess returning: ID=${eventWithDetails.id}`);
+
     // Check permissions
     if (userType === 'ADMIN') {
-      return event; // Admin has access to all events
+      return eventWithDetails; // Admin has access to all events
     }
 
-    const hasAccess = this._canModifyFile(event, userId, userType);
+    const hasAccess = this._canModifyFile(eventWithDetails, userId, userType);
     if (!hasAccess) {
       throw new Error('You do not have permission to access this event');
     }
 
-    return event;
+    return eventWithDetails;
   }
 
   /**
@@ -1089,6 +1133,7 @@ class EventService {
       
       console.log(`📁 File saved by multer to: ${file.path}`);
       console.log(`📄 Multer filename: ${file.filename}`);
+      console.log(`🔑 EventID being used for database: ${eventId}`);
 
       // For now, only coaches can upload files (schema limitation)
       // TODO: Extend schema to support multiple uploader types
@@ -1109,6 +1154,8 @@ class EventService {
         // For now, throw an error as the schema doesn't support this
         throw new Error('Only coaches can upload event result files');
       }
+
+      console.log(`💾 Saving to database:`, dataToSave);
 
       // Save file info to database - using correct field names from schema
       const savedFile = await prisma.eventResultFile.create({

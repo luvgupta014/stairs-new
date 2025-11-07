@@ -1041,6 +1041,13 @@ const CoachDashboard = () => {
                               </span>
                             </div>
                             
+                            {/* Event ID Display */}
+                            {event.uniqueId && (
+                              <div className="text-xs text-gray-500 font-mono mb-2">
+                                Event ID: <span className="text-blue-600 font-semibold">{event.uniqueId}</span>
+                              </div>
+                            )}
+                            
                             <p className="text-gray-600 mb-3 line-clamp-2">{event.description}</p>
                             
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
@@ -1158,7 +1165,7 @@ const CoachDashboard = () => {
                             {['APPROVED', 'ACTIVE', 'COMPLETED'].includes(event.status) && (
                               <>
                                 <Link
-                                  to={`/coach/event/${event.id}/results`}
+                                  to={`/coach/event/${event.uniqueId || event.id}/results`}
                                   className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-700 transition-colors inline-flex items-center"
                                 >
                                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1167,7 +1174,7 @@ const CoachDashboard = () => {
                                   Upload Results
                                 </Link>
                                 <Link
-                                  to={`/coach/event/${event.id}/orders`}
+                                  to={`/coach/event/${event.uniqueId || event.id}/orders`}
                                   className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 transition-colors inline-flex items-center"
                                 >
                                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

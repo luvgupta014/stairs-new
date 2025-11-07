@@ -33,7 +33,8 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
+    fileSize: 50 * 1024 * 1024, // 50MB limit (increased from 10MB)
+    files: 5 // Maximum 5 files per upload
   },
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['.pdf', '.xlsx', '.xls', '.csv'];
@@ -52,7 +53,7 @@ const handleMulterError = (err, req, res, next) => {
   console.error('❌ Multer error:', err);
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ success: false, message: 'File too large. Maximum size is 10MB.' });
+      return res.status(400).json({ success: false, message: 'File too large. Maximum size is 50MB.' });
     }
     if (err.code === 'LIMIT_FILE_COUNT') {
       return res.status(400).json({ success: false, message: 'Too many files. Maximum is 5 files.' });
@@ -65,6 +66,27 @@ const handleMulterError = (err, req, res, next) => {
     return res.status(400).json({ success: false, message: err.message });
   }
   return res.status(500).json({ success: false, message: 'File upload error: ' + err.message });
+};
+
+// Middleware to prevent express-fileupload interference with multer
+// express-fileupload parses the stream, consuming it before multer can
+// This middleware attempts to prevent that by setting a flag
+const clearExpressFileUpload = (req, res, next) => {
+  // Tell express-fileupload to skip this request
+  // (Doesn't actually work since express-fileupload is global, but we try anyway)
+  req._skipFileUpload = true;
+  
+  // If files were already parsed by express-fileupload, remove them
+  if (req.files) {
+    req.files = undefined;
+  }
+  
+  // Clear the body if it was set
+  if (req.body && typeof req.body === 'object' && !req.body.description) {
+    req.body = { description: req.body.description || '' };
+  }
+  
+  next();
 };
 
 /**
@@ -167,6 +189,7 @@ router.post('/test-upload',
 router.post('/:eventId/results', 
   authenticate, 
   requireCoach, // Use requireCoach middleware to ensure req.coach is set
+  clearExpressFileUpload, // Prevent express-fileupload interference with multer - MUST BE BEFORE MULTER
   (req, res, next) => {
     console.log('🔍 Upload endpoint hit:', {
       eventId: req.params.eventId,
@@ -174,10 +197,19 @@ router.post('/:eventId/results',
       contentType: req.headers['content-type'],
       contentLength: req.headers['content-length']
     });
+    console.log('📊 Request body:', req.body);
+    console.log('📁 Files on req:', !!req.files);
     next();
   },
-  upload.array('files', 5), // Changed from single('resultsFile') to array('files', 5)
-  handleMulterError, // Add multer error handling
+  upload.array('files', 5), // Multer processes files here
+  (err, req, res, next) => {
+    // Multer error handler - must have 4 parameters (err, req, res, next)
+    if (err) {
+      console.error('❌ Multer error:', err);
+      return handleMulterError(err, req, res, next);
+    }
+    next();
+  },
   eventController.uploadResults.bind(eventController)
 );
 

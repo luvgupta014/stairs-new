@@ -285,6 +285,15 @@ const EventDetails = () => {
               <div className="px-6 py-4">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Event Details</h3>
                 <dl className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+                  {event.uniqueId && (
+                    <div className="sm:col-span-2">
+                      <dt className="text-sm font-medium text-gray-500">Event ID</dt>
+                      <dd className="mt-1 text-sm font-mono text-blue-600 bg-blue-50 px-3 py-1 rounded inline-block">
+                        {event.uniqueId}
+                      </dd>
+                    </div>
+                  )}
+                  
                   <div>
                     <dt className="text-sm font-medium text-gray-500">Start Date & Time</dt>
                     <dd className="mt-1 text-sm text-gray-900">{formatDate(event.startDate)}</dd>

@@ -11,7 +11,9 @@
     "railway:build": "npm ci && npx prisma generate",
     "railway:start": "node src/index.js",
     "deploy": "npx prisma db push && npm start",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch --runInBand",
+    "test:coverage": "jest --coverage --runInBand",
     "migrate:uid": "node scripts/migrateToNewUID.js",
     "test:uid": "node scripts/testUIDGenerator.js"
   },
@@ -53,6 +55,9 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3",
+    "@faker-js/faker": "^8.3.1"
   }
 }

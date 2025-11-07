@@ -10,9 +10,12 @@ const {
   getPaginationMeta
 } = require('../utils/helpers');
 const { generateUID } = require('../utils/uidGenerator');
+const { generateEventUID } = require('../utils/uidGenerator');
+const EventService = require('../services/eventService');
 
 const router = express.Router();
 const prisma = new PrismaClient();
+const eventService = new EventService();
 
 // Initialize Razorpay
 const razorpay = new Razorpay({
@@ -33,7 +36,8 @@ router.get('/profile', authenticate, requireCoach, async (req, res) => {
             phone: true,
             isActive: true,
             isVerified: true,
-            createdAt: true
+            createdAt: true,
+            uniqueId: true
           }
         },
         studentConnections: {
@@ -57,7 +61,7 @@ router.get('/profile', authenticate, requireCoach, async (req, res) => {
           },
           take: 5
         },
-        payments: {
+        eventOrders: {
           orderBy: {
             createdAt: 'desc'
           },
@@ -532,6 +536,13 @@ router.post('/students/bulk-upload', authenticate, requireCoach, async (req, res
   let tempFilePath = null;
 
   try {
+    // Extend timeout for bulk uploads (5 minutes)
+    req.setTimeout(300000);
+    res.setTimeout(300000);
+    
+    // Send headers immediately to keep connection alive
+    res.setHeader('Connection', 'keep-alive');
+    
     console.log('=== Starting bulk upload process ===');
     console.log('Coach ID:', req.coach.id);
     console.log('Coach Name:', req.coach.name);
@@ -556,6 +567,12 @@ router.post('/students/bulk-upload', authenticate, requireCoach, async (req, res
       mimetype: file.mimetype,
       tempFilePath: file.tempFilePath
     });
+
+    // Validate file size
+    if (file.size > 50 * 1024 * 1024) {
+      console.log('ERROR: File too large:', file.size);
+      return res.status(400).json(errorResponse('File size exceeds 50MB limit.', 400));
+    }
 
     // Validate file type
     const allowedTypes = [
@@ -1059,6 +1076,9 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
       return res.status(400).json(errorResponse('Event end date must be after start date.', 400));
     }
 
+    // Generate unique event ID (format: EVT-0001-FB-DL-071125)
+    const eventUniqueId = await generateEventUID(sport, state || 'Delhi');
+
     const event = await prisma.event.create({
       data: {
         coachId: coach.id,
@@ -1075,7 +1095,8 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
         endDate: endDate ? new Date(endDate) : null,
         maxParticipants: maxParticipants ? parseInt(maxParticipants) : 50,
         eventFee: 0, // Set to 0 since we're not collecting fees anymore
-        status: 'PENDING'
+        status: 'PENDING',
+        uniqueId: eventUniqueId
       }
     });
 
@@ -1526,17 +1547,28 @@ router.post('/events/:eventId/orders', authenticate, requireCoach, async (req, r
 
     console.log(`📦 Creating order for event ${eventId}:`, { certificates, medals, trophies, urgentDelivery });
 
+    // Resolve event ID (supports both database ID and uniqueId formats)
+    let event;
+    try {
+      event = await eventService.resolveEventId(eventId);
+    } catch (err) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
     // Verify event belongs to coach
-    const event = await prisma.event.findFirst({
+    const eventBelongsToCoach = await prisma.event.findFirst({
       where: {
-        id: eventId,
+        id: event.id,
         coachId: req.coach.id
       }
     });
 
-    if (!event) {
+    if (!eventBelongsToCoach) {
       return res.status(404).json(errorResponse('Event not found or access denied.', 404));
     }
+    
+    // Use resolved event ID for subsequent queries
+    const resolvedEventId = event.id;
 
     // Validate quantities
     const totalQuantity = parseInt(certificates) + parseInt(medals) + parseInt(trophies);
@@ -1547,7 +1579,7 @@ router.post('/events/:eventId/orders', authenticate, requireCoach, async (req, r
     // Check if order already exists for this event and coach
     const existingOrder = await prisma.eventOrder.findFirst({
       where: { 
-        eventId,
+        eventId: resolvedEventId,
         coachId: req.coach.id 
       }
     });
@@ -1564,7 +1596,7 @@ router.post('/events/:eventId/orders', authenticate, requireCoach, async (req, r
     const order = await prisma.eventOrder.create({
       data: {
         orderNumber,
-        eventId,
+        eventId: resolvedEventId,
         coachId: req.coach.id,
         certificates: parseInt(certificates),
         medals: parseInt(medals),
@@ -1615,21 +1647,31 @@ router.get('/events/:eventId/orders', authenticate, requireCoach, async (req, re
 
     console.log(`📦 Getting orders for event ${eventId}, coach ${req.coach.id}`);
 
+    // Resolve event ID (supports both database ID and uniqueId formats)
+    let event;
+    try {
+      event = await eventService.resolveEventId(eventId);
+    } catch (err) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
     // Verify event belongs to coach
-    const event = await prisma.event.findFirst({
+    const eventBelongsToCoach = await prisma.event.findFirst({
       where: {
-        id: eventId,
+        id: event.id,
         coachId: req.coach.id
       }
     });
 
-    if (!event) {
-      console.log(`❌ Event ${eventId} not found for coach ${req.coach.id}`);
+    if (!eventBelongsToCoach) {
+      console.log(`❌ Event ${event.id} not found for coach ${req.coach.id}`);
       return res.status(404).json(errorResponse('Event not found or access denied.', 404));
     }
 
+    const resolvedEventId = event.id;
+
     const orders = await prisma.eventOrder.findMany({
-      where: { eventId },
+      where: { eventId: resolvedEventId },
       include: {
         event: {
           select: {
@@ -1643,7 +1685,7 @@ router.get('/events/:eventId/orders', authenticate, requireCoach, async (req, re
       orderBy: { createdAt: 'desc' }
     });
 
-    console.log(`✅ Found ${orders.length} orders for event ${eventId}`);
+    console.log(`✅ Found ${orders.length} orders for event ${event.id}`);
 
     res.json(successResponse({
       event: {
@@ -1668,23 +1710,33 @@ router.put('/events/:eventId/orders/:orderId', authenticate, requireCoach, async
     const { eventId, orderId } = req.params;
     const { certificates = 0, medals = 0, trophies = 0, specialInstructions = '', urgentDelivery = false } = req.body;
 
+    // Resolve event ID (supports both database ID and uniqueId formats)
+    let event;
+    try {
+      event = await eventService.resolveEventId(eventId);
+    } catch (err) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
     // Verify event belongs to coach
-    const event = await prisma.event.findFirst({
+    const eventBelongsToCoach = await prisma.event.findFirst({
       where: {
-        id: eventId,
+        id: event.id,
         coachId: req.coach.id
       }
     });
 
-    if (!event) {
+    if (!eventBelongsToCoach) {
       return res.status(404).json(errorResponse('Event not found or access denied.', 404));
     }
+
+    const resolvedEventId = event.id;
 
     // Verify order exists and is still pending
     const order = await prisma.eventOrder.findFirst({
       where: {
         id: orderId,
-        eventId,
+        eventId: resolvedEventId,
         status: 'PENDING' // Only allow updates for pending orders
       }
     });
@@ -1734,23 +1786,33 @@ router.delete('/events/:eventId/orders/:orderId', authenticate, requireCoach, as
   try {
     const { eventId, orderId } = req.params;
 
+    // Resolve event ID (supports both database ID and uniqueId formats)
+    let event;
+    try {
+      event = await eventService.resolveEventId(eventId);
+    } catch (err) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
     // Verify event belongs to coach
-    const event = await prisma.event.findFirst({
+    const eventBelongsToCoach = await prisma.event.findFirst({
       where: {
-        id: eventId,
+        id: event.id,
         coachId: req.coach.id
       }
     });
 
-    if (!event) {
+    if (!eventBelongsToCoach) {
       return res.status(404).json(errorResponse('Event not found or access denied.', 404));
     }
+
+    const resolvedEventId = event.id;
 
     // Verify order exists and can be deleted
     const order = await prisma.eventOrder.findFirst({
       where: {
         id: orderId,
-        eventId,
+        eventId: resolvedEventId,
         status: { in: ['PENDING', 'QUOTED'] } // Can only delete pending or quoted orders
       }
     });

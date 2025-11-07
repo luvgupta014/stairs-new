@@ -1,7 +1,17 @@
 /**
  * UID Generator - Custom Format
- * Format: <Type><Serial><StateCode><MMYY>
- * Example: A0001DL1124 (Student #1 from Delhi, Nov 2024)
+ * 
+ * User Format: <Type><Serial><StateCode><DDMMYY>
+ * Example: A0001DL071125 (Student #1 from Delhi, 07 Nov 2025)
+ * 
+ * Event Format: EVT-<Serial>-<SportCode>-<StateCode>-<DDMMYY>
+ * Example: EVT-0001-FB-DL-071125
+ * 
+ * Certificate Format: STAIRS-CERT-<EventUID>-<StudentUID>
+ * Example: STAIRS-CERT-EVT-0001-FB-DL-071125-A0001DL071125
+ * 
+ * EventOrder Format: EVT-ORDR-<EventUID>-<CoachUID>
+ * Example: EVT-ORDR-EVT-0001-FB-DL-071125-C0001DL071125
  * 
  * Type Prefixes:
  * - Students: A
@@ -39,7 +49,7 @@ const STATE_CODES = {
   'Rajasthan': 'RJ',
   'Sikkim': 'SK',
   'Tamil Nadu': 'TN',
-  'Telangana': 'TS',
+  'Telangana': 'TG',
   'Tripura': 'TR',
   'Uttar Pradesh': 'UP',
   'Uttarakhand': 'UK',
@@ -52,6 +62,33 @@ const STATE_CODES = {
   'Ladakh': 'LA',
   'Lakshadweep': 'LD',
   'Puducherry': 'PY'
+};
+
+// Sport codes mapping
+const SPORT_CODES = {
+  'Football': 'FB',
+  'Cricket': 'CR',
+  'Basketball': 'BB',
+  'Volleyball': 'VB',
+  'Badminton': 'BD',
+  'Tennis': 'TN',
+  'Table Tennis': 'TT',
+  'Hockey': 'HK',
+  'Kabaddi': 'KB',
+  'Athletics': 'AT',
+  'Swimming': 'SW',
+  'Chess': 'CH',
+  'Boxing': 'BX',
+  'Wrestling': 'WR',
+  'Archery': 'AR',
+  'Shooting': 'SH',
+  'Gymnastics': 'GM',
+  'Cycling': 'CY',
+  'Weightlifting': 'WL',
+  'Judo': 'JD',
+  'Karate': 'KR',
+  'Taekwondo': 'TK',
+  'Other': 'OT'
 };
 
 /**
@@ -68,18 +105,43 @@ const getStateCode = (stateName) => {
 };
 
 /**
- * Get next serial number for a user type, state, and month/year
+ * Get sport code from sport name
  */
-const getNextSerial = async (prefix, stateCode, mmyy) => {
+const getSportCode = (sportName) => {
+  if (!sportName) return 'OT'; // Default to Other
+  
+  const code = SPORT_CODES[sportName];
+  if (code) return code;
+  
+  // Fallback: use first 2 letters uppercase
+  return sportName.substring(0, 2).toUpperCase();
+};
+
+/**
+ * Format date as DDMMYY
+ */
+const formatDateDDMMYY = (date = new Date()) => {
+  const d = new Date(date);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = String(d.getFullYear()).slice(-2);
+  return `${day}${month}${year}`;
+};
+
+/**
+ * Get next serial number for a user type, state, and date (DDMMYY)
+ */
+const getNextUserSerial = async (prefix, stateCode, ddmmyy) => {
   try {
-    // Pattern to match: A0001DL1124
-    const pattern = `${prefix}%${stateCode}${mmyy}`;
+    // Pattern to match: A0001DL071125
+    // Using exact format: <prefix><4digits><stateCode><ddmmyy>
+    const pattern = `${prefix}____${stateCode}${ddmmyy}`;
     
     const result = await prisma.$queryRaw`
-      SELECT unique_id 
-      FROM users 
-      WHERE unique_id LIKE ${pattern}
-      ORDER BY unique_id DESC 
+      SELECT "unique_id" 
+      FROM "users" 
+      WHERE "unique_id" LIKE ${pattern}
+      ORDER BY "unique_id" DESC 
       LIMIT 1
     `;
     
@@ -88,23 +150,57 @@ const getNextSerial = async (prefix, stateCode, mmyy) => {
     }
     
     const lastUID = result[0].unique_id;
-    // Extract serial: A0001DL1124 -> 0001
+    // Extract serial: A0001DL071125 -> 0001
     const serialStr = lastUID.substring(1, 5); // Characters 1-4 (0001)
     const lastSerial = parseInt(serialStr, 10);
     
     return lastSerial + 1;
   } catch (error) {
-    console.error('Error getting next serial:', error);
+    console.error('Error getting next user serial:', error);
     return 1;
   }
 };
 
 /**
- * Generate UID
+ * Get next serial number for events
+ */
+const getNextEventSerial = async () => {
+  try {
+    const result = await prisma.$queryRaw`
+      SELECT unique_id 
+      FROM events 
+      WHERE unique_id LIKE 'EVT-%'
+      ORDER BY unique_id DESC 
+      LIMIT 1
+    `;
+    
+    if (!result || result.length === 0) {
+      return 1; // First event
+    }
+    
+    const lastUID = result[0].unique_id;
+    // Extract serial: EVT-0001-FB-DL-071125 -> 0001
+    const parts = lastUID.split('-');
+    if (parts.length >= 2) {
+      const lastSerial = parseInt(parts[1], 10);
+      return lastSerial + 1;
+    }
+    
+    return 1;
+  } catch (error) {
+    console.error('Error getting next event serial:', error);
+    return 1;
+  }
+};
+
+/**
+ * Generate User UID
+ * Format: <Type><Serial><StateCode><DDMMYY>
+ * Example: A0001DL071125
  * @param {string} userType - STUDENT, COACH, INSTITUTE, CLUB, ADMIN
  * @param {string} state - State name (e.g., "Delhi", "Maharashtra")
  * @param {Date} registrationDate - Date of registration (optional, defaults to now)
- * @returns {Promise<string>} Generated UID (e.g., A0001DL1124)
+ * @returns {Promise<string>} Generated UID (e.g., A0001DL071125)
  */
 const generateUID = async (userType, state = 'Delhi', registrationDate = null) => {
   // Admin gets special UID
@@ -134,24 +230,69 @@ const generateUID = async (userType, state = 'Delhi', registrationDate = null) =
   // Get state code
   const stateCode = getStateCode(state);
   
-  // Get MMYY from registration date
-  const date = registrationDate || new Date();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0'); // 01-12
-  const year = date.getFullYear().toString().slice(-2); // Last 2 digits: 24, 25
-  const mmyy = month + year;
+  // Get DDMMYY from registration date
+  const ddmmyy = formatDateDDMMYY(registrationDate || new Date());
   
   // Get next serial number
-  const serial = await getNextSerial(prefix, stateCode, mmyy);
+  const serial = await getNextUserSerial(prefix, stateCode, ddmmyy);
   const serialStr = serial.toString().padStart(4, '0'); // 0001, 0002, etc.
   
-  // Construct UID: A0001DL1124
-  const uid = `${prefix}${serialStr}${stateCode}${mmyy}`;
+  // Construct UID: A0001DL071125
+  const uid = `${prefix}${serialStr}${stateCode}${ddmmyy}`;
   
   return uid;
 };
 
+/**
+ * Generate Event UID
+ * Format: EVT-<Serial>-<SportCode>-<StateCode>-<DDMMYY>
+ * Example: EVT-0001-FB-DL-071125
+ * @param {string} sport - Sport name
+ * @param {string} state - State where event takes place
+ * @param {Date} creationDate - Event creation date (optional, defaults to now)
+ * @returns {Promise<string>} Generated Event UID
+ */
+const generateEventUID = async (sport, state, creationDate = null) => {
+  const serial = await getNextEventSerial();
+  const serialStr = serial.toString().padStart(4, '0');
+  const sportCode = getSportCode(sport);
+  const stateCode = getStateCode(state);
+  const ddmmyy = formatDateDDMMYY(creationDate || new Date());
+  
+  return `EVT-${serialStr}-${sportCode}-${stateCode}-${ddmmyy}`;
+};
+
+/**
+ * Generate Certificate UID
+ * Format: STAIRS-CERT-<EventUID>-<StudentUID>
+ * Example: STAIRS-CERT-EVT-0001-FB-DL-071125-A0001DL071125
+ * @param {string} eventUID - Event's uniqueId
+ * @param {string} studentUID - Student's uniqueId
+ * @returns {string} Certificate UID
+ */
+const generateCertificateUID = (eventUID, studentUID) => {
+  return `STAIRS-CERT-${eventUID}-${studentUID}`;
+};
+
+/**
+ * Generate EventOrder UID
+ * Format: EVT-ORDR-<EventUID>-<CoachUID>
+ * Example: EVT-ORDR-EVT-0001-FB-DL-071125-C0001DL071125
+ * @param {string} eventUID - Event's uniqueId
+ * @param {string} coachUID - Coach's uniqueId
+ * @returns {string} EventOrder UID
+ */
+const generateEventOrderUID = (eventUID, coachUID) => {
+  return `EVT-ORDR-${eventUID}-${coachUID}`;
+};
+
 module.exports = {
   generateUID,
+  generateEventUID,
+  generateCertificateUID,
+  generateEventOrderUID,
   getStateCode,
-  STATE_CODES
+  getSportCode,
+  STATE_CODES,
+  SPORT_CODES
 };

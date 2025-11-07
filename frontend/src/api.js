@@ -463,8 +463,7 @@ export const getAvailableCoaches = async () => {
 
 export const requestCoachConnection = async (coachId) => {
   try {
-    // TODO: Integrate with backend connection request
-    const response = await api.post('/api/student/coaches/connect', { coachId });
+    const response = await api.post(`/api/student/connect/${coachId}`);
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;
@@ -771,6 +770,8 @@ export const getUserRole = () => {
 // Event Result Files API
 export const uploadEventResults = async (eventId, formData) => {
   try {
+    // When uploading files with FormData, axios interceptor will automatically
+    // remove Content-Type header to allow browser to set it with proper boundary
     const response = await api.post(`/api/events/${eventId}/results`, formData);
     return response.data;
   } catch (error) {

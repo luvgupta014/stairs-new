@@ -530,11 +530,24 @@ class EventController {
 
       console.log(`🗑️ Coach ${coachId} deleting file ${fileId} for event ${eventId}`);
 
+      // Resolve eventId to actual database ID (it could be uniqueId)
+      let resolvedEventId = eventId;
+      if (eventId.includes('-') && eventId.includes('EVT')) {
+        // Looks like a uniqueId, resolve it
+        const event = await prisma.event.findUnique({
+          where: { uniqueId: eventId },
+          select: { id: true }
+        });
+        if (event) {
+          resolvedEventId = event.id;
+        }
+      }
+
       // Verify the file belongs to this coach and event
       const file = await prisma.eventResultFile.findFirst({
         where: {
           id: fileId,
-          eventId: eventId,
+          eventId: resolvedEventId,
           coachId: coachId
         }
       });
@@ -606,11 +619,24 @@ class EventController {
 
       console.log(`📥 Coach ${coachId} downloading file ${fileId} for event ${eventId}`);
 
+      // Resolve eventId to actual database ID (it could be uniqueId)
+      let resolvedEventId = eventId;
+      if (eventId.includes('-') && eventId.includes('EVT')) {
+        // Looks like a uniqueId, resolve it
+        const event = await prisma.event.findUnique({
+          where: { uniqueId: eventId },
+          select: { id: true }
+        });
+        if (event) {
+          resolvedEventId = event.id;
+        }
+      }
+
       // Get file details and verify ownership
       const file = await prisma.eventResultFile.findFirst({
         where: {
           id: fileId,
-          eventId: eventId,
+          eventId: resolvedEventId,
           coachId: coachId
         }
       });

@@ -3,6 +3,35 @@
 A comprehensive sports talent management platform connecting students, coaches, institutes, and clubs.
 Hosted link - http://160.187.22.41:3008/
 
+## 🧪 Testing Frameworks
+
+### ✅ Backend Testing (Jest)
+```bash
+cd backend
+npm test
+# Result: 45+ tests passing
+```
+📖 [Backend Testing Guide](./BACKEND_TESTING_SUMMARY.md)
+
+### ✅ Frontend E2E Testing (Playwright)
+```bash
+npm run test:e2e:headed
+# Result: 50+ E2E tests across all user roles
+```
+📖 [E2E Testing Guide](./E2E_TESTING_GUIDE.md)
+
+### 📊 View Reports
+```bash
+npm run test:e2e:report
+```
+
+**Documentation Files**:
+- 🚀 [Quick Start](./QUICK_START.md) - Start testing in 60 seconds
+- 📋 [Deliverables Checklist](./DELIVERABLES_CHECKLIST.md) - What's been delivered
+- 📝 [Testing Summary](./TESTING_COMPLETE_SUMMARY.md) - Complete overview
+- 🔍 [Execution Report](./EXECUTION_REPORT.md) - Detailed results
+- 🔧 [Quick Fix Guide](./QUICK_FIX_GUIDE.md) - Backend test fixes
+
 ## Project Structure
 
 ```

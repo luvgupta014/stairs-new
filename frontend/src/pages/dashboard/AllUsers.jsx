@@ -123,9 +123,7 @@ const AllUsers = () => {
   };
 
   const handleSearchChange = (e) => {
-    const newFilters = { ...filters, search: e.target.value };
-    setFilters(newFilters);
-    fetchUsers(1, newFilters);
+    setFilters({ ...filters, search: e.target.value });
   };
 
   const handleSearchSubmit = (e) => {

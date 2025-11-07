@@ -641,8 +641,7 @@ router.post('/coach/register', async (req, res) => {
       experience,
       certifications,
       bio,
-      location,
-      payLater
+      location
     } = req.body;
 
     console.log('📋 Extracted coach fields:', {
@@ -650,8 +649,7 @@ router.post('/coach/register', async (req, res) => {
       fatherName: { provided: !!fatherName, value: fatherName },
       email: { provided: !!email, value: email },
       phone: { provided: !!phone, value: phone },
-      primarySport: { provided: !!primarySport, value: primarySport },
-      payLater: { provided: !!payLater, value: payLater }
+      primarySport: { provided: !!primarySport, value: primarySport }
     });
 
     // Validation
@@ -670,9 +668,7 @@ router.post('/coach/register', async (req, res) => {
     if (!email) missingFields.push('email');
     if (!phone) missingFields.push('phone');
     if (!panNumber) missingFields.push('panNumber');
-    
-    // Only require UTR number if not paying later
-    if (!payLater && !utrNumber) missingFields.push('utrNumber');
+    if (!utrNumber) missingFields.push('utrNumber');
     
     if (!primarySport) missingFields.push('primarySport');
     if (!password) missingFields.push('password');
@@ -767,9 +763,9 @@ router.post('/coach/register', async (req, res) => {
     const hashedPassword = await hashPassword(password);
     console.log('✅ Password hashed successfully');
 
-    // Determine payment status based on payLater flag
-    const paymentStatus = payLater ? 'PENDING' : 'PENDING';
-    const isActive = false; // Will be true after OTP verification and payment (if required)
+    // Payment status is always pending (payment happens after OTP verification)
+    const paymentStatus = 'PENDING';
+    const isActive = false; // Will be true after OTP verification and payment
 
     console.log('💾 === CREATING COACH USER RECORD ===');
     console.log('🔄 Creating user and coach profile...');
@@ -848,8 +844,7 @@ router.post('/coach/register', async (req, res) => {
       uniqueId: user.uniqueId,
       coachId: user.coachProfile.id,
       requiresOtp: true,
-      requiresPayment: !payLater,
-      payLater: payLater || false
+      requiresPayment: true
     };
     console.log('📤 Sending response:', response);
 
@@ -885,15 +880,13 @@ router.post('/institute/register', async (req, res) => {
       description,
       sportsOffered,
       contactPerson,
-      licenseNumber,
-      payLater
+      licenseNumber
     } = req.body;
 
     console.log('📋 Extracted institute fields:', {
       name: { provided: !!name, value: name },
       email: { provided: !!email, value: email },
-      phone: { provided: !!phone, value: phone },
-      payLater: { provided: !!payLater, value: payLater }
+      phone: { provided: !!phone, value: phone }
     });
 
     // Validation
@@ -965,7 +958,9 @@ router.post('/institute/register', async (req, res) => {
     console.log('⏰ OTP expires at:', otpExpires.toISOString());
 
     // Generate UID with format: I0001DL1124 (Type + Serial + State + MMYY)
-    const uniqueId = await generateUID('INSTITUTE', state);
+    // Extract state from address or use default
+    const stateFromAddress = address?.split(',')[2]?.trim() || 'IN';
+    const uniqueId = await generateUID('INSTITUTE', stateFromAddress);
     console.log('🆔 Generated UID:', uniqueId);
 
     // Hash password
@@ -1032,8 +1027,7 @@ router.post('/institute/register', async (req, res) => {
       uniqueId: user.uniqueId,
       instituteId: user.instituteProfile.id,
       requiresOtp: true,
-      requiresPayment: !payLater,
-      payLater: payLater || false
+      requiresPayment: true
     };
     console.log('📤 Sending response:', response);
 
@@ -1069,15 +1063,13 @@ router.post('/club/register', async (req, res) => {
       description,
       sportsOffered,
       contactPerson,
-      establishedYear,
-      payLater
+      establishedYear
     } = req.body;
 
     console.log('📋 Extracted club fields:', {
       name: { provided: !!name, value: name },
       email: { provided: !!email, value: email },
-      phone: { provided: !!phone, value: phone },
-      payLater: { provided: !!payLater, value: payLater }
+      phone: { provided: !!phone, value: phone }
     });
 
     // Validation
@@ -1149,7 +1141,9 @@ router.post('/club/register', async (req, res) => {
     console.log('⏰ OTP expires at:', otpExpires.toISOString());
 
     // Generate UID with format: B0001DL1124 (Type + Serial + State + MMYY)
-    const uniqueId = await generateUID('CLUB', state);
+    // Extract state from address or use default
+    const stateFromAddress = address?.split(',')[2]?.trim() || 'IN';
+    const uniqueId = await generateUID('CLUB', stateFromAddress);
     console.log('🆔 Generated UID:', uniqueId);
 
     // Hash password
@@ -1216,8 +1210,7 @@ router.post('/club/register', async (req, res) => {
       uniqueId: user.uniqueId,
       clubId: user.clubProfile.id,
       requiresOtp: true,
-      requiresPayment: !payLater,
-      payLater: payLater || false
+      requiresPayment: true
     };
     console.log('📤 Sending response:', response);
 

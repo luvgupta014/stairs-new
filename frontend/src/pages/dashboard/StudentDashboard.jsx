@@ -12,7 +12,7 @@ import {
 import CoachCard from '../../components/CoachCard';
 import Spinner from '../../components/Spinner';
 import Modal from '../../components/Modal';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const StudentDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -37,6 +37,7 @@ const StudentDashboard = () => {
   const tabContentRef = useRef(null);
   
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   
   // Get user profile from localStorage
   const localUser = (() => {
@@ -55,12 +56,22 @@ const StudentDashboard = () => {
     fallback;
 
   useEffect(() => {
+    // Check if tab is specified in URL query params
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+      // Scroll to tab content after a small delay
+      setTimeout(() => {
+        tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+    
     loadDashboardData();
     loadCoaches();
     loadAvailableEvents();
     loadMyEventRegistrations();
     loadCertificates();
-  }, []);
+  }, [searchParams]);
 
   const handleUpdateProfile = () => {
     navigate('/student/profile');
@@ -389,10 +400,10 @@ const StudentDashboard = () => {
             </div>
             <div className="hidden md:flex space-x-4">
               <button
-                onClick={() => setShowCoachModal(true)}
+                onClick={() => navigate('/student/browse-coaches')}
                 className="bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
               >
-                Find Coaches
+                Browse Coaches
               </button>
               <button 
                 onClick={handleBrowseEvents}
@@ -536,6 +547,7 @@ const StudentDashboard = () => {
                 { id: 'coaches', name: 'My Coaches', icon: '👨‍🏫' },
                 { id: 'events', name: 'My Events', icon: '🏆' },
                 { id: 'certificates', name: 'My Certificates', icon: '🎓' },
+                { id: 'notifications', name: 'Notifications', icon: '🔔' },
                 { id: 'progress', name: 'Progress', icon: '📈' }
               ].map((tab) => (
                 <button
@@ -910,6 +922,44 @@ const StudentDashboard = () => {
                     >
                       Browse Events
                     </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'notifications' && (
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-6">All Notifications</h3>
+                {dashboardData?.notifications && dashboardData.notifications.length > 0 ? (
+                  <div className="space-y-3">
+                    {dashboardData.notifications.map(notification => (
+                      <div
+                        key={notification.id}
+                        className="flex items-start space-x-4 p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
+                      >
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0 ${
+                          notification.type === 'event' ? 'bg-blue-100' :
+                          notification.type === 'coach' ? 'bg-green-100' : 
+                          notification.type === 'achievement' ? 'bg-yellow-100' : 'bg-gray-100'
+                        }`}>
+                          {notification.type === 'event' ? '🏆' : 
+                           notification.type === 'coach' ? '👨‍🏫' : 
+                           notification.type === 'achievement' ? '🏅' : '📢'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900">{notification.message}</p>
+                          <p className="text-xs text-gray-500 mt-1">{notification.time}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <span className="text-gray-400 text-5xl">🔔</span>
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Notifications</h3>
+                    <p className="text-gray-600">You're all caught up! Check back later for updates.</p>
                   </div>
                 )}
               </div>

@@ -81,18 +81,26 @@ app.use((req, res, next) => {
   next();
 });
 
-// Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Body parsing middleware - Increased limits for bulk uploads
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// File upload middleware - ENABLED for bulk student upload and file uploads
-app.use(fileUpload({
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+// File upload middleware for bulk uploads
+// Applied to /api/coach routes to support bulk student uploads
+// NOT applied globally to avoid conflicts with multer on other routes
+const fileUploadMiddleware = fileUpload({
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max (increased for bulk uploads)
   useTempFiles: true,
   tempFileDir: path.join(__dirname, '../temp/'),
   createParentPath: true, // Automatically create temp directory
-  debug: true // Enable debug logging
-}));
+  debug: false, // Disable debug logging for production
+  abortOnLimit: false, // Don't abort on file size limit, return error instead
+  responseOnLimit: 'File size limit exceeded (50MB max)',
+  uploadTimeout: 120000 // 2 minutes timeout for uploads
+});
+
+// Apply fileUpload only to coach routes (for bulk student uploads)
+// Do this after routes are defined using app.use middleware wrapper
 
 // Ensure temp and uploads directories exist
 const fs = require('fs');
@@ -154,7 +162,8 @@ app.get('/health', async (req, res) => {
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/student', studentRoutes);
-app.use('/api/coach', coachRoutes);
+// Apply express-fileupload ONLY to coach routes for bulk uploads
+app.use('/api/coach', fileUploadMiddleware, coachRoutes);
 app.use('/api/institute', instituteRoutes);
 app.use('/api/club', clubRoutes);
 app.use('/api/admin', adminRoutes);
@@ -236,7 +245,7 @@ process.on('SIGTERM', async () => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 STAIRS Talent Hub API Server running on port ${PORT}`);
   console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
@@ -247,5 +256,10 @@ app.listen(PORT, () => {
     console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
   }
 });
+
+// Set server timeout to 5 minutes for bulk uploads
+server.timeout = 300000;
+server.keepAliveTimeout = 300000;
+server.headersTimeout = 310000;
 
 module.exports = app;

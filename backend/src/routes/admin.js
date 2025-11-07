@@ -996,155 +996,10 @@ router.get('/users/:uniqueId/details', authenticate, requireAdmin, async (req, r
     const user = await prisma.user.findUnique({
       where: { uniqueId },
       include: {
-        studentProfile: {
-          include: {
-            eventRegistrations: {
-              include: {
-                event: {
-                  select: {
-                    id: true,
-                    name: true,
-                    sport: true,
-                    startDate: true,
-                    venue: true,
-                    city: true,
-                    status: true
-                  }
-                }
-              },
-              orderBy: { createdAt: 'desc' },
-              take: 10
-            },
-            coachConnections: {
-              include: {
-                coach: {
-                  select: {
-                    id: true,
-                    name: true,
-                    specialization: true,
-                    user: {
-                      select: {
-                        uniqueId: true,
-                        email: true
-                      }
-                    }
-                  }
-                }
-              },
-              orderBy: { createdAt: 'desc' }
-            }
-          }
-        },
-        coachProfile: {
-          include: {
-            events: {
-              select: {
-                id: true,
-                name: true,
-                sport: true,
-                startDate: true,
-                venue: true,
-                city: true,
-                status: true,
-                currentParticipants: true,
-                maxParticipants: true
-              },
-              orderBy: { createdAt: 'desc' },
-              take: 10
-            },
-            payments: {
-              select: {
-                id: true,
-                type: true,
-                amount: true,
-                status: true,
-                createdAt: true
-              },
-              orderBy: { createdAt: 'desc' },
-              take: 10
-            },
-            studentConnections: {
-              include: {
-                student: {
-                  select: {
-                    id: true,
-                    name: true,
-                    sport: true,
-                    user: {
-                      select: {
-                        uniqueId: true,
-                        email: true
-                      }
-                    }
-                  }
-                }
-              },
-              orderBy: { createdAt: 'desc' }
-            }
-          }
-        },
-        instituteProfile: {
-          include: {
-            students: {
-              include: {
-                student: {
-                  select: {
-                    id: true,
-                    name: true,
-                    sport: true,
-                    user: {
-                      select: {
-                        uniqueId: true,
-                        email: true
-                      }
-                    }
-                  }
-                }
-              },
-              take: 20
-            },
-            coaches: {
-              include: {
-                coach: {
-                  select: {
-                    id: true,
-                    name: true,
-                    specialization: true,
-                    user: {
-                      select: {
-                        uniqueId: true,
-                        email: true
-                      }
-                    }
-                  }
-                }
-              },
-              take: 20
-            }
-          }
-        },
-        clubProfile: {
-          include: {
-            members: {
-              include: {
-                student: {
-                  select: {
-                    id: true,
-                    name: true,
-                    sport: true,
-                    user: {
-                      select: {
-                        uniqueId: true,
-                        email: true
-                      }
-                    }
-                  }
-                }
-              },
-              take: 20
-            }
-          }
-        },
+        studentProfile: true,
+        coachProfile: true,
+        instituteProfile: true,
+        clubProfile: true,
         adminProfile: true,
         payments: {
           select: {
@@ -1164,12 +1019,111 @@ router.get('/users/:uniqueId/details', authenticate, requireAdmin, async (req, r
       return res.status(404).json(errorResponse('User not found.', 404));
     }
 
+    // Fetch additional data based on role to avoid deep nested queries
+    try {
+      if (user.role === 'STUDENT' && user.studentProfile) {
+        const eventRegistrations = await prisma.eventRegistration.findMany({
+          where: { studentId: user.studentProfile.id },
+          include: {
+            event: {
+              select: {
+                id: true,
+                name: true,
+                sport: true,
+                startDate: true,
+                venue: true,
+                city: true,
+                status: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 10
+        });
+        user.studentProfile.eventRegistrations = eventRegistrations;
+      }
+
+      if (user.role === 'COACH' && user.coachProfile) {
+        const events = await prisma.event.findMany({
+          where: { coachId: user.coachProfile.id },
+          select: {
+            id: true,
+            name: true,
+            sport: true,
+            startDate: true,
+            venue: true,
+            city: true,
+            status: true,
+            currentParticipants: true,
+            maxParticipants: true
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 10
+        });
+        user.coachProfile.events = events;
+      }
+
+      if (user.role === 'INSTITUTE' && user.instituteProfile) {
+        const students = await prisma.instituteStudent.findMany({
+          where: { instituteId: user.instituteProfile.id },
+          include: {
+            student: {
+              select: {
+                id: true,
+                name: true,
+                sport: true
+              }
+            }
+          },
+          take: 20
+        });
+        user.instituteProfile.students = students;
+
+        const coaches = await prisma.instituteCoach.findMany({
+          where: { instituteId: user.instituteProfile.id },
+          include: {
+            coach: {
+              select: {
+                id: true,
+                name: true,
+                specialization: true
+              }
+            }
+          },
+          take: 20
+        });
+        user.instituteProfile.coaches = coaches;
+      }
+
+      if (user.role === 'CLUB' && user.clubProfile) {
+        const members = await prisma.clubMember.findMany({
+          where: { clubId: user.clubProfile.id },
+          include: {
+            student: {
+              select: {
+                id: true,
+                name: true,
+                sport: true
+              }
+            }
+          },
+          take: 20
+        });
+        user.clubProfile.members = members;
+      }
+    } catch (nestedError) {
+      console.warn('⚠️ Error fetching nested data:', nestedError.message);
+      // Continue anyway - main user data is fetched
+    }
+
     console.log(`✅ Retrieved full details for user: ${user.email}`);
 
     res.json(successResponse(user, 'User details retrieved successfully.'));
 
   } catch (error) {
     console.error('❌ Get user details error:', error);
+    console.error('Error details:', error.message);
+    console.error('Stack:', error.stack);
     res.status(500).json(errorResponse('Failed to retrieve user details.', 500));
   }
 });

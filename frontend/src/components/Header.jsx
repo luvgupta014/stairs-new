@@ -34,9 +34,9 @@ const Header = () => {
     }
   }, []); // No dependencies needed as it only uses state setters
 
-  // Load notifications when user is authenticated (admin only for now)
+  // Load notifications when user is authenticated (all user roles)
   useEffect(() => {
-    if (user && user.role === 'ADMIN') {
+    if (user && isAuthenticated()) {
       loadNotifications();
       // Set up polling for new notifications every 30 seconds
       const interval = setInterval(loadNotifications, 30000);
@@ -61,6 +61,53 @@ const Header = () => {
       }
     }
     setShowNotifications(false);
+
+    // Parse notification data if available
+    let navigationPath = null;
+    try {
+      if (notification.data) {
+        const data = typeof notification.data === 'string' 
+          ? JSON.parse(notification.data) 
+          : notification.data;
+        
+        // Route based on notification type
+        switch (notification.type) {
+          case 'EVENT_APPROVED':
+          case 'EVENT_REJECTED':
+          case 'EVENT_SUSPENDED':
+          case 'EVENT_RESTARTED':
+            if (data.eventId) {
+              navigationPath = `/events/${data.eventId}`;
+            }
+            break;
+          case 'ORDER_CONFIRMED':
+          case 'ORDER_IN_PROGRESS':
+          case 'ORDER_COMPLETED':
+          case 'ORDER_CANCELLED':
+            if (data.orderId) {
+              navigationPath = `/admin/orders/${data.orderId}`;
+            }
+            break;
+          case 'PAYMENT_RECEIVED':
+          case 'PAYMENT_FAILED':
+            if (data.paymentId) {
+              navigationPath = `/admin/payments/${data.paymentId}`;
+            }
+            break;
+          default:
+            // For general notifications, go to dashboard
+            navigationPath = `/dashboard/${user.role.toLowerCase()}`;
+        }
+
+        if (navigationPath) {
+          navigate(navigationPath);
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing notification data:', error);
+      // Fallback to dashboard
+      navigate(`/dashboard/${user.role.toLowerCase()}`);
+    }
   };
 
   const handleMarkAllAsRead = async () => {
@@ -265,101 +312,99 @@ const Header = () => {
               </div>
             ) : isAuthenticated() && user ? (
               <div className="flex items-center space-x-4">
-                {/* Notifications - Admin Only */}
-                {user.role === 'ADMIN' && (
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowNotifications(!showNotifications)}
-                      className="relative p-2 text-gray-700 hover:text-blue-600 focus:outline-none"
-                    >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-5 5v-5zM4 19h6v2H4a2 2 0 01-2-2V7a2 2 0 012-2h6v2H4v10zM20 5H8a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2z" />
-                      </svg>
+                {/* Notifications - All Authenticated Users */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowNotifications(!showNotifications)}
+                    className="relative p-2 text-gray-700 hover:text-blue-600 focus:outline-none"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-5 5v-5zM4 19h6v2H4a2 2 0 01-2-2V7a2 2 0 012-2h6v2H4v10zM20 5H8a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2z" />
+                    </svg>
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </button>
+                  
+                  {/* Notifications Dropdown */}
+                  {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg py-1 z-50 border">
+                    <div className="px-4 py-2 border-b border-gray-200 flex justify-between items-center">
+                      <h3 className="text-sm font-medium text-gray-900">Notifications</h3>
                       {unreadCount > 0 && (
-                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                          {unreadCount > 9 ? '9+' : unreadCount}
-                        </span>
+                        <button
+                          onClick={handleMarkAllAsRead}
+                          className="text-xs text-blue-600 hover:text-blue-800"
+                        >
+                          Mark all as read
+                        </button>
                       )}
-                    </button>
+                    </div>
                     
-                    {/* Notifications Dropdown */}
-                    {showNotifications && (
-                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg py-1 z-50 border">
-                      <div className="px-4 py-2 border-b border-gray-200 flex justify-between items-center">
-                        <h3 className="text-sm font-medium text-gray-900">Notifications</h3>
-                        {unreadCount > 0 && (
-                          <button
-                            onClick={handleMarkAllAsRead}
-                            className="text-xs text-blue-600 hover:text-blue-800"
+                    <div className="max-h-96 overflow-y-auto">
+                      {loadingNotifications ? (
+                        <div className="px-4 py-8 text-center">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                          <p className="text-sm text-gray-500 mt-2">Loading notifications...</p>
+                        </div>
+                      ) : notifications.length > 0 ? (
+                        notifications.map((notification) => (
+                          <div
+                            key={notification.id}
+                            onClick={() => handleNotificationClick(notification)}
+                            className={`px-4 py-3 hover:bg-gray-50 cursor-pointer border-l-4 ${
+                              notification.isRead 
+                                ? 'border-transparent bg-gray-50' 
+                                : 'border-blue-500 bg-white'
+                            }`}
                           >
-                            Mark all as read
-                          </button>
-                        )}
-                      </div>
-                      
-                      <div className="max-h-96 overflow-y-auto">
-                        {loadingNotifications ? (
-                          <div className="px-4 py-8 text-center">
-                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-                            <p className="text-sm text-gray-500 mt-2">Loading notifications...</p>
-                          </div>
-                        ) : notifications.length > 0 ? (
-                          notifications.map((notification) => (
-                            <div
-                              key={notification.id}
-                              onClick={() => handleNotificationClick(notification)}
-                              className={`px-4 py-3 hover:bg-gray-50 cursor-pointer border-l-4 ${
-                                notification.isRead 
-                                  ? 'border-transparent bg-gray-50' 
-                                  : 'border-blue-500 bg-white'
-                              }`}
-                            >
-                              <div className="flex items-start space-x-3">
-                                <span className="text-lg flex-shrink-0">
-                                  {getNotificationIcon(notification.type)}
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                  <p className={`text-sm font-medium ${getNotificationColor(notification.type)}`}>
-                                    {notification.title}
-                                  </p>
-                                  <p className="text-sm text-gray-600 mt-1 line-clamp-2">
-                                    {notification.message}
-                                  </p>
-                                  <p className="text-xs text-gray-500 mt-1">
-                                    {formatNotificationTime(notification.createdAt)}
-                                  </p>
-                                </div>
-                                {!notification.isRead && (
-                                  <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2"></div>
-                                )}
+                            <div className="flex items-start space-x-3">
+                              <span className="text-lg flex-shrink-0">
+                                {getNotificationIcon(notification.type)}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-sm font-medium ${getNotificationColor(notification.type)}`}>
+                                  {notification.title}
+                                </p>
+                                <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                                  {notification.message}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {formatNotificationTime(notification.createdAt)}
+                                </p>
                               </div>
+                              {!notification.isRead && (
+                                <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2"></div>
+                              )}
                             </div>
-                          ))
-                        ) : (
-                          <div className="px-4 py-8 text-center text-gray-500">
-                            <svg className="w-12 h-12 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-5 5v-5zM4 19h6v2H4a2 2 0 01-2-2V7a2 2 0 012-2h6v2H4v10zM20 5H8a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2z" />
-                            </svg>
-                            <p className="text-sm">No notifications yet</p>
                           </div>
-                        )}
-                      </div>
-                      
-                      {notifications.length > 0 && (
-                        <div className="px-4 py-2 border-t border-gray-200 text-center">
-                          <Link
-                            to={`/dashboard/${user.role.toLowerCase()}`}
-                            className="text-xs text-blue-600 hover:text-blue-800"
-                            onClick={() => setShowNotifications(false)}
-                          >
-                            View all notifications
-                          </Link>
+                        ))
+                      ) : (
+                        <div className="px-4 py-8 text-center text-gray-500">
+                          <svg className="w-12 h-12 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-5 5v-5zM4 19h6v2H4a2 2 0 01-2-2V7a2 2 0 012-2h6v2H4v10zM20 5H8a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2z" />
+                          </svg>
+                          <p className="text-sm">No notifications yet</p>
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
+                    
+                    {notifications.length > 0 && (
+                      <div className="px-4 py-2 border-t border-gray-200 text-center">
+                        <Link
+                          to={`/dashboard/${user.role.toLowerCase()}?tab=notifications`}
+                          className="text-xs text-blue-600 hover:text-blue-800"
+                          onClick={() => setShowNotifications(false)}
+                        >
+                          View all notifications
+                        </Link>
+                      </div>
+                    )}
+                  </div>
                 )}
+              </div>
 
                 {/* Profile Dropdown */}
                 <div className="relative">

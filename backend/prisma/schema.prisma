@@ -1,3 +1,5 @@
+// Prisma schema file for STAIRS Talent Hub
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,25 +10,26 @@ datasource db {
 }
 
 model User {
-  id               String         @id @default(cuid())
-  email            String?        @unique
-  phone            String?        @unique
-  password         String?
-  role             UserRole
-  isActive         Boolean        @default(true)
-  isVerified       Boolean        @default(false)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  /// Custom UID for user, visible in admin and frontend
-  uniqueId         String?        @unique @map("unique_id")
-  adminProfile     Admin?
-  clubProfile      Club?
-  coachProfile     Coach?
+  id              String        @id @default(cuid())
+  email           String?       @unique
+  phone           String?       @unique
+  password        String?
+  role            UserRole      @default(STUDENT)
+  name            String?
+  isActive        Boolean       @default(true)
+  isVerified      Boolean       @default(false)
+  uniqueId        String?       @unique @map("unique_id")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  adminProfile    Admin?
+  studentProfile  Student?
+  coachProfile    Coach?
   instituteProfile Institute?
-  notifications    Notification[]
-  otpRecords       OTPRecord[]
-  payments         Payment[]
-  studentProfile   Student?
+  clubProfile     Club?
+  notifications   Notification[]
+  otpRecords      OTPRecord[]
+  payments        Payment[]
 
   @@map("users")
 }
@@ -115,7 +118,6 @@ model Coach {
   eventResultFiles      EventResultFile[]
   events                Event[]
   instituteCoaches      InstituteCoach[]
-  payments              Payment[]
   studentConnections    StudentCoachConnection[]
 
   @@map("coaches")
@@ -281,23 +283,22 @@ model EventRegistration {
 }
 
 model Payment {
-  id                String        @id(map: "new_payments_pkey") @default(cuid())
+  id                String    @id(map: "new_payments_pkey") @default(cuid())
   userId            String?
-  userType          UserRole?
+  userType          String?
   coachId           String?
-  type              PaymentType
-  amount            Float         @db.Real
-  currency          String        @default("INR")
+  type              String
+  amount            Float     @db.Real
+  currency          String    @default("INR")
   razorpayOrderId   String?
   razorpayPaymentId String?
-  status            String        @default("PENDING")
+  status            String    @default("PENDING")
   description       String?
   metadata          String?
-  expiresAt         DateTime?     @db.Timestamp(6)
-  createdAt         DateTime      @default(now()) @db.Timestamp(6)
-  updatedAt         DateTime      @updatedAt @db.Timestamp(6)
-  coach             Coach?        @relation(fields: [coachId], references: [id])
-  user              User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt         DateTime? @db.Timestamp(6)
+  createdAt         DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamp(6)
+  user              User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("payments")
 }
@@ -344,7 +345,8 @@ model Certificate {
   sportName       String
   eventName       String
   issueDate       DateTime @default(now())
-  uid             String   @unique
+  /// Custom UID format: STAIRS-CERT-<EventUID>-<StudentUID>
+  uniqueId        String   @unique @map("uid")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
