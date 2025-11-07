@@ -628,20 +628,19 @@ router.post('/coach/register', async (req, res) => {
       district,
       address,
       pincode,
-      email,
-      phone,
-      panNumber,
-      utrNumber,
-      membershipStatus,
-      applyingAs,
-      primarySport,
-      otherSports,
-      password,
-      specialization,
-      experience,
-      certifications,
-      bio,
-      location
+  email,
+  phone,
+  panNumber,
+  membershipStatus,
+  applyingAs,
+  primarySport,
+  otherSports,
+  password,
+  specialization,
+  experience,
+  certifications,
+  bio,
+  location
     } = req.body;
 
     console.log('📋 Extracted coach fields:', {
@@ -668,7 +667,7 @@ router.post('/coach/register', async (req, res) => {
     if (!email) missingFields.push('email');
     if (!phone) missingFields.push('phone');
     if (!panNumber) missingFields.push('panNumber');
-    if (!utrNumber) missingFields.push('utrNumber');
+  // utrNumber is not required for coach registration
     
     if (!primarySport) missingFields.push('primarySport');
     if (!password) missingFields.push('password');
@@ -793,7 +792,6 @@ router.post('/coach/register', async (req, res) => {
             address,
             pincode,
             panNumber,
-            utrNumber,
             membershipStatus: membershipStatus || 'NEW',
             applyingAs: applyingAs || 'Chief District coordinator',
             primarySport,
