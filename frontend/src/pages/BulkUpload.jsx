@@ -344,7 +344,7 @@ Jane Smith,jane.smith@email.com,+1234567892,Basketball,Advanced,2004-03-22,David
             }`}
           >
             <FaUserPlus className="mr-2" />
-            Add Single Student
+            Add Student
           </button>
           <button
             onClick={() => setActiveTab('bulk')}
