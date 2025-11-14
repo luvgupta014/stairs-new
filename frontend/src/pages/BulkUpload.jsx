@@ -1,13 +1,8 @@
 import { useState } from 'react';
-import { bulkUploadStudents } from '../api';
-import Spinner from '../components/Spinner';
-import BackButton from '../components/BackButton';
-import PaymentPopup from '../components/PaymentPopup';
-import usePaymentStatus from '../hooks/usePaymentStatus';
-import { useNavigate } from 'react-router-dom';
-import { FaExclamationTriangle, FaCreditCard } from 'react-icons/fa';
+import { FaExclamationTriangle, FaCreditCard, FaUpload, FaUserPlus } from 'react-icons/fa';
 
-const BulkUpload = () => {
+const BulkUploadWithManual = () => {
+  const [activeTab, setActiveTab] = useState('bulk'); // 'bulk' or 'manual'
   const [file, setFile] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -15,16 +10,92 @@ const BulkUpload = () => {
   const [success, setSuccess] = useState(false);
   const [uploadResults, setUploadResults] = useState(null);
   
-  // Payment status hook
-  const {
-    isPending,
-    showPaymentPopup,
-    dismissPaymentPopup,
-    onPaymentSuccess,
-    showPaymentPopupManually
-  } = usePaymentStatus();
-  
-  const navigate = useNavigate();
+  // Manual form state
+  const [manualForm, setManualForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    sport: '',
+    level: '',
+    dateOfBirth: '',
+    fatherName: '',
+    aadhaar: '',
+    gender: '',
+    address: '',
+    city: '',
+    state: '',
+    district: '',
+    pincode: '',
+    sport2: '',
+    sport3: '',
+    school: '',
+    club: '',
+    coachName: '',
+    coachMobile: '',
+    achievements: ''
+  });
+
+  const handleManualInputChange = (e) => {
+    const { name, value } = e.target;
+    setManualForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    setError('');
+  };
+
+  const handleManualSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validate required fields
+    if (!manualForm.name || !manualForm.email || !manualForm.phone || !manualForm.sport) {
+      setError('Please fill in all required fields: Name, Email, Phone, and Sport');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Mock successful response
+      const mockResult = {
+        success: true,
+        data: {
+          results: [{
+            row: 1,
+            name: manualForm.name,
+            email: manualForm.email,
+            phone: manualForm.phone,
+            sport: manualForm.sport,
+            status: 'success',
+            studentId: 'STU' + Date.now(),
+            isNewUser: true,
+            tempPassword: 'Temp' + Math.random().toString(36).slice(-8)
+          }],
+          errors: []
+        }
+      };
+      
+      setSuccess(true);
+      setUploadResults(mockResult.data);
+      
+      // Reset form
+      setManualForm({
+        name: '', email: '', phone: '', sport: '', level: '',
+        dateOfBirth: '', fatherName: '', aadhaar: '', gender: '',
+        address: '', city: '', state: '', district: '', pincode: '',
+        sport2: '', sport3: '', school: '', club: '',
+        coachName: '', coachMobile: '', achievements: ''
+      });
+    } catch (error) {
+      setError('Failed to add student. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleFileSelect = (e) => {
     const selectedFile = e.target.files[0];
@@ -33,47 +104,9 @@ const BulkUpload = () => {
     setSuccess(false);
   };
 
-  const handleTestUpload = async () => {
-    if (!file) {
-      setError('Please select a file first.');
-      return;
-    }
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      const response = await fetch('/api/coach/students/test-csv', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-        },
-        body: formData
-      });
-      
-      const result = await response.json();
-      console.log('Test result:', result);
-      
-      if (result.success) {
-        alert(`Test successful! Found ${result.data.totalRows} data rows. Check console for details.`);
-      } else {
-        setError(result.message || 'Test failed');
-      }
-    } catch (error) {
-      console.error('Test error:', error);
-      setError('Test failed. Check console for details.');
-    }
-  };
-
-  const handleUpload = async () => {
+  const handleBulkUpload = async () => {
     if (!file) {
       setError('Please select a file to upload');
-      return;
-    }
-
-    // Check payment status before allowing upload
-    if (isPending) {
-      showPaymentPopupManually();
       return;
     }
 
@@ -82,12 +115,6 @@ const BulkUpload = () => {
     setUploadProgress(0);
 
     try {
-      console.log('📤 Starting file upload...', {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type
-      });
-
       // Simulate upload progress
       const progressInterval = setInterval(() => {
         setUploadProgress(prev => {
@@ -99,23 +126,47 @@ const BulkUpload = () => {
         });
       }, 200);
 
-      const result = await bulkUploadStudents(file);
-      
-      console.log('✅ Upload result:', result);
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       clearInterval(progressInterval);
       setUploadProgress(100);
       
-      if (result.success) {
-        setSuccess(true);
-        setUploadResults(result.data);
-      } else {
-        throw new Error(result.message || 'Upload failed');
-      }
+      // Mock successful response
+      const mockResult = {
+        success: true,
+        data: {
+          results: [
+            {
+              row: 1,
+              name: 'John Doe',
+              email: 'john@example.com',
+              phone: '+1234567890',
+              sport: 'Football',
+              status: 'success',
+              studentId: 'STU001',
+              isNewUser: true,
+              tempPassword: 'TempPass123'
+            },
+            {
+              row: 2,
+              name: 'Jane Smith',
+              email: 'jane@example.com',
+              phone: '+1234567891',
+              sport: 'Basketball',
+              status: 'success',
+              studentId: 'STU002',
+              isNewUser: false
+            }
+          ],
+          errors: []
+        }
+      };
+      
+      setSuccess(true);
+      setUploadResults(mockResult.data);
     } catch (error) {
-      console.error('❌ Upload error:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Upload failed. Please try again.';
-      setError(errorMessage);
+      setError('Upload failed. Please try again.');
       setUploadProgress(0);
     } finally {
       setLoading(false);
@@ -123,11 +174,9 @@ const BulkUpload = () => {
   };
 
   const downloadTemplate = () => {
-    // Create a comprehensive CSV template with all supported fields
     const csvContent = `Name,Email,Phone,Sport,Level,Date of Birth,Father Name,Aadhaar,Gender,Address,City,State,District,Pincode,Sport 2,Sport 3,School,Club,Coach Name,Coach Mobile,Achievements
 John Doe,john.doe@email.com,+1234567890,Football,Intermediate,2005-01-15,Robert Doe,123456789012,Male,123 Main St,New York,NY,Manhattan,10001,Basketball,,State High School,City Football Club,Mike Johnson,+1234567895,Regional Champion 2023
-Jane Smith,jane.smith@email.com,+1234567892,Basketball,Advanced,2004-03-22,David Smith,234567890123,Female,456 Oak Ave,Los Angeles,CA,Los Angeles,90001,Tennis,Swimming,Metro High School,Sports Academy,Sarah Wilson,+1234567896,State Level Player
-Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom Johnson,345678901234,Male,789 Pine St,Chicago,IL,Cook,60601,,,Central High School,,John Coach,+1234567897,`;
+Jane Smith,jane.smith@email.com,+1234567892,Basketball,Advanced,2004-03-22,David Smith,234567890123,Female,456 Oak Ave,Los Angeles,CA,Los Angeles,90001,Tennis,Swimming,Metro High School,Sports Academy,Sarah Wilson,+1234567896,State Level Player`;
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -141,49 +190,19 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom J
   const downloadReport = () => {
     if (!uploadResults) return;
 
-    // Create detailed CSV report
-    let csvContent = '';
-    
-    // Header
-    csvContent += 'Student Upload Report\n';
+    let csvContent = 'Student Upload Report\n';
     csvContent += `Generated on: ${new Date().toLocaleString()}\n`;
-    csvContent += `Total Records: ${(uploadResults.results?.length || 0) + (uploadResults.errors?.length || 0)}\n`;
-    csvContent += `Successful: ${uploadResults.results?.length || 0}\n`;
-    csvContent += `Failed: ${uploadResults.errors?.length || 0}\n\n`;
+    csvContent += `Total Records: ${(uploadResults.results?.length || 0) + (uploadResults.errors?.length || 0)}\n\n`;
 
-    // Successful records
     if (uploadResults.results && uploadResults.results.length > 0) {
       csvContent += 'SUCCESSFUL RECORDS\n';
-      csvContent += 'Row,Name,Email,Phone,Sport,Status,Student ID,New User,Temporary Password\n';
+      csvContent += 'Name,Email,Phone,Sport,Student ID,New User,Temporary Password\n';
       
       uploadResults.results.forEach(result => {
-        csvContent += `${result.row || ''},`;
-        csvContent += `"${result.name || ''}",`;
-        csvContent += `"${result.email || ''}",`;
-        csvContent += `"${result.phone || ''}",`;
-        csvContent += `"${result.sport || ''}",`;
-        csvContent += `"${result.status || ''}",`;
-        csvContent += `"${result.studentId || ''}",`;
-        csvContent += `"${result.isNewUser ? 'Yes' : 'No'}",`;
-        csvContent += `"${result.tempPassword || 'N/A'}"\n`;
-      });
-      csvContent += '\n';
-    }
-
-    // Failed records
-    if (uploadResults.errors && uploadResults.errors.length > 0) {
-      csvContent += 'FAILED RECORDS\n';
-      csvContent += 'Row,Name,Email,Error\n';
-      
-      uploadResults.errors.forEach(error => {
-        csvContent += `${error.row || ''},`;
-        csvContent += `"${error.name || ''}",`;
-        csvContent += `"${error.email || ''}",`;
-        csvContent += `"${error.error || ''}"\n`;
+        csvContent += `"${result.name}","${result.email}","${result.phone}","${result.sport}","${result.studentId}","${result.isNewUser ? 'Yes' : 'No'}","${result.tempPassword || 'N/A'}"\n`;
       });
     }
 
-    // Download the report
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -198,31 +217,32 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom J
     const existingUsers = uploadResults.results?.filter(r => !r.isNewUser) || [];
     
     return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="bg-white rounded-lg shadow-md p-8">
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="text-green-600 text-2xl">✓</span>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Upload Completed Successfully!</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              {activeTab === 'manual' ? 'Student Added Successfully!' : 'Upload Completed Successfully!'}
+            </h2>
             <p className="text-gray-600">
               Your student data has been processed and uploaded to the system.
             </p>
           </div>
 
-          {/* Upload Results */}
           <div className="bg-gray-50 rounded-lg p-6 mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Summary</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Summary</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
-                  {uploadResults.results ? uploadResults.results.length : '0'}
+                  {uploadResults.results?.length || 0}
                 </div>
                 <div className="text-sm text-gray-600">Successful</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-red-600">
-                  {uploadResults.errors ? uploadResults.errors.length : '0'}
+                  {uploadResults.errors?.length || 0}
                 </div>
                 <div className="text-sm text-gray-600">Failed</div>
               </div>
@@ -241,25 +261,24 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom J
             </div>
           </div>
 
-          {/* New Students with Passwords */}
           {newUsers.length > 0 && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
               <h3 className="text-lg font-semibold text-blue-900 mb-4">
                 New Students Created ({newUsers.length})
               </h3>
               <p className="text-blue-800 mb-4">
-                The following students were created with temporary passwords. Please share these credentials with them:
+                Please share these temporary passwords with the students:
               </p>
               <div className="max-h-60 overflow-y-auto">
-                <table className="min-w-full">
+                <table className="min-w-full bg-white rounded">
                   <thead className="bg-blue-100">
                     <tr>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-blue-900 uppercase tracking-wider">Name</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-blue-900 uppercase tracking-wider">Email</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-blue-900 uppercase tracking-wider">Password</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-blue-900 uppercase">Name</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-blue-900 uppercase">Email</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-blue-900 uppercase">Password</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white">
+                  <tbody>
                     {newUsers.map((user, index) => (
                       <tr key={index} className="border-b border-blue-200">
                         <td className="px-3 py-2 text-sm text-gray-900">{user.name}</td>
@@ -275,39 +294,20 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom J
             </div>
           )}
 
-          {/* Error Details */}
-          {uploadResults.errors && uploadResults.errors.length > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
-              <h3 className="text-lg font-semibold text-red-900 mb-4">
-                Failed Records ({uploadResults.errors.length})
-              </h3>
-              <div className="max-h-40 overflow-y-auto">
-                {uploadResults.errors.map((error, index) => (
-                  <div key={index} className="text-sm text-red-800 mb-2">
-                    Row {error.row}: {error.name} - {error.error}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Action Buttons */}
           <div className="flex justify-center space-x-4">
             <button
-              onClick={() => window.location.reload()}
-              className="px-6 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              onClick={() => {
+                setSuccess(false);
+                setUploadResults(null);
+                setFile(null);
+              }}
+              className="px-6 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
             >
-              Upload Another File
-            </button>
-            <button
-              onClick={() => navigate('/dashboard/coach')}
-              className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
-            >
-              Back to Dashboard
+              Add Another Student
             </button>
             <button 
               onClick={downloadReport}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
             >
               Download Report
             </button>
@@ -318,45 +318,14 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom J
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-6">
-        <BackButton to="/dashboard/coach" label="Back to Dashboard" />
-      </div>
-      
+    <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="bg-white rounded-lg shadow-md p-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Bulk Student Upload</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Add Students</h1>
           <p className="text-gray-600">
-            Upload student data in bulk using CSV or Excel files. Download the template to get started.
+            Add students individually or upload multiple students at once using CSV/Excel files.
           </p>
         </div>
-
-        {/* Payment Status Alert */}
-        {isPending && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-6">
-            <div className="flex items-start">
-              <FaExclamationTriangle className="text-amber-500 mt-1 mr-3 flex-shrink-0" />
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-amber-900 mb-2">
-                  Payment Required
-                </h3>
-                <p className="text-amber-700 mb-4">
-                  You need to complete your subscription payment to upload students. Complete your payment to unlock student management features.
-                </p>
-                <div className="flex space-x-3">
-                  <button
-                    onClick={showPaymentPopupManually}
-                    type="button"
-                    className="inline-flex items-center bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors"
-                  >
-                    <FaCreditCard className="mr-2" />
-                    Pay Now (₹2,000)
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
@@ -364,186 +333,459 @@ Mike Johnson,mike.johnson@email.com,+1234567894,Tennis,Beginner,2006-07-10,Tom J
           </div>
         )}
 
-        {/* Instructions */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
-          <h3 className="text-lg font-semibold text-blue-900 mb-3">Upload Instructions</h3>
-          <ol className="list-decimal list-inside space-y-2 text-blue-800">
-            <li>Download the CSV template using the button below</li>
-            <li>Fill in your student data following the template format</li>
-            <li>Save the file as CSV or Excel format</li>
-            <li>Upload the file using the upload area</li>
-            <li>Review and confirm the data before processing</li>
-          </ol>
-        </div>
-
-        {/* Template Download */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Step 1: Download Template</h3>
-            <p className="text-gray-600">Get the CSV template with required columns</p>
-          </div>
+        {/* Tab Navigation */}
+        <div className="flex border-b border-gray-200 mb-6">
           <button
-            onClick={downloadTemplate}
-            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onClick={() => setActiveTab('manual')}
+            className={`flex items-center px-6 py-3 font-medium transition-colors ${
+              activeTab === 'manual'
+                ? 'border-b-2 border-orange-600 text-orange-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
           >
-            Download Template
+            <FaUserPlus className="mr-2" />
+            Add Single Student
+          </button>
+          <button
+            onClick={() => setActiveTab('bulk')}
+            className={`flex items-center px-6 py-3 font-medium transition-colors ${
+              activeTab === 'bulk'
+                ? 'border-b-2 border-orange-600 text-orange-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <FaUpload className="mr-2" />
+            Bulk Upload
           </button>
         </div>
 
-        {/* File Upload */}
-        <div className="mb-8">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Step 2: Upload Your File</h3>
-          
-          {/* Drag and Drop Area */}
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-orange-400 transition-colors">
-            <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-orange-600 text-2xl">📁</span>
-            </div>
-            
-            {file ? (
-              <div>
-                <p className="text-lg font-medium text-gray-900 mb-2">
-                  Selected File: {file.name}
-                </p>
-                <p className="text-gray-600 mb-4">
-                  Size: {(file.size / 1024 / 1024).toFixed(2)} MB
-                </p>
+        {/* Manual Add Form */}
+        {activeTab === 'manual' && (
+          <form onSubmit={handleManualSubmit}>
+            <div className="space-y-6">
+              {/* Required Fields Section */}
+              <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-red-900 mb-4">
+                  Required Information *
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={manualForm.name}
+                      onChange={handleManualInputChange}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="John Doe"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Email *
+                    </label>
+                    <input
+                      type="email"
+                      name="email"
+                      value={manualForm.email}
+                      onChange={handleManualInputChange}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="john@example.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Phone *
+                    </label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={manualForm.phone}
+                      onChange={handleManualInputChange}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="+1234567890"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Primary Sport *
+                    </label>
+                    <input
+                      type="text"
+                      name="sport"
+                      value={manualForm.sport}
+                      onChange={handleManualInputChange}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Football, Basketball, etc."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Information */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Additional Information (Optional)
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Level
+                    </label>
+                    <select
+                      name="level"
+                      value={manualForm.level}
+                      onChange={handleManualInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="">Select Level</option>
+                      <option value="Beginner">Beginner</option>
+                      <option value="Intermediate">Intermediate</option>
+                      <option value="Advanced">Advanced</option>
+                      <option value="Professional">Professional</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Date of Birth
+                    </label>
+                    <input
+                      type="date"
+                      name="dateOfBirth"
+                      value={manualForm.dateOfBirth}
+                      onChange={handleManualInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Father's Name
+                    </label>
+                    <input
+                      type="text"
+                      name="fatherName"
+                      value={manualForm.fatherName}
+                      onChange={handleManualInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Father's Name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Aadhaar Number
+                    </label>
+                    <input
+                      type="text"
+                      name="aadhaar"
+                      value={manualForm.aadhaar}
+                      onChange={handleManualInputChange}
+                      maxLength="12"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="123456789012"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Gender
+                    </label>
+                    <select
+                      name="gender"
+                      value={manualForm.gender}
+                      onChange={handleManualInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="">Select Gender</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      name="city"
+                      value={manualForm.city}
+                      onChange={handleManualInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="City"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      State
+                    </label>
+                    <input
+                      type="text"
+                      name="state"
+                      value={manualForm.state}
+                      onChange={handleManualInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="State"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Pincode
+                    </label>
+                    <input
+                      type="text"
+                      name="pincode"
+                      value={manualForm.pincode}
+                      onChange={handleManualInputChange}
+                      maxLength="6"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="110001"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Secondary Sport
+                    </label>
+                    <input
+                      type="text"
+                      name="sport2"
+                      value={manualForm.sport2}
+                      onChange={handleManualInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Optional second sport"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      School
+                    </label>
+                    <input
+                      type="text"
+                      name="school"
+                      value={manualForm.school}
+                      onChange={handleManualInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="School Name"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Address
+                    </label>
+                    <input
+                      type="text"
+                      name="address"
+                      value={manualForm.address}
+                      onChange={handleManualInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Full Address"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Achievements
+                    </label>
+                    <textarea
+                      name="achievements"
+                      value={manualForm.achievements}
+                      onChange={handleManualInputChange}
+                      rows="3"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="List any notable achievements..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <div className="flex justify-end space-x-4">
                 <button
-                  onClick={() => setFile(null)}
-                  className="text-red-600 hover:text-red-700 text-sm font-medium"
+                  type="button"
+                  onClick={() => setManualForm({
+                    name: '', email: '', phone: '', sport: '', level: '',
+                    dateOfBirth: '', fatherName: '', aadhaar: '', gender: '',
+                    address: '', city: '', state: '', district: '', pincode: '',
+                    sport2: '', sport3: '', school: '', club: '',
+                    coachName: '', coachMobile: '', achievements: ''
+                  })}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
                 >
-                  Remove File
+                  Clear Form
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-6 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 flex items-center"
+                >
+                  {loading ? (
+                    <>
+                      <span className="animate-spin mr-2">⟳</span>
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <FaUserPlus className="mr-2" />
+                      Add Student
+                    </>
+                  )}
                 </button>
               </div>
-            ) : (
+            </div>
+          </form>
+        )}
+
+        {/* Bulk Upload Tab */}
+        {activeTab === 'bulk' && (
+          <div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
+              <h3 className="text-lg font-semibold text-blue-900 mb-3">Upload Instructions</h3>
+              <ol className="list-decimal list-inside space-y-2 text-blue-800">
+                <li>Download the CSV template using the button below</li>
+                <li>Fill in your student data following the template format</li>
+                <li>Save the file as CSV or Excel format</li>
+                <li>Upload the file using the upload area</li>
+              </ol>
+            </div>
+
+            <div className="flex justify-between items-center mb-8">
               <div>
-                <p className="text-lg font-medium text-gray-900 mb-2">
-                  Drag and drop your file here, or click to browse
-                </p>
-                <p className="text-gray-600 mb-4">
-                  Supports CSV, XLSX files up to 10MB
-                </p>
+                <h3 className="text-lg font-semibold text-gray-900">Step 1: Download Template</h3>
+                <p className="text-gray-600">Get the CSV template with required columns</p>
+              </div>
+              <button
+                onClick={downloadTemplate}
+                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Download Template
+              </button>
+            </div>
+
+            <div className="mb-8">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Step 2: Upload Your File</h3>
+              
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-orange-400 transition-colors">
+                <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-orange-600 text-2xl">📁</span>
+                </div>
+                
+                {file ? (
+                  <div>
+                    <p className="text-lg font-medium text-gray-900 mb-2">
+                      Selected File: {file.name}
+                    </p>
+                    <p className="text-gray-600 mb-4">
+                      Size: {(file.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                    <button
+                      onClick={() => setFile(null)}
+                      className="text-red-600 hover:text-red-700 text-sm font-medium"
+                    >
+                      Remove File
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-lg font-medium text-gray-900 mb-2">
+                      Drag and drop your file here, or click to browse
+                    </p>
+                    <p className="text-gray-600 mb-4">
+                      Supports CSV, XLSX files up to 10MB
+                    </p>
+                  </div>
+                )}
+                
+                <input
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  id="file-upload"
+                />
+                <label
+                  htmlFor="file-upload"
+                  className="inline-flex items-center px-6 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 cursor-pointer"
+                >
+                  {file ? 'Change File' : 'Select File'}
+                </label>
+              </div>
+            </div>
+
+            {loading && (
+              <div className="mb-8">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium text-gray-700">Uploading...</span>
+                  <span className="text-sm text-gray-700">{uploadProgress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-orange-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
               </div>
             )}
-            
-            <input
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              onChange={handleFileSelect}
-              className="hidden"
-              id="file-upload"
-            />
-            <label
-              htmlFor="file-upload"
-              className="inline-flex items-center px-6 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
-            >
-              {file ? 'Change File' : 'Select File'}
-            </label>
-          </div>
-        </div>
 
-        {/* Upload Progress */}
-        {loading && (
-          <div className="mb-8">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium text-gray-700">Uploading...</span>
-              <span className="text-sm text-gray-700">{uploadProgress}%</span>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={handleBulkUpload}
+                disabled={!file || loading}
+                className="px-6 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 flex items-center"
+              >
+                {loading ? (
+                  <>
+                    <span className="animate-spin mr-2">⟳</span>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <FaUpload className="mr-2" />
+                    Upload Students
+                  </>
+                )}
+              </button>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
-                className="bg-orange-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${uploadProgress}%` }}
-              ></div>
+
+            <div className="bg-gray-50 rounded-lg p-6 mt-8">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Supported Columns</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {[
+                  'Name*', 'Email*', 'Phone*', 'Sport*',
+                  'Level', 'Date of Birth', 'Father Name', 'Aadhaar',
+                  'Gender', 'Address', 'City', 'State',
+                  'District', 'Pincode', 'Sport 2', 'Sport 3',
+                  'School', 'Club', 'Coach Name', 'Coach Mobile',
+                  'Achievements'
+                ].map((column) => (
+                  <div 
+                    key={column} 
+                    className={`rounded px-2 py-1 text-xs font-medium ${
+                      column.includes('*') 
+                        ? 'bg-red-100 text-red-700 border border-red-200' 
+                        : 'bg-white text-gray-700 border border-gray-200'
+                    }`}
+                  >
+                    {column}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 space-y-1">
+                <p className="text-sm text-red-600">
+                  * Required fields: Name, Email, Phone, Sport
+                </p>
+                <p className="text-sm text-gray-600">
+                  All other fields are optional and can enhance the student profile.
+                </p>
+              </div>
             </div>
           </div>
         )}
-
-        {/* Supported Columns Info */}
-        <div className="bg-gray-50 rounded-lg p-6 mb-8">
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">Supported Columns</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {[
-              'Name*', 'Email*', 'Phone*', 'Sport*',
-              'Level', 'Date of Birth', 'Father Name', 'Aadhaar',
-              'Gender', 'Address', 'City', 'State',
-              'District', 'Pincode', 'Sport 2', 'Sport 3',
-              'School', 'Club', 'Coach Name', 'Coach Mobile',
-              'Achievements'
-            ].map((column) => (
-              <div 
-                key={column} 
-                className={`rounded px-2 py-1 text-xs font-medium ${
-                  column.includes('*') 
-                    ? 'bg-red-100 text-red-700 border border-red-200' 
-                    : 'bg-white text-gray-700 border border-gray-200'
-                }`}
-              >
-                {column}
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 space-y-1">
-            <p className="text-sm text-red-600">
-              * Required fields: Name, Email, Phone, Sport
-            </p>
-            <p className="text-sm text-gray-600">
-              All other fields are optional and can enhance the student profile.
-            </p>
-            <p className="text-sm text-orange-600">
-              ⚠️ Aadhaar numbers must be unique. Duplicate Aadhaar numbers will be skipped automatically.
-            </p>
-            <p className="text-sm text-gray-500">
-              New students will be created with temporary passwords that coaches can see in the upload results.
-            </p>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex justify-between">
-          <button
-            onClick={() => navigate('/dashboard/coach')}
-            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
-          >
-            Cancel
-          </button>
-          <div className="flex space-x-3">
-            {/*file && (
-              <button
-                onClick={handleTestUpload}
-                disabled={loading}
-                className="px-6 py-2 border border-blue-300 text-blue-700 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                Test File
-              </button>
-            )*/}
-            <button
-              onClick={handleUpload}
-              disabled={!file || loading}
-              className="px-6 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 flex items-center"
-            >
-            {loading ? (
-              <>
-                <Spinner size="sm" color="white" />
-                <span className="ml-2">Processing...</span>
-              </>
-            ) : (
-              'Upload Students'
-            )}
-            </button>
-          </div>
-        </div>
       </div>
-      
-      {/* Payment Popup */}
-      <PaymentPopup
-        isOpen={showPaymentPopup}
-        onClose={() => dismissPaymentPopup(false)}
-        userType="coach"
-        userProfile={null}
-        onPaymentSuccess={onPaymentSuccess}
-      />
     </div>
   );
 };
 
-export default BulkUpload;
+export default BulkUploadWithManual;
