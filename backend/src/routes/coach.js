@@ -350,13 +350,26 @@ router.post('/students/add', authenticate, requireCoach, async (req, res) => {
       email,
       phone,
       sport,
+      sport2,
+      sport3,
       level,
       dateOfBirth,
+      fatherName,
+      aadhaar,
+      gender,
       address,
       city,
       state,
-      pincode
+      district,
+      pincode,
+      school,
+      club,
+      coachName,
+      coachMobile,
+      achievements
     } = req.body;
+
+    console.log('📝 Adding single student manually:', { name, email, phone, sport });
 
     // Check if coach has completed payment or has active subscription
     const coach = await prisma.coach.findUnique({
@@ -367,8 +380,15 @@ router.post('/students/add', authenticate, requireCoach, async (req, res) => {
       return res.status(403).json(errorResponse('Please complete payment to add students. If you chose "Pay Later", please complete the payment to access this feature.', 403));
     }
 
+    // Validate required fields
     if (!name || !email || !phone || !sport) {
       return res.status(400).json(errorResponse('Name, email, phone, and sport are required.', 400));
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json(errorResponse('Invalid email format.', 400));
     }
 
     // Check if user already exists
@@ -381,36 +401,79 @@ router.post('/students/add', authenticate, requireCoach, async (req, res) => {
       }
     });
 
-    let student;
-    if (user) {
-      // User exists, check if they have a student profile
-      student = await prisma.student.findUnique({
-        where: { userId: user.id }
+    // Check if Aadhaar already exists (if provided)
+    let aadhaarExists = false;
+    if (aadhaar) {
+      const existingAadhaar = await prisma.student.findFirst({
+        where: { aadhaar: aadhaar }
       });
-
-      if (!student) {
-        // Create student profile for existing user
-        student = await prisma.student.create({
-          data: {
-            userId: user.id,
-            name,
-            sport,
-            level: level || 'BEGINNER',
-            dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
-            address,
-            city,
-            state,
-            pincode
-          }
-        });
+      if (existingAadhaar) {
+        return res.status(400).json(errorResponse('This Aadhaar number is already registered.', 400));
       }
-    } else {
-      // Create new user and student profile
-      const tempPassword = Math.random().toString(36).slice(-8);
+    }
+
+    let student;
+    let tempPassword = null;
+    let isNewUser = false;
+
+    if (user) {
+      console.log('Existing user found:', user.id, user.role);
+      if (user.role === 'STUDENT') {
+        student = await prisma.student.findUnique({
+          where: { userId: user.id }
+        });
+        
+        if (student) {
+          // Check if student is already connected to this coach
+          const existingConnection = await prisma.studentCoachConnection.findUnique({
+            where: {
+              studentId_coachId: {
+                studentId: student.id,
+                coachId: req.coach.id
+              }
+            }
+          });
+
+          if (existingConnection) {
+            return res.status(400).json(errorResponse('This student is already connected to you.', 400));
+          }
+        }
+      } else {
+        return res.status(400).json(errorResponse(`User exists with role: ${user.role}, cannot create student profile.`, 400));
+      }
+    }
+
+    if (!student) {
+      console.log('Creating new user and student profile...');
+      isNewUser = true;
+
+      // Generate temporary password
+      tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
       const hashedPassword = await require('../utils/helpers').hashPassword(tempPassword);
 
+      // Parse date of birth if provided
+      let parsedDateOfBirth = null;
+      if (dateOfBirth) {
+        try {
+          parsedDateOfBirth = new Date(dateOfBirth);
+          if (isNaN(parsedDateOfBirth.getTime())) {
+            console.log('WARNING: Invalid date format for dateOfBirth:', dateOfBirth);
+            parsedDateOfBirth = null;
+          }
+        } catch (error) {
+          console.log('WARNING: Error parsing dateOfBirth:', error.message);
+          parsedDateOfBirth = null;
+        }
+      }
+
+      // Generate UID with format: A0001DL1124 (Type + Serial + State + MMYY)
+      const uniqueId = await generateUID('STUDENT', state || 'Delhi');
+      console.log('Generated UID for student:', uniqueId);
+
+      // Create user with student profile
       user = await prisma.user.create({
         data: {
+          uniqueId,
           email,
           phone,
           password: hashedPassword,
@@ -420,13 +483,27 @@ router.post('/students/add', authenticate, requireCoach, async (req, res) => {
           studentProfile: {
             create: {
               name,
-              sport,
+              fatherName: fatherName || null,
+              aadhaar: aadhaar || null,
+              gender: gender || null,
+              dateOfBirth: parsedDateOfBirth,
+              state: state || null,
+              district: district || null,
+              address: address || null,
+              pincode: pincode || null,
+              sport: sport,
+              sport2: sport2 || null,
+              sport3: sport3 || null,
               level: level || 'BEGINNER',
-              dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
-              address,
-              city,
-              state,
-              pincode
+              school: school || null,
+              club: club || null,
+              coachName: coachName || null,
+              coachMobile: coachMobile || null,
+              achievements: achievements ? JSON.stringify([achievements]) : null,
+              profileCompletion: calculateProfileCompletion({
+                name, email, phone, sport, fatherName,
+                dateOfBirth: parsedDateOfBirth, address, city, state
+              })
             }
           }
         },
@@ -436,12 +513,14 @@ router.post('/students/add', authenticate, requireCoach, async (req, res) => {
       });
 
       student = user.studentProfile;
-
-      // TODO: Send login credentials to student via email/SMS
-      console.log(`Temporary password for ${email}: ${tempPassword}`);
+      console.log('Created new user and student:', {
+        userId: user.id,
+        studentId: student.id,
+        profileCompletion: student.profileCompletion
+      });
     }
 
-    // Create direct connection between coach and student
+    // Create connection between coach and student
     const connection = await prisma.studentCoachConnection.create({
       data: {
         studentId: student.id,
@@ -455,7 +534,8 @@ router.post('/students/add', authenticate, requireCoach, async (req, res) => {
             user: {
               select: {
                 email: true,
-                phone: true
+                phone: true,
+                uniqueId: true
               }
             }
           }
@@ -463,11 +543,46 @@ router.post('/students/add', authenticate, requireCoach, async (req, res) => {
       }
     });
 
-    res.status(201).json(successResponse(connection, 'Student added and connected successfully.', 201));
+    const responseData = {
+      connection,
+      isNewUser,
+      studentDetails: {
+        id: student.id,
+        name: student.name,
+        email: user.email,
+        phone: user.phone,
+        uniqueId: user.uniqueId,
+        sport: student.sport,
+        level: student.level,
+        profileCompletion: student.profileCompletion
+      }
+    };
+
+    if (isNewUser && tempPassword) {
+      responseData.tempPassword = tempPassword;
+      responseData.message = `Student added successfully. Temporary password: ${tempPassword}. Please share these credentials with the student.`;
+    }
+
+    console.log('✅ Student added successfully:', student.name);
+
+    res.status(201).json(successResponse(
+      responseData,
+      isNewUser 
+        ? 'Student added and connected successfully. Temporary credentials have been generated.' 
+        : 'Student connected successfully.',
+      201
+    ));
 
   } catch (error) {
-    console.error('Add student error:', error);
-    res.status(500).json(errorResponse('Failed to add student.', 500));
+    console.error('❌ Add student error:', error);
+    
+    // Handle unique constraint errors
+    if (error.code === 'P2002') {
+      const field = error.meta?.target?.[0] || 'unknown field';
+      return res.status(400).json(errorResponse(`Duplicate ${field} - this ${field} is already in use.`, 400));
+    }
+    
+    res.status(500).json(errorResponse(error.message || 'Failed to add student.', 500));
   }
 });
 
