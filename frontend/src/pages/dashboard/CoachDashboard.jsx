@@ -750,7 +750,7 @@ const CoachDashboard = () => {
                       to="/coach/bulk-upload"
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg text-sm font-medium text-center block transition-colors"
                     >
-                      📥 Add Athletes (Bulk)
+                      📥 Add Athletes
                     </Link>
                     <Link
                       to="/coach/profile"
