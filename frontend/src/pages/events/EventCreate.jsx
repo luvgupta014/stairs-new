@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createEvent, getCoachDashboard } from '../../api';
 import Spinner from '../../components/Spinner';
 import BackButton from '../../components/BackButton';
@@ -8,11 +8,195 @@ import usePaymentStatus from '../../hooks/usePaymentStatus';
 import { useNavigate, Link } from 'react-router-dom';
 import { FaExclamationTriangle, FaCreditCard, FaMapMarkerAlt } from 'react-icons/fa';
 
+// Multi-Sport Selector Component
+const MultiSportSelector = ({ selected = [], onChange, className = '' }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef(null);
+
+  const sports = [
+    'Football',
+    'Basketball',
+    'Tennis',
+    'Cricket',
+    'Athletics',
+    'Swimming',
+    'Badminton',
+    'Volleyball',
+    'Hockey',
+    'Table Tennis',
+    'Boxing',
+    'Wrestling',
+    'Kabaddi',
+    'Archery',
+    'Cycling',
+    'Other'
+  ];
+
+  const filteredSports = sports.filter(sport =>
+    sport.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+        setSearchTerm('');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleSport = (sport) => {
+    if (selected.includes(sport)) {
+      onChange(selected.filter(s => s !== sport));
+    } else {
+      onChange([...selected, sport]);
+    }
+  };
+
+  const removeSport = (sport, e) => {
+    e.stopPropagation();
+    onChange(selected.filter(s => s !== sport));
+  };
+
+  const clearAll = (e) => {
+    e.stopPropagation();
+    onChange([]);
+  };
+
+  // SVG Icons (inline to avoid lucide-react dependency in your project)
+  const XIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="18" y1="6" x2="6" y2="18"></line>
+      <line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+  );
+
+  const ChevronDownIcon = ({ className }) => (
+    <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polyline points="6 9 12 15 18 9"></polyline>
+    </svg>
+  );
+
+  const CheckIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
+  );
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      {/* Selected Sports Display */}
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className={`min-h-[42px] w-full px-3 py-2 border border-gray-300 rounded-md cursor-pointer focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 bg-white ${className}`}
+      >
+        <div className="flex flex-wrap gap-2 items-center">
+          {selected.length === 0 ? (
+            <span className="text-gray-400">Select sports...</span>
+          ) : (
+            <>
+              {selected.map(sport => (
+                <span
+                  key={sport}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded-md text-sm font-medium"
+                >
+                  {sport}
+                  <button
+                    onClick={(e) => removeSport(sport, e)}
+                    className="hover:bg-green-200 rounded-full p-0.5 transition-colors"
+                    type="button"
+                  >
+                    <XIcon />
+                  </button>
+                </span>
+              ))}
+            </>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            {selected.length > 0 && (
+              <button
+                onClick={clearAll}
+                type="button"
+                className="text-xs text-gray-500 hover:text-gray-700 underline"
+              >
+                Clear all
+              </button>
+            )}
+            <ChevronDownIcon
+              className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Dropdown Menu */}
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-64 overflow-hidden">
+          {/* Search Input */}
+          <div className="p-2 border-b border-gray-200">
+            <input
+              type="text"
+              placeholder="Search sports..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+
+          {/* Sports List */}
+          <div className="overflow-y-auto max-h-48">
+            {filteredSports.length === 0 ? (
+              <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                No sports found
+              </div>
+            ) : (
+              filteredSports.map(sport => {
+                const isSelected = selected.includes(sport);
+                return (
+                  <div
+                    key={sport}
+                    onClick={() => toggleSport(sport)}
+                    className={`px-4 py-2 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors ${
+                      isSelected ? 'bg-green-50' : ''
+                    }`}
+                  >
+                    <span className={`text-sm ${isSelected ? 'font-medium text-green-800' : 'text-gray-700'}`}>
+                      {sport}
+                    </span>
+                    {isSelected && (
+                      <CheckIcon />
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Selected Count */}
+          {selected.length > 0 && (
+            <div className="px-4 py-2 border-t border-gray-200 bg-gray-50">
+              <span className="text-xs text-gray-600">
+                {selected.length} sport{selected.length !== 1 ? 's' : ''} selected
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const EventCreate = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    sport: '',
+    sports: [], // Changed from 'sport' to 'sports' array
     venue: '',
     address: '',
     city: '',
@@ -66,6 +250,12 @@ const EventCreate = () => {
       return;
     }
 
+    // Validate sports selection
+    if (!formData.sports || formData.sports.length === 0) {
+      setError('Please select at least one sport');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -80,9 +270,9 @@ const EventCreate = () => {
         maxParticipants: formData.maxParticipants ? parseInt(formData.maxParticipants) : null
       };
       
-      console.log('📅 Event dates being sent (IST):', {
-        startDate: eventData.startDate,
-        endDate: eventData.endDate
+      console.log('📅 Event data being sent:', {
+        ...eventData,
+        sports: eventData.sports
       });
 
       const result = await createEvent(eventData);
@@ -261,27 +451,18 @@ const EventCreate = () => {
             </div>
 
             <div>
-              <label htmlFor="sport" className="block text-sm font-medium text-gray-700 mb-2">
-                Sport *
+              <label htmlFor="sports" className="block text-sm font-medium text-gray-700 mb-2">
+                Sports * <span className="text-gray-500 font-normal">(Select one or more)</span>
               </label>
-              <select
-                id="sport"
-                name="sport"
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                value={formData.sport}
-                onChange={handleChange}
-              >
-                <option value="">Select a sport</option>
-                <option value="Football">Football</option>
-                <option value="Basketball">Basketball</option>
-                <option value="Tennis">Tennis</option>
-                <option value="Cricket">Cricket</option>
-                <option value="Athletics">Athletics</option>
-                <option value="Swimming">Swimming</option>
-                <option value="Badminton">Badminton</option>
-                <option value="Other">Other</option>
-              </select>
+              <MultiSportSelector
+                selected={formData.sports}
+                onChange={(sports) => setFormData(prev => ({ ...prev, sports }))}
+              />
+              {formData.sports.length > 0 && (
+                <p className="mt-1 text-xs text-green-600">
+                  ✓ {formData.sports.length} sport{formData.sports.length !== 1 ? 's' : ''} selected
+                </p>
+              )}
             </div>
           </div>
 
