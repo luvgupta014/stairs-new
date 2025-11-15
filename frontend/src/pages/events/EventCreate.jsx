@@ -265,14 +265,19 @@ const EventCreate = () => {
       // Format: YYYY-MM-DDTHH:mm becomes YYYY-MM-DDTHH:mm:ss for backend
       const eventData = {
         ...formData,
+        // Convert sports array to comma-separated string for backend
+        sport: formData.sports.join(', '),
         startDate: formData.startDate ? formData.startDate + ':00' : '',
         endDate: formData.endDate ? formData.endDate + ':00' : null,
         maxParticipants: formData.maxParticipants ? parseInt(formData.maxParticipants) : null
       };
       
+      // Remove the sports array since we're sending sport string
+      delete eventData.sports;
+      
       console.log('📅 Event data being sent:', {
         ...eventData,
-        sports: eventData.sports
+        sport: eventData.sport
       });
 
       const result = await createEvent(eventData);
