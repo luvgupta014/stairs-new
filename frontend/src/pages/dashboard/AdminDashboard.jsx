@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getAdminDashboard, moderateEvent, getAdminEvents, getEventParticipants } from '../../api';
 import InfoModal from '../../components/InfoModal';
 import DetailModal from '../../components/DetailModal';
@@ -7,6 +7,8 @@ import ActionModal from '../../components/ActionModal';
 import ParticipantsModal from '../../components/ParticipantsModal';
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
+  
   // Loading and error states
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -49,9 +51,6 @@ export default function AdminDashboard() {
     search: ''
   });
 
-  // View state for expanded sections
-  const [expandedSection, setExpandedSection] = useState(null); // 'athletes', 'coaches', 'institutes', 'clubs'
-
   // Modal states
   const [infoModal, setInfoModal] = useState({
     isOpen: false,
@@ -90,10 +89,6 @@ export default function AdminDashboard() {
   const CACHE_DURATION = 120000; // 2 minutes cache
   const searchDebounceTimer = useRef(null);
   const recentRegistrationsRef = useRef(null);
-  const athletesRef = useRef(null);
-  const coachesRef = useRef(null);
-  const institutesRef = useRef(null);
-  const clubsRef = useRef(null);
 
   // Modal helper functions
   const showInfoModal = (title, content, type = 'info', data = null) => {
@@ -466,11 +461,6 @@ export default function AdminDashboard() {
     return user.email || 'Unknown User';
   };
 
-  // Filter users by role
-  const getUsersByRole = (role) => {
-    return recentUsers.filter(user => user.role === role);
-  };
-
   // Filter recent users based on filters
   const getFilteredRecentUsers = () => {
     return recentUsers.filter(user => {
@@ -485,20 +475,6 @@ export default function AdminDashboard() {
         user.email?.toLowerCase().includes(search) ||
         (user.uniqueId && user.uniqueId.toLowerCase().includes(search));
       return matchesRole && matchesStatus && matchesSearch;
-    });
-  };
-
-  // Get filtered users by role with search
-  const getFilteredUsersByRole = (role) => {
-    const search = registrationFilters.search?.toLowerCase() || '';
-    return recentUsers.filter(user => {
-      const userName = getUserName(user);
-      const matchesRole = user.role === role;
-      const matchesSearch = !search ||
-        userName?.toLowerCase().includes(search) ||
-        user.email?.toLowerCase().includes(search) ||
-        (user.uniqueId && user.uniqueId.toLowerCase().includes(search));
-      return matchesRole && matchesSearch;
     });
   };
 
@@ -611,20 +587,14 @@ export default function AdminDashboard() {
             icon="👥"
             color="blue"
             growth={stats.monthlyGrowth}
-            onClick={() => {
-              setRegistrationFilters({ role: '', status: '', search: '' });
-              setExpandedSection(null);
-              setTimeout(() => {
-                recentRegistrationsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }, 100);
-            }}
+            onClick={() => navigate('/admin/users')}
           />
           <StatCard
             title="Total Events"
             value={stats.totalEvents}
             icon="🎯"
             color="green"
-            onClick={() => setActiveTab('all')}
+            onClick={() => navigate('/admin/events')}
           />
           <StatCard
             title="Pending Events"
@@ -640,63 +610,39 @@ export default function AdminDashboard() {
             icon="💰"
             color="red"
             growth={typeof stats.revenueGrowth === 'number' ? stats.revenueGrowth : undefined}
-            onClick={() => window.location.href = '/admin/revenue'}
+            onClick={() => navigate('/admin/revenue')}
           />
         </div>
 
-        {/* Secondary Stats - Clickable to expand sections */}
+        {/* Secondary Stats - Navigate to separate pages */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <StatCard
             title="Athletes"
             value={stats.totalAthletes}
             icon="🏃"
             color="indigo"
-            onClick={() => {
-              setExpandedSection(expandedSection === 'athletes' ? null : 'athletes');
-              setRegistrationFilters({ role: '', status: '', search: '' });
-              setTimeout(() => {
-                athletesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }, 100);
-            }}
+            onClick={() => navigate('/admin/users?role=ATHLETE')}
           />
           <StatCard
             title="Coaches"
             value={stats.totalCoaches}
             icon="🏆"
             color="purple"
-            onClick={() => {
-              setExpandedSection(expandedSection === 'coaches' ? null : 'coaches');
-              setRegistrationFilters({ role: '', status: '', search: '' });
-              setTimeout(() => {
-                coachesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }, 100);
-            }}
+            onClick={() => navigate('/admin/users?role=COACH')}
           />
           <StatCard
             title="Institutes"
             value={stats.totalInstitutes}
             icon="🏫"
             color="pink"
-            onClick={() => {
-              setExpandedSection(expandedSection === 'institutes' ? null : 'institutes');
-              setRegistrationFilters({ role: '', status: '', search: '' });
-              setTimeout(() => {
-                institutesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }, 100);
-            }}
+            onClick={() => navigate('/admin/users?role=INSTITUTE')}
           />
           <StatCard
             title="Clubs"
             value={stats.totalClubs}
             icon="🏟️"
             color="teal"
-            onClick={() => {
-              setExpandedSection(expandedSection === 'clubs' ? null : 'clubs');
-              setRegistrationFilters({ role: '', status: '', search: '' });
-              setTimeout(() => {
-                clubsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }, 100);
-            }}
+            onClick={() => navigate('/admin/users?role=CLUB')}
           />
         </div>
 
@@ -793,235 +739,97 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Athletes Section */}
-        {expandedSection === 'athletes' && (
-          <div ref={athletesRef} className="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-gray-900">All Athletes ({getFilteredUsersByRole('ATHLETE').length})</h3>
-              <button
-                onClick={() => setExpandedSection(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Search Bar */}
-            <div className="mb-4">
-              <input
-                type="text"
-                placeholder="Search athletes by name, email or UID..."
-                value={registrationFilters.search}
-                onChange={(e) => handleRegistrationFilterChange('search', e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {getFilteredUsersByRole('ATHLETE').length > 0 ? (
-              <UserTable users={getFilteredUsersByRole('ATHLETE')} getUserName={getUserName} showDetailModal={showDetailModal} />
-            ) : (
-              <EmptyState message="No athletes found" />
-            )}
+        {/* Recent Users Section */}
+        <div ref={recentRegistrationsRef} className="bg-white rounded-xl shadow-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-semibold text-gray-900">Recent Registrations ({getFilteredRecentUsers().length})</h3>
+            <button
+              onClick={() => fetchDashboardData(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors"
+            >
+              Refresh
+            </button>
           </div>
-        )}
 
-        {/* Coaches Section */}
-        {expandedSection === 'coaches' && (
-          <div ref={coachesRef} className="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-gray-900">All Coaches ({getFilteredUsersByRole('COACH').length})</h3>
-              <button
-                onClick={() => setExpandedSection(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+          {/* Registration Filter Bar */}
+          <div className="bg-gray-50 rounded-lg p-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                <select
+                  value={registrationFilters.role}
+                  onChange={(e) => handleRegistrationFilterChange('role', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  <option value="">All Roles</option>
+                  <option value="ATHLETE">Athletes</option>
+                  <option value="COACH">Coaches</option>
+                  <option value="INSTITUTE">Institutes</option>
+                  <option value="CLUB">Clubs</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={registrationFilters.status}
+                  onChange={(e) => handleRegistrationFilterChange('status', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="active">Active</option>
+                  <option value="pending">Pending</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                <input
+                  type="text"
+                  placeholder="Search by name, email or uid..."
+                  value={registrationFilters.search}
+                  onChange={(e) => handleRegistrationFilterChange('search', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              
+              <div className="flex items-end">
+                <button
+                  onClick={() => setRegistrationFilters({ role: '', status: '', search: '' })}
+                  className="w-full px-3 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors text-sm"
+                >
+                  Clear Filters
+                </button>
+              </div>
             </div>
-
-            {/* Search Bar */}
-            <div className="mb-4">
-              <input
-                type="text"
-                placeholder="Search coaches by name, email or UID..."
-                value={registrationFilters.search}
-                onChange={(e) => handleRegistrationFilterChange('search', e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {getFilteredUsersByRole('COACH').length > 0 ? (
-              <UserTable users={getFilteredUsersByRole('COACH')} getUserName={getUserName} showDetailModal={showDetailModal} />
-            ) : (
-              <EmptyState message="No coaches found" />
-            )}
           </div>
-        )}
-
-        {/* Institutes Section */}
-        {expandedSection === 'institutes' && (
-          <div ref={institutesRef} className="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-gray-900">All Institutes ({getFilteredUsersByRole('INSTITUTE').length})</h3>
-              <button
-                onClick={() => setExpandedSection(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Search Bar */}
-            <div className="mb-4">
-              <input
-                type="text"
-                placeholder="Search institutes by name, email or UID..."
-                value={registrationFilters.search}
-                onChange={(e) => handleRegistrationFilterChange('search', e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {getFilteredUsersByRole('INSTITUTE').length > 0 ? (
-              <UserTable users={getFilteredUsersByRole('INSTITUTE')} getUserName={getUserName} showDetailModal={showDetailModal} />
-            ) : (
-              <EmptyState message="No institutes found" />
-            )}
-          </div>
-        )}
-
-        {/* Clubs Section */}
-        {expandedSection === 'clubs' && (
-          <div ref={clubsRef} className="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-gray-900">All Clubs ({getFilteredUsersByRole('CLUB').length})</h3>
-              <button
-                onClick={() => setExpandedSection(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Search Bar */}
-            <div className="mb-4">
-              <input
-                type="text"
-                placeholder="Search clubs by name, email or UID..."
-                value={registrationFilters.search}
-                onChange={(e) => handleRegistrationFilterChange('search', e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {getFilteredUsersByRole('CLUB').length > 0 ? (
-              <UserTable users={getFilteredUsersByRole('CLUB')} getUserName={getUserName} showDetailModal={showDetailModal} />
-            ) : (
-              <EmptyState message="No clubs found" />
-            )}
-          </div>
-        )}
-
-        {/* Recent Users - Only show if no section is expanded */}
-        {!expandedSection && (
-          <div ref={recentRegistrationsRef} className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-gray-900">Recent Registrations ({getFilteredRecentUsers().length})</h3>
-              <button
-                onClick={() => fetchDashboardData(true)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors"
-              >
-                Refresh
-              </button>
-            </div>
-
-            {/* Registration Filter Bar */}
-            <div className="bg-gray-50 rounded-lg p-4 mb-6">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          
+          {getFilteredRecentUsers().length > 0 ? (
+            <UserTable users={getFilteredRecentUsers()} getUserName={getUserName} showDetailModal={showDetailModal} />
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              {Object.values(registrationFilters).some(filter => filter) ? (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                  <select
-                    value={registrationFilters.role}
-                    onChange={(e) => handleRegistrationFilterChange('role', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  >
-                    <option value="">All Roles</option>
-                    <option value="ATHLETE">Athletes</option>
-                    <option value="COACH">Coaches</option>
-                    <option value="INSTITUTE">Institutes</option>
-                    <option value="CLUB">Clubs</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <select
-                    value={registrationFilters.status}
-                    onChange={(e) => handleRegistrationFilterChange('status', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  >
-                    <option value="">All Statuses</option>
-                    <option value="active">Active</option>
-                    <option value="pending">Pending</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-                  <input
-                    type="text"
-                    placeholder="Search by name, email or uid..."
-                    value={registrationFilters.search}
-                    onChange={(e) => handleRegistrationFilterChange('search', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                </div>
-                
-                <div className="flex items-end">
+                  <div className="text-4xl mb-4">🔍</div>
+                  <h4 className="text-lg font-medium text-gray-900 mb-2">No Users Found</h4>
+                  <p>No users match your current filters.</p>
                   <button
                     onClick={() => setRegistrationFilters({ role: '', status: '', search: '' })}
-                    className="w-full px-3 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors text-sm"
+                    className="mt-3 text-blue-600 hover:text-blue-700 font-medium"
                   >
-                    Clear Filters
+                    Clear filters to see all users
                   </button>
                 </div>
-              </div>
+              ) : (
+                <div>
+                  <div className="text-4xl mb-4">👥</div>
+                  <h4 className="text-lg font-medium text-gray-900 mb-2">No Recent Users</h4>
+                  <p>No recent user registrations found.</p>
+                </div>
+              )}
             </div>
-            
-            {getFilteredRecentUsers().length > 0 ? (
-              <UserTable users={getFilteredRecentUsers()} getUserName={getUserName} showDetailModal={showDetailModal} />
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                {Object.values(registrationFilters).some(filter => filter) ? (
-                  <div>
-                    <div className="text-4xl mb-4">🔍</div>
-                    <h4 className="text-lg font-medium text-gray-900 mb-2">No Users Found</h4>
-                    <p>No users match your current filters.</p>
-                    <button
-                      onClick={() => setRegistrationFilters({ role: '', status: '', search: '' })}
-                      className="mt-3 text-blue-600 hover:text-blue-700 font-medium"
-                    >
-                      Clear filters to see all users
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <div className="text-4xl mb-4">👥</div>
-                    <h4 className="text-lg font-medium text-gray-900 mb-2">No Recent Users</h4>
-                    <p>No recent user registrations found.</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Modals */}
         <InfoModal
@@ -1122,14 +930,6 @@ const UserTable = ({ users, getUserName, showDetailModal }) => (
         ))}
       </tbody>
     </table>
-  </div>
-);
-
-// Empty State Component
-const EmptyState = ({ message }) => (
-  <div className="text-center py-8 text-gray-500">
-    <div className="text-4xl mb-4">🔍</div>
-    <h4 className="text-lg font-medium text-gray-900 mb-2">{message}</h4>
   </div>
 );
 
