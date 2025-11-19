@@ -452,7 +452,9 @@ export default function AdminDashboard() {
 
   const getUserName = (user) => {
     if (!user) return 'Unknown User';
-    if (user.name) return user.name;
+    // Check flattened name field first (from backend formatting)
+    if (user.name && user.name !== 'Unknown') return user.name;
+    // Then check nested profile objects
     if (user.studentProfile?.name) return user.studentProfile.name;
     if (user.coachProfile?.name) return user.coachProfile.name;
     if (user.instituteProfile?.name) return user.instituteProfile.name;
@@ -602,7 +604,7 @@ export default function AdminDashboard() {
             icon="⏳"
             color="orange"
             urgent={stats.pendingEvents > 0}
-            onClick={() => setActiveTab('pending')}
+            onClick={() => navigate('/admin/events?status=PENDING')}
           />
           <StatCard
             title="Revenue"
@@ -621,7 +623,7 @@ export default function AdminDashboard() {
             value={stats.totalAthletes}
             icon="🏃"
             color="indigo"
-            onClick={() => navigate('/admin/users?role=ATHLETE')}
+            onClick={() => navigate('/admin/users?role=STUDENT')}
           />
           <StatCard
             title="Coaches"

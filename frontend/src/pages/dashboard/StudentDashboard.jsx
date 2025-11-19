@@ -28,6 +28,24 @@ const StudentDashboard = () => {
   const [connectedCoaches, setConnectedCoaches] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [registeringEventId, setRegisteringEventId] = useState(null);
+
+  // Format notification time
+  const formatNotificationTime = (timeOrDate) => {
+    // If it's already a formatted string like "2 hours ago", return it
+    if (typeof timeOrDate === 'string' && timeOrDate.includes('ago')) {
+      return timeOrDate;
+    }
+    
+    // Otherwise format as date/time
+    const now = new Date();
+    const notificationTime = new Date(timeOrDate);
+    const diffInMinutes = Math.floor((now - notificationTime) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+    return `${Math.floor(diffInMinutes / 1440)}d ago`;
+  };
   
   // ADDED: Filter states for events
   const [eventsFilter, setEventsFilter] = useState('all'); // all, registered, pending, approved
@@ -584,7 +602,9 @@ const StudentDashboard = () => {
                         </div>
                         <div className="flex-1">
                           <p className="text-sm text-gray-900">{notification.message}</p>
-                          <p className="text-xs text-gray-500 mt-1">{notification.time}</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {formatNotificationTime(notification.createdAt || notification.time)}
+                          </p>
                         </div>
                       </div>
                     ))}
@@ -948,7 +968,9 @@ const StudentDashboard = () => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900">{notification.message}</p>
-                          <p className="text-xs text-gray-500 mt-1">{notification.time}</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {formatNotificationTime(notification.createdAt || notification.time)}
+                          </p>
                         </div>
                       </div>
                     ))}
