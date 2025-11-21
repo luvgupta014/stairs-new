@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getEventById, getEligibleStudents, issueCertificates, getEventCertificates } from '../api';
+import { getEventById, getEligibleStudents, getEventCertificates } from '../api';
 import Spinner from '../components/Spinner';
 
 const IssueCertificates = () => {
@@ -160,15 +160,23 @@ const IssueCertificates = () => {
       setIssuing(true);
       setError(null);
 
-      const response = await issueCertificates({
-        eventId,
-        orderId: null,
-        selectedStudents,
-        certificateType: 'participation'
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/certificates/issue`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          eventId,
+          selectedStudents
+        })
       });
 
-      if (response.success) {
-        setSuccess(`Successfully issued ${response.data.issued} participation certificate(s)!`);
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess(`Successfully issued ${data.data.issued} participation certificate(s)!`);
         setSelectedStudents([]);
         
         setTimeout(() => {
@@ -177,7 +185,7 @@ const IssueCertificates = () => {
           setSuccess(null);
         }, 2000);
       } else {
-        throw new Error(response.message || 'Failed to issue certificates');
+        throw new Error(data.message || 'Failed to issue certificates');
       }
     } catch (err) {
       console.error('Error issuing certificates:', err);
@@ -217,16 +225,25 @@ const IssueCertificates = () => {
         positionsData[id] = position === 'custom' ? customPositions[id] : position;
       });
 
-      const response = await issueCertificates({
-        eventId,
-        orderId: null,
-        selectedStudents,
-        certificateType: 'winning',
-        positions: positionsData
+      // FIX: Call the correct endpoint for winning certificates
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/certificates/issue/winning`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          eventId,
+          selectedStudents,
+          positions: positionsData
+        })
       });
 
-      if (response.success) {
-        setSuccess(`Successfully issued ${response.data.issued} winning certificate(s)!`);
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess(`Successfully issued ${data.data.issued} winning certificate(s)!`);
         setSelectedStudents([]);
         setStudentPositions({});
         setCustomPositions({});
@@ -238,7 +255,7 @@ const IssueCertificates = () => {
           setSuccess(null);
         }, 2000);
       } else {
-        throw new Error(response.message || 'Failed to issue certificates');
+        throw new Error(data.message || 'Failed to issue certificates');
       }
     } catch (err) {
       console.error('Error issuing certificates:', err);
