@@ -18,7 +18,23 @@ const IssueCertificates = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [activeTab, setActiveTab] = useState('issue');
-  const [certificateType, setCertificateType] = useState('participation'); // 'participation' or 'winning'
+  
+  // Position/Award management
+  const [showPositionModal, setShowPositionModal] = useState(false);
+  const [studentPositions, setStudentPositions] = useState({});
+  const [customPositions, setCustomPositions] = useState({});
+
+  const quickPositions = [
+    { value: '1st', label: '🥇 1st Place', color: 'bg-yellow-500' },
+    { value: '2nd', label: '🥈 2nd Place', color: 'bg-gray-400' },
+    { value: '3rd', label: '🥉 3rd Place', color: 'bg-amber-600' },
+    { value: 'Winner', label: '🏆 Winner', color: 'bg-purple-500' },
+    { value: 'Runner Up', label: '🎖️ Runner Up', color: 'bg-blue-500' },
+    { value: 'Best Performance', label: '⭐ Best Performance', color: 'bg-green-500' },
+    { value: 'Most Valuable Player', label: '👑 MVP', color: 'bg-red-500' },
+    { value: 'Champion', label: '🏅 Champion', color: 'bg-indigo-500' },
+    { value: 'custom', label: '✏️ Custom Award', color: 'bg-gray-600' }
+  ];
 
   useEffect(() => {
     loadEvent();
@@ -90,6 +106,15 @@ const IssueCertificates = () => {
   const handleStudentToggle = (studentId) => {
     setSelectedStudents(prev => {
       if (prev.includes(studentId)) {
+        // Remove student and clear their position
+        const newPositions = { ...studentPositions };
+        delete newPositions[studentId];
+        setStudentPositions(newPositions);
+        
+        const newCustom = { ...customPositions };
+        delete newCustom[studentId];
+        setCustomPositions(newCustom);
+        
         return prev.filter(id => id !== studentId);
       } else {
         setError(null);
@@ -101,6 +126,8 @@ const IssueCertificates = () => {
   const handleSelectAll = () => {
     if (selectedStudents.length === eligibleStudents.length) {
       setSelectedStudents([]);
+      setStudentPositions({});
+      setCustomPositions({});
     } else {
       const studentsToSelect = eligibleStudents.map(s => s.id);
       setSelectedStudents(studentsToSelect);
@@ -114,8 +141,17 @@ const IssueCertificates = () => {
       return;
     }
 
-    const typeLabel = type === 'participation' ? 'Participation' : 'Winning';
-    const confirmMsg = `Are you sure you want to issue ${typeLabel} certificates to ${selectedStudents.length} student(s)? This action cannot be undone.`;
+    if (type === 'winning') {
+      // Show position modal for winning certificates
+      setShowPositionModal(true);
+    } else {
+      // Issue participation certificates directly
+      issueParticipationCertificates();
+    }
+  };
+
+  const issueParticipationCertificates = async () => {
+    const confirmMsg = `Are you sure you want to issue Participation certificates to ${selectedStudents.length} student(s)? This action cannot be undone.`;
     if (!window.confirm(confirmMsg)) {
       return;
     }
@@ -128,11 +164,11 @@ const IssueCertificates = () => {
         eventId,
         orderId: null,
         selectedStudents,
-        certificateType: type
+        certificateType: 'participation'
       });
 
       if (response.success) {
-        setSuccess(`Successfully issued ${response.data.issued} ${typeLabel.toLowerCase()} certificate(s)!`);
+        setSuccess(`Successfully issued ${response.data.issued} participation certificate(s)!`);
         setSelectedStudents([]);
         
         setTimeout(() => {
@@ -149,6 +185,92 @@ const IssueCertificates = () => {
     } finally {
       setIssuing(false);
     }
+  };
+
+  const issueWinningCertificates = async () => {
+    // Validate all selected students have positions
+    const missingPositions = selectedStudents.filter(id => {
+      const position = studentPositions[id];
+      if (!position) return true;
+      if (position === 'custom' && !customPositions[id]?.trim()) return true;
+      return false;
+    });
+    
+    if (missingPositions.length > 0) {
+      setError(`Please assign positions/awards to all ${missingPositions.length} remaining student(s)`);
+      return;
+    }
+
+    const confirmMsg = `Are you sure you want to issue Winning certificates to ${selectedStudents.length} student(s)? This action cannot be undone.`;
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+
+    try {
+      setIssuing(true);
+      setError(null);
+
+      // Build positions data with final values
+      const positionsData = {};
+      selectedStudents.forEach(id => {
+        const position = studentPositions[id];
+        positionsData[id] = position === 'custom' ? customPositions[id] : position;
+      });
+
+      const response = await issueCertificates({
+        eventId,
+        orderId: null,
+        selectedStudents,
+        certificateType: 'winning',
+        positions: positionsData
+      });
+
+      if (response.success) {
+        setSuccess(`Successfully issued ${response.data.issued} winning certificate(s)!`);
+        setSelectedStudents([]);
+        setStudentPositions({});
+        setCustomPositions({});
+        setShowPositionModal(false);
+        
+        setTimeout(() => {
+          loadEligibleStudentsDirectly();
+          loadIssuedCertificates();
+          setSuccess(null);
+        }, 2000);
+      } else {
+        throw new Error(response.message || 'Failed to issue certificates');
+      }
+    } catch (err) {
+      console.error('Error issuing certificates:', err);
+      setError(err.message || 'Failed to issue certificates');
+    } finally {
+      setIssuing(false);
+    }
+  };
+
+  const handlePositionSelect = (studentId, position) => {
+    setStudentPositions(prev => ({
+      ...prev,
+      [studentId]: position
+    }));
+    
+    // Clear custom input if switching away from custom
+    if (position !== 'custom') {
+      const newCustom = { ...customPositions };
+      delete newCustom[studentId];
+      setCustomPositions(newCustom);
+    }
+  };
+
+  const handleCustomPositionChange = (studentId, value) => {
+    setCustomPositions(prev => ({
+      ...prev,
+      [studentId]: value
+    }));
+  };
+
+  const getStudentById = (id) => {
+    return eligibleStudents.find(s => s.id === id);
   };
 
   if (loading) {
@@ -475,17 +597,6 @@ const IssueCertificates = () => {
                             className="inline-flex items-center px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                           >
                             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                            View
-                          </a>
-                          <a
-                            href={`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}${cert.certificateUrl}`}
-                            download
-                            className="inline-flex items-center px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                          >
-                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                             </svg>
                             Download
@@ -513,6 +624,120 @@ const IssueCertificates = () => {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Position Assignment Modal */}
+        {showPositionModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200 sticky top-0 bg-white">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="text-2xl font-bold text-gray-900">Assign Positions/Awards</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Assign positions or awards to {selectedStudents.length} selected student(s)
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowPositionModal(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {selectedStudents.map((studentId) => {
+                  const student = getStudentById(studentId);
+                  if (!student) return null;
+
+                  return (
+                    <div key={studentId} className="bg-gray-50 rounded-lg p-4 border-2 border-gray-200">
+                      <div className="flex items-center mb-4">
+                        <div className="w-12 h-12 bg-gradient-to-r from-teal-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-lg mr-4">
+                          {student.name.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">{student.name}</p>
+                          <p className="text-sm text-gray-600">UID: {student.uniqueId || student.studentId}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                        {quickPositions.map((pos) => (
+                          <button
+                            key={pos.value}
+                            onClick={() => handlePositionSelect(studentId, pos.value)}
+                            className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                              studentPositions[studentId] === pos.value
+                                ? 'border-teal-600 bg-teal-50 text-teal-700'
+                                : 'border-gray-300 hover:border-teal-400 text-gray-700'
+                            }`}
+                          >
+                            {pos.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {studentPositions[studentId] === 'custom' && (
+                        <div className="mt-4">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Enter Custom Award/Position
+                          </label>
+                          <input
+                            type="text"
+                            value={customPositions[studentId] || ''}
+                            onChange={(e) => handleCustomPositionChange(studentId, e.target.value)}
+                            placeholder="e.g., Best Goalkeeper, Top Scorer..."
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                          />
+                        </div>
+                      )}
+
+                      {studentPositions[studentId] && studentPositions[studentId] !== 'custom' && (
+                        <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded text-sm text-green-700">
+                          ✓ Position assigned: <strong>{studentPositions[studentId]}</strong>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="p-6 border-t border-gray-200 bg-gray-50 sticky bottom-0">
+                <div className="flex justify-between items-center">
+                  <button
+                    onClick={() => setShowPositionModal(false)}
+                    className="px-6 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={issueWinningCertificates}
+                    disabled={issuing}
+                    className="px-6 py-3 bg-yellow-600 text-white rounded-lg font-semibold hover:bg-yellow-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center"
+                  >
+                    {issuing ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                        Issuing Certificates...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Issue {selectedStudents.length} Winning Certificate(s)
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
