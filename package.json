@@ -20,5 +20,8 @@
     "@faker-js/faker": "^10.1.0",
     "@playwright/test": "^1.56.1",
     "playwright": "^1.56.1"
+  },
+  "dependencies": {
+    "prisma": "^7.0.0"
   }
 }

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, requireCoach, requireAdmin } = require('../utils/authMiddleware');
+const { authenticate, requireAdmin } = require('../utils/authMiddleware');
 const certificateService = require('../services/certificateService');
 const EventService = require('../services/eventService');
 const { PrismaClient } = require('@prisma/client');
@@ -11,169 +11,143 @@ const eventService = new EventService();
 const successResponse = (data, message = 'Success') => ({ success: true, message, data });
 const errorResponse = (message, statusCode = 400) => ({ success: false, message, statusCode });
 
-/**
- * @route   POST /api/certificates/issue
- * @desc    Issue certificates to selected students (Admin only)
- * @access  Private (Admin)
- */
+// Utility to fetch event and students
+async function fetchEventAndStudents(eventId, selectedStudents) {
+  const event = await eventService.resolveEventId(eventId);
+  if (!event) throw new Error('Event not found or you do not have permission');
+
+  const students = await prisma.student.findMany({
+    where: { id: { in: selectedStudents } },
+    select: {
+      id: true,
+      name: true,
+      user: { select: { uniqueId: true } }
+    }
+  });
+
+  if (students.length !== selectedStudents.length) {
+    throw new Error('Some selected students were not found');
+  }
+
+  return { event, students };
+}
+
+// Generic function to prepare certificate data
+function prepareCertificatesData(event, students, orderId = null) {
+  const eventDate = new Date(event.startDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  return students.map(student => ({
+    participantName: student.name,
+    sportName: event.sport,
+    eventName: event.name,
+    eventDate: eventDate,
+    date: eventDate,
+    studentId: student.id,
+    studentUniqueId: student.user.uniqueId,
+    eventId: event.id,
+    eventUniqueId: event.uniqueId,
+    orderId: orderId
+  }));
+}
+
+// POST /api/certificates/issue - Participation Certificates
 router.post('/issue', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { eventId, orderId, selectedStudents } = req.body;
-
-    console.log(`📜 Certificate issuance request:`, { eventId, orderId, selectedStudents: selectedStudents?.length });
-
-    // Validate input
+    const { eventId, selectedStudents } = req.body;
     if (!eventId || !selectedStudents || selectedStudents.length === 0) {
       return res.status(400).json(errorResponse('Missing required fields: eventId or selectedStudents'));
     }
 
-    // Use EventService resolver to handle both database ID and uniqueId
-    let event;
-    try {
-      event = await eventService.resolveEventId(eventId);
-    } catch (error) {
-      console.log(`❌ Event not found for ID: ${eventId}`);
-      return res.status(404).json(errorResponse('Event not found or you do not have permission'));
-    }
+    const { event, students } = await fetchEventAndStudents(eventId, selectedStudents);
 
-    if (!event) {
-      return res.status(404).json(errorResponse('Event not found or you do not have permission'));
-    }
-
-    // COMMENTED OUT: Order verification and payment check
-    // Admin can now issue certificates without order completion constraint
-    /*
-    // Verify the order and check payment status
-    const order = await prisma.eventOrder.findFirst({
-      where: {
-        id: orderId,
-        eventId,
-        paymentStatus: 'SUCCESS'
-      },
-      select: {
-        id: true,
-        certificates: true,
-        orderNumber: true
-      }
-    });
-
-    if (!order) {
-      return res.status(404).json(errorResponse('Order not found or payment not completed'));
-    }
-
-    // Check if trying to issue more certificates than paid for
-    if (selectedStudents.length > order.certificates) {
-      return res.status(400).json(errorResponse(
-        `You can only issue ${order.certificates} certificate(s). You selected ${selectedStudents.length} students.`
-      ));
-    }
-    */
-
-    // Get student details for selected students
-    const students = await prisma.student.findMany({
-      where: {
-        id: { in: selectedStudents }
-      },
-      select: {
-        id: true,
-        name: true,
-        user: {
-          select: {
-            uniqueId: true
-          }
-        }
-      }
-    });
-
-    if (students.length !== selectedStudents.length) {
-      return res.status(400).json(errorResponse('Some selected students were not found'));
-    }
-
-    // Check for already issued certificates (without orderId constraint)
+    // Check for existing certificates
     const existingCertificates = await prisma.certificate.findMany({
-      where: {
-        eventId: event.id,
-        // orderId, // Removed orderId constraint
-        studentId: { in: selectedStudents }
-      },
-      select: {
-        studentId: true
-      }
+      where: { eventId: event.id, studentId: { in: selectedStudents } },
+      select: { studentId: true }
     });
 
     if (existingCertificates.length > 0) {
-      const alreadyIssuedIds = existingCertificates.map(c => c.studentId);
-      return res.status(400).json(errorResponse(
-        `Certificates already issued for some students. Already issued count: ${alreadyIssuedIds.length}`
-      ));
+      return res.status(400).json(errorResponse(`Certificates already issued for ${existingCertificates.length} student(s)`));
     }
 
-    // Prepare certificate data for each student
-    const eventDate = new Date(event.startDate).toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-    
-    // CRITICAL: Pass database IDs internally, UIDs only for display
-    const certificatesData = students.map(student => ({
-      participantName: student.name,
-      sportName: event.sport,
-      eventName: event.name,
-      eventDate: eventDate,
-      date: eventDate, // For backwards compatibility
-      studentId: student.id, // Use database ID internally
-      studentUniqueId: student.user.uniqueId, // For display on certificate
-      eventId: event.id, // Use database ID internally
-      eventUniqueId: event.uniqueId, // For display on certificate
-      orderId: orderId || null // Optional orderId
-    }));
+    const certificatesData = prepareCertificatesData(event, students);
 
-    // Log certificate data being prepared
-    console.log(`📋 Certificate data prepared:`);
-    certificatesData.forEach((cert, idx) => {
-      console.log(`   [${idx}] eventUniqueId=${cert.eventUniqueId}, studentUniqueId=${cert.studentUniqueId}`);
-    }); 
-
-    // Generate certificates
-    console.log(`🎓 Generating ${certificatesData.length} certificate(s)...`);
     const { results, errors } = await certificateService.generateBulkCertificates(certificatesData);
 
-    if (errors.length > 0) {
-      console.error('⚠️ Some certificates failed to generate:', errors);
-    }
-
-    // Create notifications for students
+    // Create notifications
     for (const certificate of results) {
-      await prisma.notification.create({
-        data: {
-          userId: (await prisma.student.findUnique({ 
-            where: { id: certificate.studentId },
-            select: { userId: true }
-          })).userId,
-          type: 'GENERAL',
-          title: '🎓 Certificate Issued!',
-          message: `Your certificate for ${event.name} has been issued. You can download it from your dashboard.`,
-          data: JSON.stringify({ 
-            certificateId: certificate.id,
-            certificateUrl: certificate.certificateUrl 
-          })
-        }
-      });
+      const student = await prisma.student.findUnique({ where: { id: certificate.studentId }, select: { userId: true } });
+      if (student) {
+        await prisma.notification.create({
+          data: {
+            userId: student.userId,
+            type: 'GENERAL',
+            title: '🎓 Certificate Issued!',
+            message: `Your certificate for ${event.name} has been issued. You can download it from your dashboard.`,
+            data: JSON.stringify({ certificateId: certificate.id, certificateUrl: certificate.certificateUrl })
+          }
+        });
+      }
     }
 
-    console.log(`✅ Successfully issued ${results.length} certificate(s)`);
-
-    res.json(successResponse({
-      issued: results.length,
-      failed: errors.length,
-      certificates: results,
-      errors
-    }, `Successfully issued ${results.length} certificate(s)`));
-
+    res.json(successResponse({ issued: results.length, failed: errors.length, certificates: results, errors }, `Successfully issued ${results.length} participation certificate(s)`));
   } catch (error) {
-    console.error('❌ Error issuing certificates:', error);
-    res.status(500).json(errorResponse('Failed to issue certificates. Please try again.', 500));
+    console.error('❌ Error issuing participation certificates:', error);
+    res.status(500).json(errorResponse(error.message || 'Failed to issue certificates'));
+  }
+});
+
+// POST /api/certificates/issue/winning - Winning Certificates
+router.post('/issue/winning', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId, selectedStudents, positions } = req.body;
+    if (!eventId || !selectedStudents || selectedStudents.length === 0) {
+      return res.status(400).json(errorResponse('Missing required fields: eventId or selectedStudents'));
+    }
+
+    if (!positions || Object.keys(positions).length !== selectedStudents.length) {
+      return res.status(400).json(errorResponse('Positions/awards must be assigned to all selected students'));
+    }
+
+    const { event, students } = await fetchEventAndStudents(eventId, selectedStudents);
+
+    // Check for already issued certificates
+    const existingCertificates = await prisma.certificate.findMany({
+      where: { eventId: event.id, studentId: { in: selectedStudents } },
+      select: { studentId: true }
+    });
+    if (existingCertificates.length > 0) {
+      return res.status(400).json(errorResponse(`Certificates already issued for ${existingCertificates.length} student(s)`));
+    }
+
+    // Add positions to certificates data
+    const certificatesData = prepareCertificatesData(event, students).map(cert => ({
+      ...cert,
+      position: positions[cert.studentId]
+    }));
+
+    const { results, errors } = await certificateService.generateBulkCertificates(certificatesData);
+
+    // Create notifications
+    for (const certificate of results) {
+      const student = await prisma.student.findUnique({ where: { id: certificate.studentId }, select: { userId: true } });
+      if (student) {
+        await prisma.notification.create({
+          data: {
+            userId: student.userId,
+            type: 'GENERAL',
+            title: '🏆 Certificate Issued!',
+            message: `Your winning certificate for ${event.name} has been issued.`,
+            data: JSON.stringify({ certificateId: certificate.id, certificateUrl: certificate.certificateUrl })
+          }
+        });
+      }
+    }
+
+    res.json(successResponse({ issued: results.length, failed: errors.length, certificates: results, errors }, `Successfully issued ${results.length} winning certificate(s)`));
+  } catch (error) {
+    console.error('❌ Error issuing winning certificates:', error);
+    res.status(500).json(errorResponse(error.message || 'Failed to issue certificates'));
   }
 });
 
