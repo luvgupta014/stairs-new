@@ -1,19 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { getAdminEvents, moderateEvent, getEventParticipants } from '../../api';
 import ParticipantsModal from '../../components/ParticipantsModal';
 
 const AdminEventsManagement = () => {
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState([]);
   const [filteredEvents, setFilteredEvents] = useState([]);
   const [moderatingEventId, setModeratingEventId] = useState(null);
   
-  const [filters, setFilters] = useState({
-    status: '',
-    sport: '',
-    search: ''
-  });
+  // Initialize filters from URL query parameters
+  const getInitialFilters = () => {
+    const searchParams = new URLSearchParams(location.search);
+    return {
+      status: searchParams.get('status') || '',
+      sport: searchParams.get('sport') || '',
+      search: searchParams.get('search') || ''
+    };
+  };
+  
+  const [filters, setFilters] = useState(getInitialFilters());
 
   // Event details modal state
   const [eventDetailsModal, setEventDetailsModal] = useState({
@@ -26,6 +33,17 @@ const AdminEventsManagement = () => {
   useEffect(() => {
     fetchAllEvents();
   }, []);
+
+  useEffect(() => {
+    // Update filters when URL query parameters change
+    const searchParams = new URLSearchParams(location.search);
+    const newFilters = {
+      status: searchParams.get('status') || '',
+      sport: searchParams.get('sport') || '',
+      search: searchParams.get('search') || ''
+    };
+    setFilters(newFilters);
+  }, [location.search]);
 
   useEffect(() => {
     applyFilters();

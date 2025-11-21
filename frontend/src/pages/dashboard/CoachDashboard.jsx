@@ -758,9 +758,9 @@ const CoachDashboard = () => {
                     >
                       � Update Profile
                     </Link>
-                    <button className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-lg text-sm font-medium text-center block transition-colors">
+                    {/* <button className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-lg text-sm font-medium text-center block transition-colors">
                       📋 Schedule Training
-                    </button>
+                    </button> */}
                   </div>
                 </div>
               </div>

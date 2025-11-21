@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { getAllUsers } from '../../api';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { HiOutlineExternalLink, HiOutlineDownload } from 'react-icons/hi';
 
 const ROLES = [
@@ -33,6 +33,7 @@ const getRoleColor = (role) => {
 const PAGE_SIZE = 10;
 
 const AllUsers = () => {
+  const location = useLocation();
   const [users, setUsers] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [filters, setFilters] = useState({ role: '', status: '', search: '' });
@@ -111,9 +112,23 @@ const AllUsers = () => {
   };
 
   useEffect(() => {
-    fetchUsers(1);
+    // Read query parameters from URL
+    const searchParams = new URLSearchParams(location.search);
+    const roleParam = searchParams.get('role');
+    const statusParam = searchParams.get('status');
+    const searchParam = searchParams.get('search');
+    
+    // Set initial filters from URL if present
+    const initialFilters = {
+      role: roleParam || '',
+      status: statusParam || '',
+      search: searchParam || ''
+    };
+    
+    setFilters(initialFilters);
+    fetchUsers(1, initialFilters);
     // eslint-disable-next-line
-  }, []);
+  }, [location.search]);
 
 
   const handleFilterChange = (key, value) => {
