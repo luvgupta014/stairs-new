@@ -95,7 +95,7 @@ const sendOTPEmail = async (email, otp, name = 'User') => {
             .otp-code {
               font-size: 32px;
               font-weight: bold;
-              color: #2563eb;
+              color: #2563eb;9
               letter-spacing: 5px;
               margin: 10px 0;
             }
