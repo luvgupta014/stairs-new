@@ -16,15 +16,34 @@ const errorResponse = (message, statusCode = 400) => ({ success: false, message,
  * @desc    Issue certificates to selected students (Admin only)
  * @access  Private (Admin)
  */
+
 router.post('/issue', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { eventId, orderId, selectedStudents } = req.body;
+    const { eventId, orderId, selectedStudents, certificateType = 'participation', positions } = req.body;
 
-    console.log(`📜 Certificate issuance request:`, { eventId, orderId, selectedStudents: selectedStudents?.length });
+    console.log(`📜 Certificate issuance request:`, { 
+      eventId, 
+      orderId, 
+      selectedStudents: selectedStudents?.length,
+      certificateType,
+      positions: positions ? Object.keys(positions).length : 0
+    });
 
     // Validate input
     if (!eventId || !selectedStudents || selectedStudents.length === 0) {
       return res.status(400).json(errorResponse('Missing required fields: eventId or selectedStudents'));
+    }
+
+    // Validate certificate type
+    if (!['participation', 'winning'].includes(certificateType)) {
+      return res.status(400).json(errorResponse('Invalid certificateType. Must be "participation" or "winning"'));
+    }
+
+    // If winning certificate, validate positions
+    if (certificateType === 'winning') {
+      if (!positions || Object.keys(positions).length !== selectedStudents.length) {
+        return res.status(400).json(errorResponse('Positions/awards must be assigned to all selected students for winning certificates'));
+      }
     }
 
     // Use EventService resolver to handle both database ID and uniqueId
@@ -39,35 +58,6 @@ router.post('/issue', authenticate, requireAdmin, async (req, res) => {
     if (!event) {
       return res.status(404).json(errorResponse('Event not found or you do not have permission'));
     }
-
-    // COMMENTED OUT: Order verification and payment check
-    // Admin can now issue certificates without order completion constraint
-    /*
-    // Verify the order and check payment status
-    const order = await prisma.eventOrder.findFirst({
-      where: {
-        id: orderId,
-        eventId,
-        paymentStatus: 'SUCCESS'
-      },
-      select: {
-        id: true,
-        certificates: true,
-        orderNumber: true
-      }
-    });
-
-    if (!order) {
-      return res.status(404).json(errorResponse('Order not found or payment not completed'));
-    }
-
-    // Check if trying to issue more certificates than paid for
-    if (selectedStudents.length > order.certificates) {
-      return res.status(400).json(errorResponse(
-        `You can only issue ${order.certificates} certificate(s). You selected ${selectedStudents.length} students.`
-      ));
-    }
-    */
 
     // Get student details for selected students
     const students = await prisma.student.findMany({
@@ -89,11 +79,10 @@ router.post('/issue', authenticate, requireAdmin, async (req, res) => {
       return res.status(400).json(errorResponse('Some selected students were not found'));
     }
 
-    // Check for already issued certificates (without orderId constraint)
+    // Check for already issued certificates
     const existingCertificates = await prisma.certificate.findMany({
       where: {
         eventId: event.id,
-        // orderId, // Removed orderId constraint
         studentId: { in: selectedStudents }
       },
       select: {
@@ -115,28 +104,43 @@ router.post('/issue', authenticate, requireAdmin, async (req, res) => {
       day: 'numeric' 
     });
     
-    // CRITICAL: Pass database IDs internally, UIDs only for display
-    const certificatesData = students.map(student => ({
-      participantName: student.name,
-      sportName: event.sport,
-      eventName: event.name,
-      eventDate: eventDate,
-      date: eventDate, // For backwards compatibility
-      studentId: student.id, // Use database ID internally
-      studentUniqueId: student.user.uniqueId, // For display on certificate
-      eventId: event.id, // Use database ID internally
-      eventUniqueId: event.uniqueId, // For display on certificate
-      orderId: orderId || null // Optional orderId
-    }));
+    // Pass database IDs internally, UIDs only for display
+    const certificatesData = students.map(student => {
+      const baseData = {
+        participantName: student.name,
+        sportName: event.sport,
+        eventName: event.name,
+        eventDate: eventDate,
+        date: eventDate,
+        studentId: student.id,
+        studentUniqueId: student.user.uniqueId,
+        eventId: event.id,
+        eventUniqueId: event.uniqueId,
+        orderId: orderId || null,
+        certificateType: certificateType
+      };
+
+      // Add position for winning certificates
+      if (certificateType === 'winning') {
+        baseData.position = positions[student.id];
+      }
+
+      return baseData;
+    });
 
     // Log certificate data being prepared
-    console.log(`📋 Certificate data prepared:`);
+    console.log(`📋 ${certificateType.toUpperCase()} certificate data prepared:`);
     certificatesData.forEach((cert, idx) => {
-      console.log(`   [${idx}] eventUniqueId=${cert.eventUniqueId}, studentUniqueId=${cert.studentUniqueId}`);
+      if (certificateType === 'winning') {
+        console.log(`   [${idx}] ${cert.participantName} - Position: ${cert.position}`);
+      } else {
+        console.log(`   [${idx}] ${cert.participantName}`);
+      }
     }); 
 
     // Generate certificates
-    console.log(`🎓 Generating ${certificatesData.length} certificate(s)...`);
+    const emoji = certificateType === 'winning' ? '🏆' : '🎓';
+    console.log(`${emoji} Generating ${certificatesData.length} ${certificateType} certificate(s)...`);
     const { results, errors } = await certificateService.generateBulkCertificates(certificatesData);
 
     if (errors.length > 0) {
@@ -145,6 +149,23 @@ router.post('/issue', authenticate, requireAdmin, async (req, res) => {
 
     // Create notifications for students
     for (const certificate of results) {
+      const notificationTitle = certificateType === 'winning' 
+        ? '🏆 Winning Certificate Issued!' 
+        : '🎓 Certificate Issued!';
+      
+      const notificationMessage = certificateType === 'winning'
+        ? `Congratulations! Your winning certificate for ${event.name} has been issued. You can download it from your dashboard.`
+        : `Your certificate for ${event.name} has been issued. You can download it from your dashboard.`;
+
+      const notificationData = {
+        certificateId: certificate.id,
+        certificateUrl: certificate.certificateUrl
+      };
+
+      if (certificateType === 'winning') {
+        notificationData.position = certificate.position;
+      }
+
       await prisma.notification.create({
         data: {
           userId: (await prisma.student.findUnique({ 
@@ -152,24 +173,22 @@ router.post('/issue', authenticate, requireAdmin, async (req, res) => {
             select: { userId: true }
           })).userId,
           type: 'GENERAL',
-          title: '🎓 Certificate Issued!',
-          message: `Your certificate for ${event.name} has been issued. You can download it from your dashboard.`,
-          data: JSON.stringify({ 
-            certificateId: certificate.id,
-            certificateUrl: certificate.certificateUrl 
-          })
+          title: notificationTitle,
+          message: notificationMessage,
+          data: JSON.stringify(notificationData)
         }
       });
     }
 
-    console.log(`✅ Successfully issued ${results.length} certificate(s)`);
+    console.log(`✅ Successfully issued ${results.length} ${certificateType} certificate(s)`);
 
     res.json(successResponse({
       issued: results.length,
       failed: errors.length,
       certificates: results,
-      errors
-    }, `Successfully issued ${results.length} certificate(s)`));
+      errors,
+      certificateType: certificateType
+    }, `Successfully issued ${results.length} ${certificateType} certificate(s)`));
 
   } catch (error) {
     console.error('❌ Error issuing certificates:', error);
