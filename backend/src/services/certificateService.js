@@ -6,15 +6,12 @@ const prisma = new PrismaClient();
 
 class CertificateService {
   constructor() {
-    // Two templates: participation and winning
-    this.participationTemplatePath = path.join(__dirname, '../../templates/certificate-template.html');
-    this.winningTemplatePath = path.join(__dirname, '../../templates/winning-certificate-template.html');
-    this.certificatesDir = path.join(__dirname, '../../uploads/certificates');
-    
-    // Prefer PNG if available, else JPG
-    const pngPath = path.join(__dirname, '../../../assets/logo.png');
-    const jpgPath = path.join(__dirname, '../../../assets/logo.jpg');
-    this.logoPath = require('fs').existsSync(pngPath) ? pngPath : jpgPath;
+  this.templatePath = path.join(__dirname, '../../templates/certificate-template.html');
+  this.certificatesDir = path.join(__dirname, '../../uploads/certificates');
+  // Prefer PNG if available, else JPG
+  const pngPath = path.join(__dirname, '../../../assets/logo.png');
+  const jpgPath = path.join(__dirname, '../../../assets/logo.jpg');
+  this.logoPath = require('fs').existsSync(pngPath) ? pngPath : jpgPath;
   }
 
   /**
@@ -31,19 +28,8 @@ class CertificateService {
   /**
    * Generate a unique certificate UID
    */
-  generateCertificateUID(eventId, studentId, certificateType = 'participation') {
-    const typePrefix = certificateType === 'winning' ? 'WIN' : 'PART';
-    return `STAIRS-CERT-${typePrefix}-${eventId}-${studentId}`;
-  }
-
-  /**
-   * Get template path based on certificate type
-   */
-  getTemplatePath(certificateType) {
-    if (certificateType === 'winning') {
-      return this.winningTemplatePath;
-    }
-    return this.participationTemplatePath;
+  generateCertificateUID(eventId, studentId) {
+    return `STAIRS-CERT-${eventId}-${studentId}`;
   }
 
   /**
@@ -56,14 +42,11 @@ class CertificateService {
       eventName,
       date,
       eventDate,
-      studentId, // Database ID
-      eventId, // Database ID
+      studentId, // Now expects database ID
+      eventId, // Now expects database ID
       studentUniqueId, // Custom UID for display
       eventUniqueId, // Custom UID for display
-      orderId,
-      certificateType = 'participation', // NEW: 'participation' or 'winning'
-      position, // NEW: Optional - for winning certificates (1st, 2nd, 3rd, etc.)
-      achievement // NEW: Optional - custom achievement text
+      orderId
     } = data;
 
     try {
@@ -82,19 +65,10 @@ class CertificateService {
       }
 
       // Generate unique UID for certificate using custom formatted UIDs
-      const uid = this.generateCertificateUID(eventUniqueId, studentUniqueId, certificateType);
+      const uid = this.generateCertificateUID(eventUniqueId, studentUniqueId);
 
-      // Get appropriate template based on certificate type
-      const templatePath = this.getTemplatePath(certificateType);
-      
-      // Check if template exists, fallback to participation template if winning doesn't exist
-      let htmlTemplate;
-      try {
-        htmlTemplate = await fs.readFile(templatePath, 'utf8');
-      } catch (error) {
-        console.warn(`⚠️ Template not found: ${templatePath}, using participation template`);
-        htmlTemplate = await fs.readFile(this.participationTemplatePath, 'utf8');
-      }
+      // Read template
+      let htmlTemplate = await fs.readFile(this.templatePath, 'utf8');
 
       // Read logo as base64
       let logoBase64 = '';
@@ -114,15 +88,6 @@ class CertificateService {
         day: 'numeric' 
       });
       
-      // Determine achievement text based on position or custom achievement
-      let achievementText = 'for outstanding performance';
-      if (position) {
-        const positionSuffix = position === 1 ? 'st' : position === 2 ? 'nd' : position === 3 ? 'rd' : 'th';
-        achievementText = `for securing ${position}${positionSuffix} position`;
-      } else if (achievement) {
-        achievementText = achievement;
-      }
-      
       htmlTemplate = htmlTemplate
         .replace(/\[PARTICIPANT_NAME\]/g, participantName)
         .replace(/\[SPORT_NAME\]/g, sportName)
@@ -131,9 +96,7 @@ class CertificateService {
         .replace(/\[ISSUE_DATE\]/g, issueDate)
         .replace(/\[DATE\]/g, date)
         .replace(/\[UID\]/g, uid)
-        .replace(/\[LOGO_PATH\]/g, logoBase64)
-        .replace(/\[ACHIEVEMENT\]/g, achievementText)
-        .replace(/\[POSITION\]/g, position ? `${position}${position === 1 ? 'st' : position === 2 ? 'nd' : position === 3 ? 'rd' : 'th'} Place` : '');
+        .replace(/\[LOGO_PATH\]/g, logoBase64);
 
       // Launch Puppeteer
       const browser = await puppeteer.launch({
@@ -159,8 +122,7 @@ class CertificateService {
 
       console.log(`📸 Image loaded status: ${imageLoaded}`);
 
-      // Generate PDF filename with certificate type
-      const typePrefix = certificateType === 'winning' ? 'winning' : 'participation';
+      // Generate PDF filename
       const filename = `${uid}.pdf`;
       const filepath = path.join(this.certificatesDir, filename);
       
@@ -193,14 +155,11 @@ class CertificateService {
           sportName,
           eventName,
           issueDate: new Date(date),
-          uniqueId: uid,
-          certificateType: certificateType, // NEW: Store certificate type
-          position: position || null, // NEW: Store position if provided
-          achievement: achievement || null // NEW: Store custom achievement
+          uniqueId: uid
         }
       });
 
-      console.log(`✅ ${certificateType === 'winning' ? 'Winning' : 'Participation'} certificate generated successfully: ${uid}`);
+      console.log(`✅ Certificate generated successfully: ${uid}`);
       return certificate;
 
     } catch (error) {
@@ -258,25 +217,6 @@ class CertificateService {
       return certificate;
     } catch (error) {
       console.error('❌ Error fetching certificate by UID:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get certificates by type for an event
-   */
-  async getEventCertificatesByType(eventId, certificateType) {
-    try {
-      const certificates = await prisma.certificate.findMany({
-        where: { 
-          eventId,
-          certificateType 
-        },
-        orderBy: { issueDate: 'desc' }
-      });
-      return certificates;
-    } catch (error) {
-      console.error('❌ Error fetching event certificates by type:', error);
       throw error;
     }
   }

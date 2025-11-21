@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, requireAdmin } = require('../utils/authMiddleware');
+const { authenticate, requireCoach } = require('../utils/authMiddleware');
 const certificateService = require('../services/certificateService');
 const EventService = require('../services/eventService');
 const { PrismaClient } = require('@prisma/client');
@@ -50,8 +50,8 @@ function prepareCertificatesData(event, students, orderId = null) {
   }));
 }
 
-// POST /api/certificates/issue - Participation Certificates
-router.post('/issue', authenticate, requireAdmin, async (req, res) => {
+// POST /api/certificates/issue - Participation Certificates (ORIGINAL - WORKING)
+router.post('/issue', authenticate, requireCoach, async (req, res) => {
   try {
     const { eventId, selectedStudents } = req.body;
     if (!eventId || !selectedStudents || selectedStudents.length === 0) {
@@ -97,8 +97,8 @@ router.post('/issue', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/certificates/issue/winning - Winning Certificates
-router.post('/issue/winning', authenticate, requireAdmin, async (req, res) => {
+// POST /api/certificates/issue/winning - Winning Certificates (NEW FEATURE)
+router.post('/issue/winning', authenticate, requireCoach, async (req, res) => {
   try {
     const { eventId, selectedStudents, positions } = req.body;
     if (!eventId || !selectedStudents || selectedStudents.length === 0) {
@@ -120,9 +120,10 @@ router.post('/issue/winning', authenticate, requireAdmin, async (req, res) => {
       return res.status(400).json(errorResponse(`Certificates already issued for ${existingCertificates.length} student(s)`));
     }
 
-    // Add positions to certificates data
+    // Add certificateType and positions to certificates data
     const certificatesData = prepareCertificatesData(event, students).map(cert => ({
       ...cert,
+      certificateType: 'winning',
       position: positions[cert.studentId]
     }));
 
@@ -136,8 +137,8 @@ router.post('/issue/winning', authenticate, requireAdmin, async (req, res) => {
           data: {
             userId: student.userId,
             type: 'GENERAL',
-            title: '🏆 Certificate Issued!',
-            message: `Your winning certificate for ${event.name} has been issued.`,
+            title: '🏆 Winning Certificate Issued!',
+            message: `Your winning certificate for ${event.name} has been issued. You can download it from your dashboard.`,
             data: JSON.stringify({ certificateId: certificate.id, certificateUrl: certificate.certificateUrl })
           }
         });
@@ -212,33 +213,25 @@ router.get('/verify/:uid', async (req, res) => {
 
 /**
  * @route   GET /api/certificates/event/:eventId/issued
- * @desc    Get all issued certificates for an event (Admin only)
- * @access  Private (Admin)
- * @note    Returns all certificates for the event regardless of order
+ * @desc    Get all issued certificates for an event (Coach only)
+ * @access  Private (Coach)
  */
-router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res) => {
+router.get('/event/:eventId/issued', authenticate, requireCoach, async (req, res) => {
   try {
     const { eventId } = req.params;
 
     console.log(`📜 Fetching issued certificates for event: ${eventId}`);
-    console.log(`   Request URL: ${req.originalUrl}`);
-    console.log(`   Admin ID: ${req.admin?.id || 'N/A'}`);
 
     // Use EventService resolver to handle both database ID and uniqueId
     let event;
     try {
-      console.log(`🔍 Step 1: Resolving event ID...`);
       event = await eventService.resolveEventId(eventId);
-      console.log(`✅ Event resolved: ID=${event.id}, uniqueId=${event.uniqueId}`);
     } catch (error) {
       console.error(`❌ Event resolution failed for ID: ${eventId}`);
-      console.error(`   Error: ${error.message}`);
-      console.error(`   Stack: ${error.stack}`);
       return res.status(404).json(errorResponse('Event not found'));
     }
 
     // Re-fetch with coach relation
-    console.log(`🔍 Step 2: Fetching event with coach details...`);
     event = await prisma.event.findUnique({
       where: { id: event.id },
       include: {
@@ -254,29 +247,20 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
       }
     });
 
-    console.log(`🔍 Event lookup result:`, event ? { id: event.id, name: event.name, uniqueId: event.uniqueId } : 'null');
-
     if (!event) {
-      console.error(`❌ Event not found after re-fetch for ID: ${eventId}`);
       return res.status(404).json(errorResponse('Event not found'));
     }
 
-    // Get all certificates for this event - check both database ID and uniqueId
-    // Some old certificates might have uniqueId stored, newer ones have database ID
-    console.log(`🔍 Step 3: Building certificate query conditions...`);
+    // Get all certificates for this event
     const whereConditions = [
       { eventId: event.id },
-      { eventId: eventId } // Also check if eventId param was stored directly
+      { eventId: eventId }
     ];
     
-    // Only add uniqueId condition if it exists
     if (event.uniqueId) {
       whereConditions.push({ eventId: event.uniqueId });
     }
     
-    console.log(`   Query conditions:`, JSON.stringify(whereConditions, null, 2));
-    
-    console.log(`🔍 Step 4: Querying certificates...`);
     const certificatesRaw = await prisma.certificate.findMany({
       where: {
         OR: whereConditions
@@ -284,18 +268,11 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
       orderBy: { issueDate: 'desc' }
     });
 
-    console.log(`📋 Found ${certificatesRaw.length} raw certificates for event ${event.name}`);
-    if (certificatesRaw.length > 0) {
-      console.log(`   First certificate: ID=${certificatesRaw[0].id}, studentId=${certificatesRaw[0].studentId}, eventId=${certificatesRaw[0].eventId}`);
-    }
+    console.log(`📋 Found ${certificatesRaw.length} certificates for event ${event.name}`);
 
     // Fetch student details for each certificate
-    console.log(`🔍 Step 5: Enriching certificates with student data...`);
-    const certificates = await Promise.all(certificatesRaw.map(async (cert, index) => {
+    const certificates = await Promise.all(certificatesRaw.map(async (cert) => {
       try {
-        console.log(`   Processing certificate ${index + 1}/${certificatesRaw.length}: studentId=${cert.studentId}`);
-        
-        // Try to find student by database ID first, then by uniqueId
         let student = await prisma.student.findUnique({
           where: { id: cert.studentId },
           select: {
@@ -304,16 +281,12 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
           }
         });
 
-        // If not found by ID, try finding by uniqueId through user
         if (!student) {
-          console.log(`      Student not found by ID, trying uniqueId lookup...`);
           const user = await prisma.user.findUnique({
             where: { uniqueId: cert.studentId },
             include: {
               studentProfile: {
-                select: {
-                  name: true
-                }
+                select: { name: true }
               }
             }
           });
@@ -346,8 +319,6 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
       }
     }));
 
-    console.log(`✅ Successfully retrieved ${certificates.length} certificates`);
-
     res.json(successResponse({
       certificates,
       count: certificates.length,
@@ -356,61 +327,31 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
 
   } catch (error) {
     console.error('❌ Error fetching event certificates:', error);
-    console.error('Stack trace:', error.stack);
     res.status(500).json(errorResponse('Failed to fetch certificates', 500));
   }
 });
 
 /**
  * @route   GET /api/certificates/event/:eventId/eligible-students
- * @desc    Get eligible students for certificate issuance for an event (Admin only)
- * @access  Private (Admin)
- * @note    Order verification commented out - Admin can issue certificates without order completion
+ * @desc    Get eligible students for certificate issuance for an event (Coach only)
+ * @access  Private (Coach)
  */
-router.get('/event/:eventId/eligible-students', authenticate, requireAdmin, async (req, res) => {
+router.get('/event/:eventId/eligible-students', authenticate, requireCoach, async (req, res) => {
   try {
     const { eventId } = req.params;
-    const { orderId } = req.query;
 
-    console.log(`📋 Fetching eligible students for event: ${eventId}${orderId ? `, order: ${orderId}` : ''}`);
+    console.log(`📋 Fetching eligible students for event: ${eventId}`);
 
-    // Use EventService resolver to handle both database ID and uniqueId
     let event;
     try {
       event = await eventService.resolveEventId(eventId);
     } catch (error) {
-      console.log(`❌ Event not found for ID: ${eventId}`);
       return res.status(404).json(errorResponse('Event not found'));
     }
-    
-    console.log('[DEBUG] Eligible students eventId param:', eventId);
-    console.log('[DEBUG] Event found:', event);
     
     if (!event) {
       return res.status(404).json(errorResponse('Event not found'));
     }
-
-    // COMMENTED OUT: Order verification and payment check
-    // Admin can now view and issue certificates without order completion constraint
-    /*
-    // Verify the order and check payment status
-    const order = await prisma.eventOrder.findFirst({
-      where: {
-        id: orderId,
-        eventId,
-        paymentStatus: 'SUCCESS'
-      },
-      select: {
-        id: true,
-        certificates: true,
-        orderNumber: true
-      }
-    });
-
-    if (!order) {
-      return res.status(404).json(errorResponse('Order not found or payment not completed'));
-    }
-    */
 
     // Get all students registered for this event
     const registrations = await prisma.eventRegistration.findMany({
@@ -435,13 +376,12 @@ router.get('/event/:eventId/eligible-students', authenticate, requireAdmin, asyn
       }
     });
 
-    // Get already issued certificates for this event - check all possible ID formats
+    // Get already issued certificates for this event
     const whereConditions = [
       { eventId: event.id },
-      { eventId: eventId } // Also check if eventId param was stored directly
+      { eventId: eventId }
     ];
     
-    // Only add uniqueId condition if it exists
     if (event.uniqueId) {
       whereConditions.push({ eventId: event.uniqueId });
     }
@@ -457,14 +397,12 @@ router.get('/event/:eventId/eligible-students', authenticate, requireAdmin, asyn
 
     console.log(`📋 Found ${issuedCertificates.length} issued certificates for event ${event.name}`);
 
-    // Build a set of issued student IDs - check both database ID and uniqueId
+    // Build a set of issued student IDs
     const issuedStudentIds = new Set();
     
     for (const cert of issuedCertificates) {
       issuedStudentIds.add(cert.studentId);
       
-      // Also try to find the database ID if cert.studentId is a uniqueId
-      // First check if it's a User uniqueId, then get the student
       const user = await prisma.user.findUnique({
         where: { uniqueId: cert.studentId },
         select: {
@@ -479,8 +417,6 @@ router.get('/event/:eventId/eligible-students', authenticate, requireAdmin, asyn
       }
     }
 
-    console.log(`🔍 Total student IDs to exclude (including uniqueIds): ${issuedStudentIds.size}`);
-
     // Filter out students who already have certificates
     const eligibleStudents = registrations
       .filter(reg => !issuedStudentIds.has(reg.student.id))
@@ -488,7 +424,7 @@ router.get('/event/:eventId/eligible-students', authenticate, requireAdmin, asyn
         id: reg.student.id,
         name: reg.student.name,
         uniqueId: reg.student.user.uniqueId,
-        studentId: reg.student.user.uniqueId, // Also provide as studentId for clarity
+        studentId: reg.student.user.uniqueId,
         email: reg.student.user.email,
         sport: reg.student.sport,
         registrationStatus: reg.status
@@ -499,19 +435,13 @@ router.get('/event/:eventId/eligible-students', authenticate, requireAdmin, asyn
       totalEligible: eligibleStudents.length,
       totalRegistered: registrations.length,
       certificatesIssued: issuedCertificates.length,
-      certificatesRemaining: eligibleStudents.length, // All eligible students can get certificates
+      certificatesRemaining: eligibleStudents.length,
       eventName: event.name,
       eventStatus: event.status
     }, 'Eligible students retrieved successfully'));
 
   } catch (error) {
     console.error('❌ Error fetching eligible students:', error);
-    console.error('❌ Error stack:', error.stack);
-    console.error('❌ Error details:', {
-      message: error.message,
-      code: error.code,
-      meta: error.meta
-    });
     res.status(500).json(errorResponse('Failed to fetch eligible students', 500));
   }
 });
@@ -533,18 +463,15 @@ router.get('/:uid/html', async (req, res) => {
       return res.status(404).json(errorResponse('Certificate not found'));
     }
 
-    // Construct HTML file path
     const htmlPath = certificate.certificateUrl.replace('.pdf', '.html');
     const fs = require('fs');
     const path = require('path');
     const fullPath = path.join(__dirname, '../..', htmlPath);
 
-    // Check if HTML file exists
     if (!fs.existsSync(fullPath)) {
       return res.status(404).json(errorResponse('HTML version not available'));
     }
 
-    // Send HTML file
     res.sendFile(fullPath);
 
   } catch (error) {
