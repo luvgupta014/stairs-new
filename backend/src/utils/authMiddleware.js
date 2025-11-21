@@ -198,20 +198,18 @@ const requireClub = async (req, res, next) => {
   }
 };
 
-// Admin-specific middleware - FIXED VERSION
+// Admin-specific middleware
 const requireAdmin = async (req, res, next) => {
   try {
     if (!req.user || req.user.role !== 'ADMIN') {
       return res.status(403).json(errorResponse('Access denied. Admin role required.', 403));
     }
 
-    // FIXED: Admin profile is now optional - don't fail if it doesn't exist
-    // This allows admins without a profile record to still access admin endpoints
-    req.admin = req.user.adminProfile || { 
-      userId: req.user.id,
-      id: req.user.id 
-    };
-    
+    if (!req.user.adminProfile) {
+      return res.status(403).json(errorResponse('Admin profile not found.', 403));
+    }
+
+    req.admin = req.user.adminProfile;
     next();
   } catch (error) {
     return res.status(500).json(errorResponse('Authorization error.', 500));
