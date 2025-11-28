@@ -282,7 +282,7 @@ const EventCreate = ({ adminMode = false }) => {
         sport: eventData.sport
       });
 
-      const result = await createEvent(eventData);
+      const result = await createEvent(eventData, adminMode);
       
       if (result.success) {
         setSuccess(true);

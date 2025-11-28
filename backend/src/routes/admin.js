@@ -10,9 +10,12 @@ const {
   hashPassword
 } = require('../utils/helpers');
 const { sendEventModerationEmail, sendOrderStatusEmail } = require('../utils/emailService');
+const EventService = require('../services/eventService');
+const { generateEventUID } = require('../utils/uidGenerator');
 
 const router = express.Router();
 const prisma = new PrismaClient();
+const eventService = new EventService();
 
 // Get admin profile
 router.get('/profile', authenticate, requireAdmin, async (req, res) => {
@@ -3565,6 +3568,103 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
       console.error('Prisma error meta:', JSON.stringify(error.meta, null, 2));
     }
     res.status(500).json(errorResponse(`Failed to retrieve revenue dashboard data: ${error.message}`, 500));
+  }
+});
+
+// Admin: Create event
+router.post('/events', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const {
+      name,
+      description,
+      sport,
+      venue,
+      address,
+      city,
+      state,
+      latitude,
+      longitude,
+      startDate,
+      endDate,
+      maxParticipants
+    } = req.body;
+
+    // Validation
+    if (!name || !description || !sport || !venue || !startDate) {
+      return res.status(400).json(errorResponse('Name, description, sport, venue, and start date are required.', 400));
+    }
+
+    // Parse dates for India (IST) only platform
+    const parseAsIST = (dateString) => {
+      if (!dateString) return null;
+      if (dateString.includes('+') || dateString.includes('Z')) {
+        return new Date(dateString);
+      }
+      return new Date(dateString + '+05:30');
+    };
+    
+    let startDateObj, endDateObj;
+    
+    if (startDate) {
+      startDateObj = parseAsIST(startDate);
+      console.log('📅 Admin creating event - Start date:', {
+        input: startDate,
+        parsed: startDateObj
+      });
+    }
+    
+    if (endDate) {
+      endDateObj = parseAsIST(endDate);
+      console.log('📅 Admin creating event - End date:', {
+        input: endDate,
+        parsed: endDateObj
+      });
+    }
+
+    if (!startDateObj || startDateObj <= new Date()) {
+      return res.status(400).json(errorResponse('Event start date must be in the future.', 400));
+    }
+
+    if (endDateObj && endDateObj <= startDateObj) {
+      return res.status(400).json(errorResponse('Event end date must be after start date.', 400));
+    }
+
+    // Generate unique event ID (format: EVT-0001-FB-DL-071125)
+    const eventUniqueId = await generateEventUID(sport, state || 'Delhi');
+
+    // Admin-created events are automatically approved
+    const event = await prisma.event.create({
+      data: {
+        name,
+        description,
+        sport,
+        venue,
+        address,
+        city,
+        state,
+        latitude: latitude ? parseFloat(latitude) : null,
+        longitude: longitude ? parseFloat(longitude) : null,
+        startDate: startDateObj,
+        endDate: endDateObj || null,
+        maxParticipants: maxParticipants ? parseInt(maxParticipants) : 50,
+        eventFee: 0,
+        status: 'APPROVED', // Admin events are auto-approved
+        uniqueId: eventUniqueId,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      include: {
+        registrations: true
+      }
+    });
+
+    console.log('✅ Admin created event:', event.id);
+
+    res.status(201).json(successResponse(event, 'Event created successfully by admin.'));
+
+  } catch (error) {
+    console.error('❌ Admin create event error:', error);
+    res.status(500).json(errorResponse('Failed to create event: ' + error.message, 500));
   }
 });
 

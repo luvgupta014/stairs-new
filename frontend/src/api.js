@@ -255,9 +255,10 @@ export const bulkUploadStudents = async (file) => {
   }
 };
 
-export const createEvent = async (data) => {
+export const createEvent = async (data, adminMode = false) => {
   try {
-    const response = await api.post('/api/coach/events', data);
+    const endpoint = adminMode ? '/api/admin/events' : '/api/coach/events';
+    const response = await api.post(endpoint, data);
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;
