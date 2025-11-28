@@ -2828,4 +2828,326 @@ router.get('/event-results/:fileId/download', authenticate, requireCoach, async 
   }
 });
 
+/**
+ * STUDENT REGISTRATION FOR EVENTS WITH FEE MANAGEMENT
+ */
+
+// Bulk register students for an event with fee tracking
+router.post('/events/:eventId/registrations/bulk', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { studentIds = [], eventFeePerStudent = 0 } = req.body;
+
+    console.log(`📋 Coach ${req.coach.id} registering ${studentIds.length} students for event ${eventId}`);
+
+    // Validate
+    if (!studentIds || studentIds.length === 0) {
+      return res.status(400).json(errorResponse('At least one student must be selected.', 400));
+    }
+
+    if (eventFeePerStudent < 0) {
+      return res.status(400).json(errorResponse('Event fee cannot be negative.', 400));
+    }
+
+    // Check if event exists and belongs to coach
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: { coach: true }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    if (event.coachId !== req.coach.id) {
+      return res.status(403).json(errorResponse('You can only register students for your own events.', 403));
+    }
+
+    // Check if event is APPROVED or ACTIVE
+    if (!['APPROVED', 'ACTIVE'].includes(event.status)) {
+      return res.status(400).json(errorResponse(`Cannot register students for event with status: ${event.status}`, 400));
+    }
+
+    // Check all students exist and belong to this coach
+    const students = await prisma.student.findMany({
+      where: {
+        id: { in: studentIds },
+        coachConnections: {
+          some: { coachId: req.coach.id }
+        }
+      }
+    });
+
+    if (students.length !== studentIds.length) {
+      return res.status(400).json(errorResponse('Some students do not exist or are not connected to you.', 400));
+    }
+
+    // Calculate total fee
+    const totalFeeAmount = studentIds.length * eventFeePerStudent;
+
+    // Generate order number
+    const orderCount = await prisma.eventRegistrationOrder.count();
+    const orderNumber = `REG-${event.uniqueId}-${String(orderCount + 1).padStart(4, '0')}`;
+
+    // Create registration order
+    const registrationOrder = await prisma.eventRegistrationOrder.create({
+      data: {
+        orderNumber,
+        eventId,
+        coachId: req.coach.id,
+        eventFeePerStudent,
+        totalStudents: studentIds.length,
+        totalFeeAmount,
+        status: 'PENDING',
+        registrationItems: {
+          createMany: {
+            data: studentIds.map(studentId => ({
+              eventId,
+              studentId,
+              status: 'REGISTERED'
+            }))
+          }
+        }
+      },
+      include: {
+        registrationItems: {
+          include: {
+            student: {
+              select: {
+                id: true,
+                name: true,
+                sport: true
+              }
+            }
+          }
+        },
+        event: {
+          select: {
+            id: true,
+            name: true,
+            uniqueId: true
+          }
+        }
+      }
+    });
+
+    console.log(`✅ Registration order created:`, {
+      orderNumber: registrationOrder.orderNumber,
+      totalStudents: registrationOrder.totalStudents,
+      totalFee: registrationOrder.totalFeeAmount,
+      eventId: registrationOrder.eventId
+    });
+
+    res.status(201).json(successResponse(registrationOrder, 'Bulk registration created successfully. Please proceed to payment.'));
+
+  } catch (error) {
+    console.error('❌ Bulk registration error:', error);
+    res.status(500).json(errorResponse('Failed to create bulk registration: ' + error.message, 500));
+  }
+});
+
+// Get registration orders for a coach's event
+router.get('/events/:eventId/registrations/orders', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    // Verify event belongs to coach
+    const event = await prisma.event.findUnique({
+      where: { id: eventId }
+    });
+
+    if (!event || event.coachId !== req.coach.id) {
+      return res.status(403).json(errorResponse('Access denied.', 403));
+    }
+
+    const orders = await prisma.eventRegistrationOrder.findMany({
+      where: {
+        eventId,
+        coachId: req.coach.id
+      },
+      include: {
+        registrationItems: {
+          include: {
+            student: {
+              select: {
+                id: true,
+                name: true,
+                sport: true,
+                level: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(successResponse(orders, 'Registration orders retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get registration orders error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve registration orders.', 500));
+  }
+});
+
+// Initiate payment for student registration order
+router.post('/events/:eventId/registrations/orders/:orderId/payment', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { eventId, orderId } = req.params;
+
+    // Verify order exists and belongs to coach
+    const registrationOrder = await prisma.eventRegistrationOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        event: true,
+        registrationItems: {
+          include: { student: true }
+        }
+      }
+    });
+
+    if (!registrationOrder) {
+      return res.status(404).json(errorResponse('Registration order not found.', 404));
+    }
+
+    if (registrationOrder.coachId !== req.coach.id || registrationOrder.eventId !== eventId) {
+      return res.status(403).json(errorResponse('Access denied.', 403));
+    }
+
+    if (registrationOrder.paymentStatus === 'PAID') {
+      return res.status(400).json(errorResponse('This order has already been paid.', 400));
+    }
+
+    // Initialize Razorpay order
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET
+    });
+
+    const options = {
+      amount: Math.round(registrationOrder.totalFeeAmount * 100), // Convert to paise
+      currency: 'INR',
+      receipt: registrationOrder.orderNumber,
+      notes: {
+        orderId: registrationOrder.id,
+        eventId: registrationOrder.eventId,
+        coachId: registrationOrder.coachId,
+        studentCount: registrationOrder.totalStudents,
+        orderType: 'student_registration'
+      }
+    };
+
+    const razorpayOrder = await razorpay.orders.create(options);
+
+    // Update registration order with Razorpay order ID
+    await prisma.eventRegistrationOrder.update({
+      where: { id: orderId },
+      data: {
+        razorpayOrderId: razorpayOrder.id,
+        status: 'PAYMENT_PENDING'
+      }
+    });
+
+    console.log(`💳 Razorpay order created for registration ${orderId}:`, razorpayOrder.id);
+
+    res.json(successResponse({
+      razorpayOrderId: razorpayOrder.id,
+      amount: registrationOrder.totalFeeAmount,
+      studentCount: registrationOrder.totalStudents,
+      eventName: registrationOrder.event.name
+    }, 'Payment initiated. Complete payment to register students.'));
+
+  } catch (error) {
+    console.error('❌ Payment initiation error:', error);
+    res.status(500).json(errorResponse('Failed to initiate payment: ' + error.message, 500));
+  }
+});
+
+// Verify and complete payment for registration order
+router.post('/events/:eventId/registrations/orders/:orderId/payment-success', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { eventId, orderId } = req.params;
+    const { razorpayPaymentId, razorpaySignature } = req.body;
+
+    // Verify order belongs to coach
+    const registrationOrder = await prisma.eventRegistrationOrder.findUnique({
+      where: { id: orderId }
+    });
+
+    if (!registrationOrder || registrationOrder.coachId !== req.coach.id) {
+      return res.status(403).json(errorResponse('Access denied.', 403));
+    }
+
+    // Verify signature
+    const generatedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(`${registrationOrder.razorpayOrderId}|${razorpayPaymentId}`)
+      .digest('hex');
+
+    if (generatedSignature !== razorpaySignature) {
+      return res.status(400).json(errorResponse('Payment signature verification failed.', 400));
+    }
+
+    // Update order with payment details
+    const updatedOrder = await prisma.eventRegistrationOrder.update({
+      where: { id: orderId },
+      data: {
+        razorpayPaymentId,
+        paymentStatus: 'PAID',
+        status: 'PAID',
+        paymentDate: new Date(),
+        paymentMethod: 'RAZORPAY'
+      },
+      include: {
+        registrationItems: {
+          include: { student: true }
+        },
+        event: true
+      }
+    });
+
+    // Register each student in the event
+    const registrationPromises = updatedOrder.registrationItems.map(item =>
+      prisma.eventRegistration.upsert({
+        where: {
+          eventId_studentId: {
+            eventId: updatedOrder.eventId,
+            studentId: item.studentId
+          }
+        },
+        create: {
+          eventId: updatedOrder.eventId,
+          studentId: item.studentId,
+          status: 'REGISTERED'
+        },
+        update: {
+          status: 'REGISTERED'
+        }
+      })
+    );
+
+    await Promise.all(registrationPromises);
+
+    // Update event currentParticipants
+    await prisma.event.update({
+      where: { id: updatedOrder.eventId },
+      data: {
+        currentParticipants: {
+          increment: updatedOrder.registrationItems.length
+        }
+      }
+    });
+
+    console.log(`✅ Payment successful for order ${orderId}. ${updatedOrder.registrationItems.length} students registered.`);
+
+    res.json(successResponse(updatedOrder, 'Payment successful! Students have been registered for the event.'));
+
+  } catch (error) {
+    console.error('❌ Payment verification error:', error);
+    res.status(500).json(errorResponse('Failed to verify payment: ' + error.message, 500));
+  }
+});
+
+module.exports = router;
+
 module.exports = router;

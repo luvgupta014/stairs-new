@@ -647,6 +647,19 @@ export const bulkModerateEvents = async (eventIds, action, remarks) => {
   }
 };
 
+// Update event status (e.g., to COMPLETED for certificate generation)
+export const updateEventStatus = async (eventId, status) => {
+  try {
+    const response = await api.put(`/api/admin/events/${eventId}/status`, {
+      status: status.toUpperCase()
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Update event status error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 // Coach and Institute Approval APIs
 export const getPendingCoaches = async (params = {}) => {
   try {
@@ -1122,6 +1135,88 @@ export const deleteNotification = async (notificationId) => {
 export const getNotificationCount = async () => {
   try {
     const response = await api.get('/api/admin/notifications/count');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Student Registration Management for Events
+export const bulkRegisterStudentsForEvent = async (eventId, studentIds, eventFeePerStudent = 0) => {
+  try {
+    const response = await api.post(`/api/coach/events/${eventId}/registrations/bulk`, {
+      studentIds,
+      eventFeePerStudent
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getEventRegistrationOrders = async (eventId) => {
+  try {
+    const response = await api.get(`/api/coach/events/${eventId}/registrations/orders`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const initiateRegistrationPayment = async (eventId, orderId) => {
+  try {
+    const response = await api.post(`/api/coach/events/${eventId}/registrations/orders/${orderId}/payment`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const verifyRegistrationPayment = async (eventId, orderId, razorpayPaymentId, razorpaySignature) => {
+  try {
+    const response = await api.post(`/api/coach/events/${eventId}/registrations/orders/${orderId}/payment-success`, {
+      razorpayPaymentId,
+      razorpaySignature
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Admin: Certificate Management Endpoints
+export const getEventRegistrationOrdersAdmin = async (eventId) => {
+  try {
+    const response = await api.get(`/api/admin/events/${eventId}/registrations/orders`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const notifyCoordinatorForCompletion = async (eventId, notifyMessage = '') => {
+  try {
+    const response = await api.post(`/api/admin/events/${eventId}/registrations/notify-completion`, {
+      notifyMessage
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const generateCertificates = async (orderId) => {
+  try {
+    const response = await api.post(`/api/admin/registrations/orders/${orderId}/generate-certificates`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getEventCertificatesAdmin = async (eventId) => {
+  try {
+    const response = await api.get(`/api/admin/events/${eventId}/certificates`);
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;

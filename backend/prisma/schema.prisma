@@ -75,6 +75,7 @@ model Student {
   eventRegistrations EventRegistration[]
   instituteStudents  InstituteStudent[]
   coachConnections   StudentCoachConnection[]
+  registrationItems  EventRegistrationOrderItem[]
   user               User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("students")
@@ -119,6 +120,7 @@ model Coach {
   events                Event[]
   instituteCoaches      InstituteCoach[]
   studentConnections    StudentCoachConnection[]
+  registrationOrders    EventRegistrationOrder[]
 
   @@map("coaches")
 }
@@ -262,6 +264,8 @@ model Event {
   payments            EventPayment[]
   registrations       EventRegistration[]
   resultFiles         EventResultFile[]
+  registrationOrders  EventRegistrationOrder[]
+  registrationItems   EventRegistrationOrderItem[]
   coach               Coach               @relation(fields: [coachId], references: [id], onDelete: Cascade)
 
   @@map("events")
@@ -386,6 +390,53 @@ model EventOrder {
   admin               Admin?        @relation(fields: [processedBy], references: [id])
 
   @@map("event_orders")
+}
+
+// Bulk Student Registration for events with fee tracking
+model EventRegistrationOrder {
+  id                    String                      @id @default(cuid())
+  orderNumber           String                      @unique
+  eventId               String
+  coachId               String
+  eventFeePerStudent    Float                       @default(0) // e.g., ₹500 per student
+  totalStudents         Int                         @default(0)
+  totalFeeAmount        Float                       @default(0) // e.g., 50 * 500 = 25000
+  status                OrderStatus                 @default(PENDING) // PENDING, PAYMENT_PENDING, PAID, COMPLETED
+  paymentStatus         PaymentStatus               @default(PENDING) // PENDING, PAID
+  razorpayOrderId       String?
+  razorpayPaymentId     String?
+  paymentDate           DateTime?
+  paymentMethod         String?
+  certificateGenerated  Boolean                     @default(false)
+  adminNotified         Boolean                     @default(false) // Notified for final payment & certs
+  adminNotes            String?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  completedAt           DateTime?
+  coach                 Coach                       @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  event                 Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  registrationItems     EventRegistrationOrderItem[]
+
+  @@unique([eventId, coachId])
+  @@map("event_registration_orders")
+}
+
+// Individual student registrations within a bulk order
+model EventRegistrationOrderItem {
+  id                      String                   @id @default(cuid())
+  registrationOrderId     String
+  eventId                 String
+  studentId              String
+  status                  RegistrationStatus      @default(REGISTERED) // REGISTERED, APPROVED, REJECTED
+  certificateId           String?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  registrationOrder       EventRegistrationOrder  @relation(fields: [registrationOrderId], references: [id], onDelete: Cascade)
+  event                   Event                   @relation(fields: [eventId], references: [id])
+  student                 Student                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([registrationOrderId, studentId])
+  @@map("event_registration_order_items")
 }
 
 model Notification {

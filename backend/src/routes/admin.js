@@ -1660,6 +1660,53 @@ router.put('/events/:eventId/moderate', authenticate, requireAdmin, async (req, 
   }
 });
 
+// Update event status (e.g., to COMPLETED for certificate generation)
+router.put('/events/:eventId/status', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { status } = req.body;
+
+    // Validate status
+    const validStatuses = ['PENDING', 'APPROVED', 'ACTIVE', 'COMPLETED', 'REJECTED', 'SUSPENDED', 'CANCELLED'];
+    if (!status || !validStatuses.includes(status.toUpperCase())) {
+      return res.status(400).json(errorResponse(`Invalid status. Must be one of: ${validStatuses.join(', ')}`, 400));
+    }
+
+    console.log(`🔄 Updating event ${eventId} status to ${status.toUpperCase()}`);
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    const updatedEvent = await prisma.event.update({
+      where: { id: eventId },
+      data: {
+        status: status.toUpperCase(),
+        updatedAt: new Date()
+      },
+      include: {
+        coach: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    console.log(`✅ Event status updated to ${updatedEvent.status}`);
+    res.json(successResponse(updatedEvent, `Event status updated to ${updatedEvent.status}`));
+
+  } catch (error) {
+    console.error('❌ Update event status error:', error);
+    res.status(500).json(errorResponse(`Failed to update event status: ${error.message}`, 500));
+  }
+});
+
 // Get pending events for approval - CORRECTED for your schema
 router.get('/pending-events', authenticate, requireAdmin, async (req, res) => {
   try {
@@ -3720,6 +3767,300 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('❌ Admin create event error:', error);
     res.status(500).json(errorResponse('Failed to create event: ' + error.message, 500));
+  }
+});
+
+/**
+ * POST-EVENT COMPLETION & CERTIFICATE MANAGEMENT
+ */
+
+// Get all registration orders for a completed event (for admin certificate issuance)
+router.get('/events/:eventId/registrations/orders', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    const orders = await prisma.eventRegistrationOrder.findMany({
+      where: { eventId },
+      include: {
+        registrationItems: {
+          include: {
+            student: {
+              select: {
+                id: true,
+                name: true,
+                sport: true
+              }
+            }
+          }
+        },
+        coach: {
+          select: {
+            id: true,
+            name: true,
+            user: {
+              select: { email: true }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(successResponse({
+      event: {
+        id: event.id,
+        name: event.name,
+        sport: event.sport,
+        status: event.status,
+        startDate: event.startDate,
+        endDate: event.endDate
+      },
+      orders
+    }, 'Event registration orders retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get event registration orders error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve registration orders.', 500));
+  }
+});
+
+// Notify coordinator for final payment & generate certificates after event completion
+router.post('/events/:eventId/registrations/notify-completion', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { notifyMessage } = req.body;
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    if (event.status !== 'COMPLETED') {
+      return res.status(400).json(errorResponse('Event must be marked as COMPLETED before notifying for final payment.', 400));
+    }
+
+    // Find all paid registration orders for this event
+    const registrationOrders = await prisma.eventRegistrationOrder.findMany({
+      where: {
+        eventId,
+        paymentStatus: 'PAID'
+      },
+      include: {
+        registrationItems: {
+          include: {
+            student: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
+        },
+        coach: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Mark orders as notified and ready for certificate generation
+    const updatedOrders = await Promise.all(
+      registrationOrders.map(order =>
+        prisma.eventRegistrationOrder.update({
+          where: { id: order.id },
+          data: {
+            adminNotified: true,
+            adminNotes: notifyMessage || 'Admin notified coordinator for final payment and certificate generation'
+          }
+        })
+      )
+    );
+
+    // Send notifications to coaches
+    const notificationPromises = registrationOrders.map(order =>
+      prisma.notification.create({
+        data: {
+          userId: order.coach.user.id,
+          type: 'GENERAL',
+          title: `Event Completed - Certificates Ready: ${event.name}`,
+          message: `Your event "${event.name}" has been completed. ${order.registrationItems.length} student certificates are ready for generation. Please check the dashboard for details.`,
+          data: JSON.stringify({
+            eventId,
+            registrationOrderId: order.id,
+            studentCount: order.registrationItems.length
+          })
+        }
+      })
+    );
+
+    await Promise.all(notificationPromises);
+
+    console.log(`✅ Notified ${registrationOrders.length} coaches for event completion`);
+
+    res.json(successResponse({
+      ordersNotified: updatedOrders.length,
+      totalStudentsForCertificates: updatedOrders.reduce((sum, order) => sum + order.registrationItems.length, 0),
+      message: 'Coaches have been notified. Certificates can now be generated.'
+    }, 'Completion notification sent successfully.'));
+
+  } catch (error) {
+    console.error('❌ Notify completion error:', error);
+    res.status(500).json(errorResponse('Failed to send completion notification: ' + error.message, 500));
+  }
+});
+
+// Generate certificates for a registration order
+router.post('/registrations/orders/:orderId/generate-certificates', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const registrationOrder = await prisma.eventRegistrationOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        event: true,
+        registrationItems: {
+          include: {
+            student: {
+              include: {
+                user: {
+                  select: {
+                    email: true,
+                    uniqueId: true
+                  }
+                }
+              }
+            }
+          }
+        },
+        coach: true
+      }
+    });
+
+    if (!registrationOrder) {
+      return res.status(404).json(errorResponse('Registration order not found.', 404));
+    }
+
+    // Check event is completed
+    if (registrationOrder.event.status !== 'COMPLETED') {
+      return res.status(400).json(errorResponse('Cannot generate certificates until event is completed.', 400));
+    }
+
+    // Generate certificates for each student
+    const certificatePromises = registrationOrder.registrationItems.map(async (item) => {
+      const existingCert = await prisma.certificate.findFirst({
+        where: {
+          studentId: item.studentId,
+          eventId: registrationOrder.eventId
+        }
+      });
+
+      if (existingCert) {
+        return existingCert;
+      }
+
+      // Generate certificate UID
+      const certUid = `STAIRS-CERT-${registrationOrder.event.uniqueId}-${item.student.user.uniqueId}-${Date.now()}`;
+
+      const certificate = await prisma.certificate.create({
+        data: {
+          studentId: item.studentId,
+          eventId: registrationOrder.eventId,
+          orderId: registrationOrder.id,
+          participantName: item.student.name,
+          sportName: registrationOrder.event.sport,
+          eventName: registrationOrder.event.name,
+          uniqueId: certUid,
+          certificateUrl: `/certificates/${certUid}.pdf` // Placeholder - implement actual PDF generation
+        }
+      });
+
+      return certificate;
+    });
+
+    const certificates = await Promise.all(certificatePromises);
+
+    // Update registration order
+    await prisma.eventRegistrationOrder.update({
+      where: { id: orderId },
+      data: {
+        certificateGenerated: true,
+        status: 'COMPLETED'
+      }
+    });
+
+    console.log(`✅ Generated ${certificates.length} certificates for order ${orderId}`);
+
+    res.json(successResponse({
+      certificatesGenerated: certificates.length,
+      certificates
+    }, `${certificates.length} certificates generated successfully.`));
+
+  } catch (error) {
+    console.error('❌ Generate certificates error:', error);
+    res.status(500).json(errorResponse('Failed to generate certificates: ' + error.message, 500));
+  }
+});
+
+// Get generated certificates for an event (admin view)
+router.get('/events/:eventId/certificates', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    const certificates = await prisma.certificate.findMany({
+      where: { eventId },
+      include: {
+        student: {
+          select: {
+            id: true,
+            name: true,
+            user: {
+              select: {
+                email: true,
+                uniqueId: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { issueDate: 'desc' }
+    });
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        name: true,
+        sport: true,
+        status: true
+      }
+    });
+
+    res.json(successResponse({
+      event,
+      certificateCount: certificates.length,
+      certificates
+    }, 'Certificates retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get certificates error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve certificates.', 500));
   }
 });
 

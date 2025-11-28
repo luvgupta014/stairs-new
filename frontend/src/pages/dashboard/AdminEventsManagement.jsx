@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { getAdminEvents, moderateEvent, getEventParticipants } from '../../api';
 import ParticipantsModal from '../../components/ParticipantsModal';
+import AdminCertificateIssuance from '../../components/AdminCertificateIssuance';
 
 const AdminEventsManagement = () => {
   const location = useLocation();
@@ -29,6 +30,8 @@ const AdminEventsManagement = () => {
     participants: [],
     loading: false
   });
+
+  const [modalTab, setModalTab] = useState('details'); // 'details', 'certificates'
 
   useEffect(() => {
     fetchAllEvents();
@@ -156,6 +159,7 @@ const AdminEventsManagement = () => {
       participants: [],
       loading: false
     });
+    setModalTab('details');
   };
 
   const getStatusColor = (status) => {
@@ -273,10 +277,37 @@ const AdminEventsManagement = () => {
             </div>
           </div>
 
+          {/* Tab Navigation */}
+          <div className="border-b border-gray-200 flex flex-shrink-0 bg-white">
+            <button
+              onClick={() => setModalTab('details')}
+              className={`px-6 py-3 font-medium text-sm transition-colors ${
+                modalTab === 'details'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Event Details & Participants
+            </button>
+            <button
+              onClick={() => setModalTab('certificates')}
+              className={`px-6 py-3 font-medium text-sm transition-colors ${
+                modalTab === 'certificates'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              🎓 Certificate Issuance
+            </button>
+          </div>
+
           {/* Scrollable Content */}
           <div className="flex-1 overflow-y-auto">
-            {/* Event Details Section */}
-            <div className="px-6 py-5 bg-gradient-to-b from-gray-50 to-white border-b border-gray-200">
+            {/* Details Tab */}
+            {modalTab === 'details' && (
+              <>
+                {/* Event Details Section */}
+                <div className="px-6 py-5 bg-gradient-to-b from-gray-50 to-white border-b border-gray-200">
               <div className="flex items-center mb-4">
                 <div className="w-1 h-6 bg-blue-600 rounded-full mr-3"></div>
                 <h4 className="text-lg font-bold text-gray-900">Event Information</h4>
@@ -588,6 +619,15 @@ const AdminEventsManagement = () => {
                 </div>
               )}
             </div>
+              </>
+            )}
+
+            {/* Certificates Tab */}
+            {modalTab === 'certificates' && (
+              <div className="p-6">
+                <AdminCertificateIssuance event={event} onSuccess={closeEventDetailsModal} />
+              </div>
+            )}
           </div>
 
           {/* Footer - Fixed */}
