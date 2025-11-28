@@ -3629,6 +3629,49 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
       return res.status(400).json(errorResponse('Event end date must be after start date.', 400));
     }
 
+    // Get or create a system coach for admin-created events
+    // First check if there's a coach with email "system-admin-coach@stairs.com"
+    let systemCoach = await prisma.coach.findFirst({
+      where: {
+        user: {
+          email: 'system-admin-coach@stairs.com'
+        }
+      },
+      include: {
+        user: true
+      }
+    }).catch(() => null);
+
+    if (!systemCoach) {
+      console.log('🔧 Creating system coach for admin events...');
+      // Create a system user first
+      const systemUser = await prisma.user.create({
+        data: {
+          email: 'system-admin-coach@stairs.com',
+          password: '', // No password needed for system account
+          role: 'COACH',
+          isActive: true,
+          isVerified: true,
+          name: 'System Admin Coach'
+        }
+      });
+
+      // Create the coach profile
+      systemCoach = await prisma.coach.create({
+        data: {
+          userId: systemUser.id,
+          name: 'System Admin Coach',
+          isActive: true,
+          specialization: 'System Events'
+        },
+        include: {
+          user: true
+        }
+      });
+
+      console.log('✅ System coach created:', systemCoach.id);
+    }
+
     // Generate unique event ID (format: EVT-0001-FB-DL-071125)
     const eventUniqueId = await generateEventUID(sport, state || 'Delhi');
 
@@ -3650,15 +3693,27 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
         eventFee: 0,
         status: 'APPROVED', // Admin events are auto-approved
         uniqueId: eventUniqueId,
+        coachId: systemCoach.id,
         createdAt: new Date(),
         updatedAt: new Date()
       },
       include: {
+        coach: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true
+              }
+            }
+          }
+        },
         registrations: true
       }
     });
 
-    console.log('✅ Admin created event:', event.id);
+    console.log('✅ Admin created event:', event.id, 'linked to coach:', systemCoach.id);
 
     res.status(201).json(successResponse(event, 'Event created successfully by admin.'));
 
