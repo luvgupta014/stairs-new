@@ -542,6 +542,12 @@ export default function AdminDashboard() {
             </div>
             <div className="flex space-x-3">
               <Link
+                to="/admin/event/create"
+                className="bg-white text-green-600 px-4 py-2 rounded-lg font-medium inline-flex items-center hover:bg-gray-50 transition-colors"
+              >
+                Create Event
+              </Link>
+              <Link
                 to="/admin/users"
                 className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-lg font-medium inline-flex items-center transition-colors"
               >

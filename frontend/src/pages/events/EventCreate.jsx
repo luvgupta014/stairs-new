@@ -192,7 +192,7 @@ const MultiSportSelector = ({ selected = [], onChange, className = '' }) => {
   );
 };
 
-const EventCreate = () => {
+const EventCreate = ({ adminMode = false }) => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -211,7 +211,7 @@ const EventCreate = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [coachData, setCoachData] = useState(null);
-  const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(true);
+  const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(!adminMode);
   
   // Payment status hook
   const {
@@ -225,8 +225,10 @@ const EventCreate = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    checkPaymentStatus();
-  }, []);
+    if (!adminMode) {
+      checkPaymentStatus();
+    }
+  }, [adminMode]);
 
   const checkPaymentStatus = async () => {
     try {
@@ -245,7 +247,7 @@ const EventCreate = () => {
     e.preventDefault();
 
     // Check payment status before allowing event creation
-    if (isPending) {
+    if (!adminMode && isPending) {
       showPaymentPopupManually();
       return;
     }
@@ -285,7 +287,7 @@ const EventCreate = () => {
       if (result.success) {
         setSuccess(true);
         setTimeout(() => {
-          navigate('/dashboard/coach');
+          navigate(adminMode ? '/dashboard/admin' : '/dashboard/coach');
         }, 2000);
       } else {
         setError(result.message || 'Failed to create event');
@@ -360,7 +362,7 @@ const EventCreate = () => {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-6">
-        <BackButton to="/dashboard/coach" label="Back to Dashboard" />
+        <BackButton to={adminMode ? '/dashboard/admin' : '/dashboard/coach'} label="Back to Dashboard" />
       </div>
       
       <div className="bg-white rounded-lg shadow-md p-8">
@@ -672,14 +674,16 @@ const EventCreate = () => {
         </form>
       </div>
 
-      {/* Payment Popup */}
-      <PaymentPopup
-        isOpen={showPaymentPopup}
-        onClose={() => dismissPaymentPopup(false)}
-        userType="coach"
-        userProfile={coachData}
-        onPaymentSuccess={onPaymentSuccess}
-      />
+      {/* Payment Popup (only for coach flow) */}
+      {!adminMode && (
+        <PaymentPopup
+          isOpen={showPaymentPopup}
+          onClose={() => dismissPaymentPopup(false)}
+          userType="coach"
+          userProfile={coachData}
+          onPaymentSuccess={onPaymentSuccess}
+        />
+      )}
     </div>
   );
 };

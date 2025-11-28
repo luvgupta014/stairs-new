@@ -195,6 +195,20 @@ function App() {
               }
             />
             <Route
+              path="/admin/event/create"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute role="ADMIN">
+                      <EventCreate adminMode={true} />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
               path="/admin/event-results"
               element={
                 <>
