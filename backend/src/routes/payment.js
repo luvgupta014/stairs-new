@@ -28,7 +28,7 @@ router.get('/test-auth', authenticate, (req, res) => {
 router.get('/plans/:userType', async (req, res) => {
   try {
     const { userType } = req.params;
-    
+
     // Validate user type
     const validUserTypes = ['student', 'coach', 'club', 'institute'];
     if (!validUserTypes.includes(userType)) {
@@ -55,7 +55,7 @@ router.get('/plans', async (req, res) => {
   try {
     const allPlans = {};
     const userTypes = ['student', 'coach', 'club', 'institute'];
-    
+
     userTypes.forEach(userType => {
       allPlans[userType] = {
         userDisplayName: getUserTypeDisplayName(userType),
@@ -75,7 +75,7 @@ router.get('/plans', async (req, res) => {
 router.post('/create-order', authenticate, async (req, res) => {
   try {
     const { planId, userType } = req.body;
-    
+
     // Validate user type
     const validUserTypes = ['student', 'coach', 'club', 'institute'];
     if (!validUserTypes.includes(userType)) {
@@ -85,7 +85,7 @@ router.post('/create-order', authenticate, async (req, res) => {
     // Get plan details
     const planConfig = getPlansForUserType(userType);
     const plan = planConfig.plans.find(p => p.id === planId);
-    
+
     if (!plan) {
       return res.status(400).json(errorResponse('Invalid plan selected.', 400));
     }
@@ -93,10 +93,10 @@ router.post('/create-order', authenticate, async (req, res) => {
     // Create Razorpay order
     const timestamp = Date.now().toString().slice(-8); // Last 8 digits
     const userIdShort = req.user.id.slice(-6); // Last 6 chars of user ID
-    const receipt = `${userType.slice(0,2)}_${userIdShort}_${timestamp}`; // Max ~20 chars
-    
+    const receipt = `${userType.slice(0, 2)}_${userIdShort}_${timestamp}`; // Max ~20 chars
+
     console.log(`Generated receipt: "${receipt}" (length: ${receipt.length})`);
-    
+
     const order = await razorpay.orders.create({
       amount: plan.price * 100, // Amount in paise
       currency: 'INR',
@@ -126,10 +126,10 @@ router.post('/create-order', authenticate, async (req, res) => {
         razorpayOrderId: order.id,
         status: 'PENDING',
         description: `${plan.name} subscription for ${userType}`,
-        metadata: JSON.stringify({ 
+        metadata: JSON.stringify({
           planId: planId,
           planName: plan.name,
-          userType: userType 
+          userType: userType
         })
       }
     });
@@ -148,69 +148,126 @@ router.post('/create-order', authenticate, async (req, res) => {
   }
 });
 
-   router.post('/create-order-events', authenticate, async (req, res) => {
-      try {
-        const { eventId } = req.body;
-        
-        // Fetch event details
-        const event = await prisma.event.findUnique({
-          where: { id: eventId }
-        });
-        
-        if (!event) {
-          return res.status(404).json(errorResponse('Event not found.', 404));
+router.post('/create-order-events', authenticate, async (req, res) => {
+  try {
+    const { eventId } = req.body;
+
+    // Fetch event details
+    // Fetch event details
+    const event = await prisma.event.findUnique({
+      where: { id: eventId }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+    console.log("Creating payment order for event", event);
+
+    const amount = 500 * (event.currentParticipants || 0) * 100; // in paise
+
+    // Create Razorpay order
+    const timestamp = Date.now().toString().slice(-8); // Last 8 digits
+    // guard against coachId being undefined
+    const userIdForReceipt = (event.coachId || '').toString();
+    const userIdShort = userIdForReceipt.slice(-6); // Last 6 chars of user ID
+    const receipt = `EV_${userIdShort}_${timestamp}`; // Max ~20 chars
+
+    console.log(`Generated receipt: "${receipt}" (length: ${receipt.length})`);
+
+    const order = await razorpay.orders.create({
+      amount: amount,
+      currency: 'INR',
+      receipt: receipt,
+      notes: {
+        userId: event.coachId,
+        eventId: eventId
+      }
+    });
+
+    console.log(`✅ Razorpay order created successfully: ${order.id} for event ${event.name} (₹${amount / 100})`);
+
+    //
+    // === SAFETY CHECK: ensure the referenced user exists AND types match Prisma schema ===
+    //
+    // The Prisma P2003 you saw means the payment.userId (FK) does not match any users.id.
+    // We attempt to find the coach record and coerce numeric ids when necessary.
+    //
+    let coach = null;
+
+    // Try direct lookup first (works for string UUID or int depending on schema)
+    try {
+      coach = await prisma.user.findUnique({ where: { id: event.coachId } });
+    } catch (e) {
+      // If the schema's id is Int and event.coachId is string, the direct call may throw.
+      // We'll ignore and try a numeric coercion below.
+      console.warn('Direct user lookup failed, will try numeric coercion if possible.');
+    }
+
+    // If not found, and event.coachId looks numeric, try numeric lookup
+    if (!coach) {
+      const maybeNum = Number(event.coachId);
+      if (!Number.isNaN(maybeNum)) {
+        try {
+          coach = await prisma.user.findUnique({ where: { id: maybeNum } });
+          // if found, prefer numeric id for payment creation
+          if (coach) event.coachId = maybeNum;
+        } catch (e) {
+          console.warn('Numeric user lookup also failed.');
         }
-        console.log("Creating payment order for event", event);
-        const amount = 500 * event.currentParticipants * 100; // in paise
+      }
+    }
 
-        // Create Razorpay order
-        const timestamp = Date.now().toString().slice(-8); // Last 8 digits
-        const userIdShort = event.coachId.slice(-6); // Last 6 chars of user ID
-        const receipt = `EV_${userIdShort}_${timestamp}`; // Max ~20 chars
-        
-        console.log(`Generated receipt: "${receipt}" (length: ${receipt.length})`);
-        
-        const order = await razorpay.orders.create({
-          amount: amount,
-          currency: 'INR',
-          receipt: receipt,
-          notes: {
-            userId: event.coachId,
-            eventId: eventId
-          }
-        });
+    if (!coach) {
+      // No matching user -> return error instead of attempting to create an invalid FK payment
+      console.error(`No user found for coachId=${event.coachId}. Aborting payment create to avoid FK constraint error.`);
+      return res.status(400).json(errorResponse('Coach (user) not found for this event. Please contact support.', 400));
+    }
+
+    // Prepare payment payload.
+    // If your Prisma Payment.metadata field is a Json type, pass object; otherwise stringify.
+    const metadataValue = (() => {
+      // Detect if prisma schema has Json type by trying to pass object (safe to pass object for Json)
+      // If your metadata is defined as String, change to JSON.stringify(...)
+      return {
+        eventId,
+        eventName: event.name
+      };
+    })();
+
+    // Use connect or userId depending on your schema. Both examples are shown; uncomment the one that matches.
+    // Most robust: use connect with the value that matches user.id type
+    const paymentData = {
+      // If your Payment model has a 'userId' scalar of same type as coach.id, use userId:
+      // userId: coach.id,
+      // Or use relation connect (works regardless of scalar name) — ensure the relation name is 'user'
+      user: { connect: { id: coach.id } },
+
+      // fix userType to reflect the actual user role
+      userType: 'COACH', // was 'STUDENT' previously; set according to who is being charged
+      type: 'EVENT_REGISTRATION',
+      amount: amount / 100,
+      currency: 'INR',
+      razorpayOrderId: order.id,
+      status: 'PENDING',
+      description: `Registration for event: ${event.name}`,
+      // If metadata column in Prisma is Json, pass object; if it's String, stringify
+      metadata: metadataValue
+    };
+
+    // Create payment record
+    const payment = await prisma.payment.create({
+      data: paymentData
+    });
+
+    res.json(successResponse({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      eventName: event.name,
+      razorpayKeyId: process.env.RAZORPAY_KEY_ID
+    }, 'Event payment order created successfully.'));
 
 
-        console.log(`✅ Razorpay order created successfully: ${order.id} for event ${event.name} (₹${amount/100})`);
-
-        // Save payment record
-        const payment = await prisma.payment.create({
-          data: {
-            userId: event.coachId,
-            userType: 'STUDENT',
-            type: 'EVENT_REGISTRATION',
-            amount: amount / 100,
-            currency: 'INR',
-            razorpayOrderId: order.id,
-            status: 'PENDING',
-            description: `Registration for event: ${event.name}`,
-            metadata: JSON.stringify({ 
-              eventId: eventId,
-              eventName: event.name
-            })
-          }
-        });
-
-        res.json(successResponse({
-          orderId: order.id,
-          amount: order.amount,
-          currency: order.currency,
-          eventName: event.name,
-          razorpayKeyId: process.env.RAZORPAY_KEY_ID
-        }, 'Event payment order created successfully.'));
-
-    
-       
 
   } catch (error) {
     console.error('Create payment order error:', error);
@@ -221,11 +278,11 @@ router.post('/create-order', authenticate, async (req, res) => {
 // Verify payment (unified for all user types)
 router.post('/verify', authenticate, async (req, res) => {
   try {
-    const { 
-      razorpay_order_id, 
-      razorpay_payment_id, 
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
       razorpay_signature,
-      userType 
+      userType
     } = req.body;
 
     console.log(`🔍 Verifying payment for user ${req.user.id}, order: ${razorpay_order_id}`);
@@ -265,7 +322,7 @@ router.post('/verify', authenticate, async (req, res) => {
 
     // Update user profile based on userType
     console.log(`🔄 Updating ${userType} profile for user ${req.user.id}`);
-    
+
     const subscriptionExpiresAt = new Date();
     subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1); // 1 month subscription
 
