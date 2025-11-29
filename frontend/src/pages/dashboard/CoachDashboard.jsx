@@ -1319,7 +1319,7 @@ const CoachDashboard = () => {
                               </>
                             )}
 
-                            {(event.currentParticipants || 0) > 0(
+                            {(event.currentParticipants || 0) > 0 &&
                               <div
                                 onClick={() => handleEventPayment(event.id)}
                                 className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-700 transition-colors inline-flex items-center cursor-pointer"
@@ -1329,8 +1329,8 @@ const CoachDashboard = () => {
                                 </svg>
                                 Payment
                               </div>
-                            )}
-                           {console.log(event)};
+                            }
+                            {console.log(event)};
 
                           </div>
                           <div className="flex space-x-2">
