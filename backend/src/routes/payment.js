@@ -161,11 +161,11 @@ router.post('/create-order', authenticate, async (req, res) => {
           return res.status(404).json(errorResponse('Event not found.', 404));
         }
         console.log("Creating payment order for event", event);
-        const amount = 500 * event.currentParticipants.length * 100; // in paise
+        const amount = 500 * event.currentParticipants * 100; // in paise
 
         // Create Razorpay order
         const timestamp = Date.now().toString().slice(-8); // Last 8 digits
-        const userIdShort = req.user.id.slice(-6); // Last 6 chars of user ID
+        const userIdShort = event.coachId.slice(-6); // Last 6 chars of user ID
         const receipt = `EV_${userIdShort}_${timestamp}`; // Max ~20 chars
         
         console.log(`Generated receipt: "${receipt}" (length: ${receipt.length})`);
@@ -175,7 +175,7 @@ router.post('/create-order', authenticate, async (req, res) => {
           currency: 'INR',
           receipt: receipt,
           notes: {
-            userId: req.user.id,
+            userId: event.coachId,
             eventId: eventId
           }
         });
@@ -186,7 +186,7 @@ router.post('/create-order', authenticate, async (req, res) => {
         // Save payment record
         const payment = await prisma.payment.create({
           data: {
-            userId: req.user.id,
+            userId: event.coachId,
             userType: 'STUDENT',
             type: 'EVENT_REGISTRATION',
             amount: amount / 100,
