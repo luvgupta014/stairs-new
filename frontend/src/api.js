@@ -26,23 +26,23 @@ window.debugBackendConnection = () => {
   console.log('  Backend URL:', backendUrl);
   console.log('  Environment:', import.meta.env.MODE);
   console.log('  All VITE env vars:', Object.keys(import.meta.env).filter(key => key.startsWith('VITE_')));
-  
+
   // Test multiple possible backend URLs
   const possibleUrls = [
     backendUrl,
     // Auto-detect alternatives based on current location
     `${window.location.protocol}//${window.location.hostname}:5000`,
-    `${window.location.protocol}//${window.location.hostname}:3001`, 
+    `${window.location.protocol}//${window.location.hostname}:3001`,
     `${window.location.protocol}//${window.location.hostname}:8000`,
     'http://localhost:5000'
   ];
-  
+
   console.log('🔍 Testing possible backend URLs...');
-  
+
   possibleUrls.forEach(url => {
-    fetch(`${url}/health`, { 
+    fetch(`${url}/health`, {
       method: 'GET',
-      timeout: 5000 
+      timeout: 5000
     })
       .then(response => {
         if (response.ok) {
@@ -59,7 +59,7 @@ window.debugBackendConnection = () => {
         console.log(`❌ Cannot reach backend at ${url}:`, error.message);
       });
   });
-  
+
   // Show fix instructions
   setTimeout(() => {
     console.log('💡 If no backend found, try these solutions:');
@@ -88,12 +88,12 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
+
     // Handle FormData - remove Content-Type to let browser set boundary
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
     }
-    
+
     return config;
   },
   (error) => {
@@ -118,7 +118,7 @@ api.interceptors.response.use(
       // FIXED: Only redirect to login if this is NOT a login/register attempt
       // Don't redirect on login/register endpoints - let the component handle the error
       const isAuthEndpoint = error.config?.url?.includes('/api/auth/');
-      
+
       if (!isAuthEndpoint) {
         // User's session has expired while accessing protected resources
         console.warn('🔒 Session expired - redirecting to login');
@@ -177,7 +177,7 @@ export const login = async (data, role) => {
     return response.data;
   } catch (error) {
     console.error(`❌ Login failed for ${role}:`, error.message);
-    
+
     // Provide user-friendly error messages
     if (error.userMessage) {
       throw { message: error.userMessage };
@@ -541,7 +541,7 @@ export const adminLogin = async (credentials) => {
     return response.data;
   } catch (error) {
     console.error('❌ Admin login failed:', error.message);
-    
+
     // Provide user-friendly error messages
     if (error.userMessage) {
       throw { message: error.userMessage };
@@ -609,26 +609,26 @@ export const getPendingEvents = async (params = {}) => {
 export const moderateEvent = async (eventId, action, remarks) => {
   try {
     console.log(`🔄 Sending moderation request: ${action} for event ${eventId}`);
-    
+
     const response = await api.put(`/api/admin/events/${eventId}/moderate`, {
       action: action.toUpperCase(),
       adminNotes: remarks,
       remarks: remarks // Send both field names for compatibility
     });
-    
+
     console.log('✅ Moderation response:', response.data);
     return response.data;
   } catch (error) {
     console.error('❌ Moderate event API error:', error);
     console.error('Error response:', error.response?.data);
     console.error('Error status:', error.response?.status);
-    
+
     // Throw more specific error
-    const errorMessage = error.response?.data?.message || 
-                        error.response?.data?.error || 
-                        error.message || 
-                        'Unknown error occurred';
-    
+    const errorMessage = error.response?.data?.message ||
+      error.response?.data?.error ||
+      error.message ||
+      'Unknown error occurred';
+
     throw new Error(errorMessage);
   }
 };
@@ -665,25 +665,48 @@ export const getEventPayments = async (eventId, params = {}) => {
     throw new Error('eventId is required');
   }
 
-  try {
-    const response = await api.get(`/api/admin/events/${eventId}/payments`, { params });
-    const payload = response.data;
+  const adminPath = `/api/admin/events/${eventId}/payments`;
+  const publicPath = `/api/events/${eventId}/payments`; // fallback, if you have a non-admin endpoint
 
-    if (payload && Object.prototype.hasOwnProperty.call(payload, 'data')) {
-      return payload.data;
+  const normalize = (resData) => {
+    // expected server shape: { success: true, data: { payments: [...] } }
+    if (!resData) return { success: false, payments: [] };
+
+    if (resData.success && resData.data) {
+      return { success: true, payments: resData.data.payments || [] };
     }
 
-    return payload;
-  } catch (error) {
-    console.error('Get event payments error:', error);
+    if (Array.isArray(resData)) {
+      return { success: true, payments: resData };
+    }
 
-    const serverError = error?.response?.data || error?.response || error?.message || error;
-    const err = new Error(serverError?.message || 'Failed to fetch event payments');
-    err.details = serverError;
-    throw err;
+    if (resData.payments) {
+      return { success: true, payments: resData.payments };
+    }
+
+    return { success: false, payments: [], message: resData.message || null };
+  };
+
+  try {
+    const response = await api.get(adminPath, { params });
+    return normalize(response.data);
+  } catch (error) {
+    const status = error?.response?.status;
+    // Try public fallback for non-admin users or missing admin route
+    if (status === 404 || status === 403 || status === 401) {
+      try {
+        const fallback = await api.get(publicPath, { params });
+        return normalize(fallback.data);
+      } catch (err2) {
+        console.error('Get event payments fallback error:', err2);
+        return { success: false, payments: [], message: err2?.response?.data?.message || err2.message };
+      }
+    }
+
+    console.error('Get event payments error:', error);
+    return { success: false, payments: [], message: error?.response?.data?.message || error.message || 'Failed to fetch event payments' };
   }
 };
-
 // Coach and Institute Approval APIs
 export const getPendingCoaches = async (params = {}) => {
   try {
@@ -831,10 +854,10 @@ export const getEventResultFiles = async (eventId, params = {}) => {
 export const deleteEventResultFile = async (eventId, fileId = null) => {
   try {
     // If fileId is provided, delete specific file, otherwise delete all files
-    const endpoint = fileId 
+    const endpoint = fileId
       ? `/api/events/${eventId}/results/${fileId}`
       : `/api/events/${eventId}/results`;
-    
+
     const response = await api.delete(endpoint);
     return response.data;
   } catch (error) {
