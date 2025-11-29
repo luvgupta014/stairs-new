@@ -160,7 +160,7 @@ router.post('/create-order', authenticate, async (req, res) => {
         if (!event) {
           return res.status(404).json(errorResponse('Event not found.', 404));
         }
-
+        console.log("Creating payment order for event", event);
         const amount = 500 * event.currentParticipants.length * 100; // in paise
 
         // Create Razorpay order
@@ -179,6 +179,7 @@ router.post('/create-order', authenticate, async (req, res) => {
             eventId: eventId
           }
         });
+
 
         console.log(`✅ Razorpay order created successfully: ${order.id} for event ${event.name} (₹${amount/100})`);
 
