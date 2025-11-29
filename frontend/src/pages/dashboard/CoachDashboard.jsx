@@ -1,5 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getCoachDashboard, getCoachEvents, updateEvent, deleteEvent, getEventRegistrations, getNotifications, getNotificationCount, markNotificationAsRead } from '../../api';
+import {
+  getCoachDashboard,
+  getCoachEvents,
+  updateEvent,
+  deleteEvent,
+  getEventRegistrations,
+  getNotifications,
+  getNotificationCount,
+  markNotificationAsRead,
+  cancelEventAPI
+} from '../../api';
 import StudentCard from '../../components/StudentCard';
 import Spinner from '../../components/Spinner';
 import CoachParticipantsModal from '../../components/CoachParticipantsModal';
@@ -11,6 +21,7 @@ import { FaExclamationTriangle, FaCreditCard, FaCheckCircle, FaEdit, FaTrash, Fa
 const CoachDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [coachEvents, setCoachEvents] = useState([]);
@@ -141,7 +152,7 @@ const CoachDashboard = () => {
     return () => clearInterval(interval);
   }, [loadNotificationCount]);
 
-  // Load events when tab changes
+  // Load events when tab changes or filters change
   useEffect(() => {
     if (activeTab === 'events') {
       loadCoachEvents();
@@ -397,8 +408,6 @@ const CoachDashboard = () => {
     }
   };
 
-  // Notification functions - moved to useCallback above
-
   const handleNotificationClick = async (notification) => {
     if (!notification.isRead) {
       try {
@@ -527,7 +536,7 @@ const CoachDashboard = () => {
           </div>
         )}
 
-        {/* Notifications Section - Only show if we have notifications OR if the panel is expanded */}
+        {/* Notifications Section */}
         {(notifications.length > 0 || unreadCount > 0) && (
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
@@ -544,9 +553,8 @@ const CoachDashboard = () => {
                 onClick={() => {
                   const newState = !showNotifications;
                   setShowNotifications(newState);
-                  // Load full notifications only when opening the panel
                   if (newState) {
-                    loadNotifications(true); // Force reload
+                    loadNotifications(true);
                   }
                 }}
                 className="text-blue-600 hover:text-blue-800 text-sm font-medium"
@@ -827,11 +835,8 @@ const CoachDashboard = () => {
                       to="/coach/profile"
                       className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 rounded-lg text-sm font-medium text-center block transition-colors"
                     >
-                      � Update Profile
+                      Update Profile
                     </Link>
-                    {/* <button className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-lg text-sm font-medium text-center block transition-colors">
-                      📋 Schedule Training
-                    </button> */}
                   </div>
                 </div>
               </div>
@@ -1257,89 +1262,85 @@ const CoachDashboard = () => {
                             )}
 
                             {['COMPLETED'].includes(event.status) && (
-                              <>
-                                <div
-                                  onClick={() => handleEventPayment(event.id)}
-                                  className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-700 transition-colors inline-flex items-center cursor-pointer"
-                                >
-                                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                  Payment
-                                </div>
-                              </>
+                              <div
+                                onClick={() => handleEventPayment(event.id)}
+                                className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-700 transition-colors inline-flex items-center cursor-pointer"
+                              >
+                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Payment
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex space-x-2">
+                            {event.status === 'PENDING' && (
+                              <button
+                                onClick={() => confirmDeleteEvent(event)}
+                                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 transition-colors inline-flex items-center"
+                              >
+                                <FaTrash className="mr-2" />
+                                Delete
+                              </button>
                             )}
 
-
-
-                            <div className="flex space-x-2">
-                              {event.status === 'PENDING' && (
-                                <button
-                                  onClick={() => confirmDeleteEvent(event)}
-                                  className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 transition-colors inline-flex items-center"
-                                >
-                                  <FaTrash className="mr-2" />
-                                  Delete
-                                </button>
-                              )}
-
-                              {['APPROVED', 'ACTIVE'].includes(event.status) && new Date(event.startDate) > new Date() && (
-                                <button
-                                  onClick={() => cancelEvent(event)}
-                                  className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-700 transition-colors"
-                                >
-                                  Cancel Event
-                                </button>
-                              )}
-                            </div>
+                            {['APPROVED', 'ACTIVE'].includes(event.status) && new Date(event.startDate) > new Date() && (
+                              <button
+                                onClick={() => cancelEvent(event)}
+                                className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-700 transition-colors"
+                              >
+                                Cancel Event
+                              </button>
+                            )}
                           </div>
                         </div>
+                      </div>
                     ))}
-                      </div>
-                    ) : (
-                    <div className="text-center py-12">
-                      <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <FaCalendar className="text-gray-400 text-3xl" />
-                      </div>
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Events Found</h3>
-                      <p className="text-gray-600 mb-6">
-                        {Object.values(eventFilters).some(filter => filter)
-                          ? 'No events match your current filters.'
-                          : 'Create your first event to start managing student activities.'}
-                      </p>
-                      {!Object.values(eventFilters).some(filter => filter) && (
-                        <Link
-                          to="/coach/event/create"
-                          className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium inline-flex items-center"
-                        >
-                          <FaCalendar className="mr-2" />
-                          Create Your First Event
-                        </Link>
-                      )}
-                    </div>
-                )}
                   </div>
-                )}
-
-                {activeTab === 'analytics' && (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div className="bg-white border border-gray-200 rounded-lg p-6">
-                      <h4 className="font-semibold text-gray-900 mb-4">Student Performance Trends</h4>
-                      <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                        <p className="text-gray-500">📊 Performance Chart (Chart.js integration)</p>
-                      </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <FaCalendar className="text-gray-400 text-3xl" />
                     </div>
-
-                    <div className="bg-white border border-gray-200 rounded-lg p-6">
-                      <h4 className="font-semibold text-gray-900 mb-4">Revenue Analytics</h4>
-                      <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                        <p className="text-gray-500">💰 Revenue Chart (Chart.js integration)</p>
-                      </div>
-                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Events Found</h3>
+                    <p className="text-gray-600 mb-6">
+                      {Object.values(eventFilters).some(filter => filter)
+                        ? 'No events match your current filters.'
+                        : 'Create your first event to start managing student activities.'}
+                    </p>
+                    {!Object.values(eventFilters).some(filter => filter) && (
+                      <Link
+                        to="/coach/event/create"
+                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium inline-flex items-center"
+                      >
+                        <FaCalendar className="mr-2" />
+                        Create Your First Event
+                      </Link>
+                    )}
                   </div>
                 )}
               </div>
-        </div>
+            )}
+
+            {activeTab === 'analytics' && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-white border border-gray-200 rounded-lg p-6">
+                  <h4 className="font-semibold text-gray-900 mb-4">Student Performance Trends</h4>
+                  <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+                    <p className="text-gray-500">📊 Performance Chart (Chart.js integration)</p>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-gray-200 rounded-lg p-6">
+                  <h4 className="font-semibold text-gray-900 mb-4">Revenue Analytics</h4>
+                  <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+                    <p className="text-gray-500">💰 Revenue Chart (Chart.js integration)</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Event Details Modal */}
@@ -1524,7 +1525,8 @@ const CoachDashboard = () => {
           onPaymentSuccess={onPaymentSuccess}
         />
       </div>
-      );
+    </div>
+  );
 };
 
-      export default CoachDashboard;
+export default CoachDashboard;
