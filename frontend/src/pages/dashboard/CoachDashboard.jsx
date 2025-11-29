@@ -25,13 +25,13 @@ const CoachDashboard = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [eventToDelete, setEventToDelete] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
-  
+
   // Notification state
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
-  
+
   // Participants modal state
   const [participantsModal, setParticipantsModal] = useState({
     isOpen: false,
@@ -39,7 +39,7 @@ const CoachDashboard = () => {
     participants: [],
     loading: false
   });
-  
+
   // Payment status hook
   const {
     paymentStatus,
@@ -49,10 +49,10 @@ const CoachDashboard = () => {
     onPaymentSuccess,
     showPaymentPopupManually
   } = usePaymentStatus();
-  
+
   const location = useLocation();
   const navigate = useNavigate();
-  
+
   // Use ref to track if initial load is done
   const initialLoadDone = useRef(false);
   const notificationCache = useRef({ timestamp: 0, data: [] });
@@ -87,7 +87,7 @@ const CoachDashboard = () => {
         const notifData = response.data.notifications || [];
         setNotifications(notifData);
         setUnreadCount(response.data.unreadCount || 0);
-        
+
         // Update cache
         notificationCache.current = {
           timestamp: now,
@@ -105,7 +105,7 @@ const CoachDashboard = () => {
     try {
       const response = await getCoachDashboard();
       console.log('Dashboard response:', response);
-      
+
       if (response.success) {
         setDashboardData(response.data);
       } else {
@@ -126,7 +126,7 @@ const CoachDashboard = () => {
       loadDashboardData();
       loadNotificationCount(); // Only load count initially
     }
-    
+
     // Check if redirected from payment success
     if (location.state?.paymentSuccess) {
       setPaymentSuccess(true);
@@ -157,7 +157,7 @@ const CoachDashboard = () => {
         limit: 50,
         ...eventFilters
       });
-      
+
       if (response.success) {
         setCoachEvents(response.data.events || []);
       } else {
@@ -221,7 +221,7 @@ const CoachDashboard = () => {
     try {
       setActionLoading(true);
       const response = await deleteEvent(eventId);
-      
+
       if (response.success) {
         setCoachEvents(prev => prev.filter(event => event.id !== eventId));
         setShowDeleteModal(false);
@@ -238,17 +238,92 @@ const CoachDashboard = () => {
     }
   };
 
+  const handleEventPayment = async (eventId) => {
+    try {
+      const token = localStorage.getItem("token");
+
+      // 1️⃣ Create Razorpay order
+      const res = await fetch("/api/create-order-events", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ eventId })
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        alert("Failed to create Razorpay order");
+        return;
+      }
+
+      const { orderId, amount, currency, razorpayKeyId, eventName } = data.data;
+
+      // 2️⃣ Razorpay checkout
+      const options = {
+        key: razorpayKeyId,
+        amount,
+        currency,
+        name: "STAIRS Event Fee",
+        description: `Payment for ${eventName}`,
+        order_id: orderId,
+
+        handler: async (response) => {
+          // 3️⃣ Verify the payment
+          const verifyRes = await fetch("/api/verify-payment", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature
+            })
+          });
+
+          const verifyData = await verifyRes.json();
+
+          if (verifyData.success) {
+            alert("Payment Successful!");
+
+            // 🔥 Refresh events instantly
+            await loadCoachEvents();
+          } else {
+            alert("Payment verification failed!");
+          }
+        },
+
+        prefill: {
+          name: dashboardData?.coach?.name || "Coach",
+          email: dashboardData?.coach?.email || "coach@example.com",
+          contact: dashboardData?.coach?.phone || "9999999999"
+        },
+
+        theme: { color: "#0F9D58" }
+      };
+
+      new window.Razorpay(options).open();
+
+    } catch (error) {
+      console.error("Payment Error:", error);
+      alert("Something went wrong during payment.");
+    }
+  };
+
   const confirmDeleteEvent = (event) => {
     setEventToDelete(event);
     setShowDeleteModal(true);
   };
 
   const exportEvents = () => {
-    const csvContent = "data:text/csv;charset=utf-8," 
+    const csvContent = "data:text/csv;charset=utf-8,"
       + "Event Name,Sport,Status,Start Date,Venue,City,Participants,Max Participants\n"
-      + coachEvents.map(event => 
-          `"${event.name}","${event.sport}","${event.status}","${new Date(event.startDate).toLocaleDateString()}","${event.venue}","${event.city}","${event.currentParticipants || 0}","${event.maxParticipants || 'Unlimited'}"`
-        ).join("\n");
+      + coachEvents.map(event =>
+        `"${event.name}","${event.sport}","${event.status}","${new Date(event.startDate).toLocaleDateString()}","${event.venue}","${event.city}","${event.currentParticipants || 0}","${event.maxParticipants || 'Unlimited'}"`
+      ).join("\n");
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -269,7 +344,7 @@ const CoachDashboard = () => {
       });
 
       const response = await getEventRegistrations(event.id);
-      
+
       if (response.success) {
         setParticipantsModal(prev => ({
           ...prev,
@@ -301,13 +376,13 @@ const CoachDashboard = () => {
   const cancelEvent = async (event) => {
     const reason = prompt('Please provide a reason for cancelling this event:');
     if (reason === null) return; // User cancelled
-    
+
     try {
       setActionLoading(true);
       const response = await cancelEventAPI(event.id, reason);
-      
+
       if (response.success) {
-        setCoachEvents(prev => prev.map(e => 
+        setCoachEvents(prev => prev.map(e =>
           e.id === event.id ? { ...e, status: 'CANCELLED' } : e
         ));
         alert('Event cancelled successfully!');
@@ -328,19 +403,19 @@ const CoachDashboard = () => {
     if (!notification.isRead) {
       try {
         await markNotificationAsRead(notification.id);
-        const updatedNotifications = notifications.map(n => 
-          n.id === notification.id 
+        const updatedNotifications = notifications.map(n =>
+          n.id === notification.id
             ? { ...n, isRead: true, readAt: new Date() }
             : n
         );
         setNotifications(updatedNotifications);
-        
+
         // Update cache
         notificationCache.current = {
           timestamp: Date.now(),
           data: updatedNotifications
         };
-        
+
         setUnreadCount(prev => Math.max(0, prev - 1));
       } catch (error) {
         console.error('Failed to mark notification as read:', error);
@@ -387,7 +462,7 @@ const CoachDashboard = () => {
     const now = new Date();
     const notificationTime = new Date(createdAt);
     const diffInMinutes = Math.floor((now - notificationTime) / (1000 * 60));
-    
+
     if (diffInMinutes < 1) return 'Just now';
     if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
@@ -479,18 +554,17 @@ const CoachDashboard = () => {
                 {showNotifications ? 'Hide' : 'View All'}
               </button>
             </div>
-            
+
             {showNotifications && (
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {notifications.map((notification) => (
                   <div
                     key={notification.id}
                     onClick={() => handleNotificationClick(notification)}
-                    className={`p-4 rounded-lg border-l-4 cursor-pointer hover:bg-gray-50 transition-colors ${
-                      notification.isRead 
-                        ? 'border-gray-300 bg-gray-50' 
-                        : 'border-blue-500 bg-white'
-                    }`}
+                    className={`p-4 rounded-lg border-l-4 cursor-pointer hover:bg-gray-50 transition-colors ${notification.isRead
+                      ? 'border-gray-300 bg-gray-50'
+                      : 'border-blue-500 bg-white'
+                      }`}
                   >
                     <div className="flex items-start space-x-3">
                       <span className="text-lg flex-shrink-0">
@@ -515,16 +589,15 @@ const CoachDashboard = () => {
                 ))}
               </div>
             )}
-            
+
             {!showNotifications && notifications.slice(0, 3).map((notification) => (
               <div
                 key={notification.id}
                 onClick={() => handleNotificationClick(notification)}
-                className={`p-3 rounded-lg border-l-4 cursor-pointer hover:bg-gray-50 transition-colors mb-2 ${
-                  notification.isRead 
-                    ? 'border-gray-300 bg-gray-50' 
-                    : 'border-blue-500 bg-white'
-                }`}
+                className={`p-3 rounded-lg border-l-4 cursor-pointer hover:bg-gray-50 transition-colors mb-2 ${notification.isRead
+                  ? 'border-gray-300 bg-gray-50'
+                  : 'border-blue-500 bg-white'
+                  }`}
               >
                 <div className="flex items-start space-x-3">
                   <span className="text-lg flex-shrink-0">
@@ -585,7 +658,7 @@ const CoachDashboard = () => {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div 
+          <div
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
             onClick={() => {
               setActiveTab('athletes');
@@ -608,7 +681,7 @@ const CoachDashboard = () => {
             </div>
           </div>
 
-          <div 
+          <div
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
             onClick={() => {
               setActiveTab('events');
@@ -631,7 +704,7 @@ const CoachDashboard = () => {
             </div>
           </div>
 
-          <div 
+          <div
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-yellow-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
             onClick={() => {
               setActiveTab('analytics');
@@ -663,7 +736,7 @@ const CoachDashboard = () => {
             </div>
           </div>
 
-          <div 
+          <div
             className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500 cursor-pointer hover:shadow-lg transition-shadow duration-200"
             onClick={() => {
               setActiveTab('analytics');
@@ -700,11 +773,10 @@ const CoachDashboard = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === tab.id
-                      ? 'border-green-500 text-green-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === tab.id
+                    ? 'border-green-500 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
                 >
                   <span className="mr-2">{tab.icon}</span>
                   {tab.name}
@@ -723,10 +795,9 @@ const CoachDashboard = () => {
                   <div className="space-y-4">
                     {dashboardData?.notifications?.map(notification => (
                       <div key={notification.id} className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
-                        <div className={`w-2 h-2 rounded-full mt-2 ${
-                          notification.type === 'student' ? 'bg-blue-500' :
+                        <div className={`w-2 h-2 rounded-full mt-2 ${notification.type === 'student' ? 'bg-blue-500' :
                           notification.type === 'event' ? 'bg-green-500' : 'bg-purple-500'
-                        }`}></div>
+                          }`}></div>
                         <div className="flex-1">
                           <p className="text-sm text-gray-900">{notification.message}</p>
                           <p className="text-xs text-gray-500 mt-1">{notification.time}</p>
@@ -798,15 +869,15 @@ const CoachDashboard = () => {
                             <p className="text-sm text-gray-600">{student.sport} • {student.level}</p>
                           </div>
                         </div>
-                        
+
                         <div className="space-y-2 mb-4">
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">Performance</span>
                             <span className="font-medium">{student.performance}%</span>
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                              className="bg-green-500 h-2 rounded-full" 
+                            <div
+                              className="bg-green-500 h-2 rounded-full"
                               style={{ width: `${student.performance}%` }}
                             ></div>
                           </div>
@@ -868,7 +939,7 @@ const CoachDashboard = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                     <div className="flex items-center">
                       <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center mr-3">
@@ -882,7 +953,7 @@ const CoachDashboard = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                     <div className="flex items-center">
                       <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
@@ -896,7 +967,7 @@ const CoachDashboard = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                     <div className="flex items-center">
                       <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
@@ -930,7 +1001,7 @@ const CoachDashboard = () => {
                       <option value="COMPLETED">Completed</option>
                     </select>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Sport</label>
                     <select
@@ -949,7 +1020,7 @@ const CoachDashboard = () => {
                       <option value="Other">Other</option>
                     </select>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
                     <select
@@ -964,7 +1035,7 @@ const CoachDashboard = () => {
                       <option value="next_month">Next Month</option>
                     </select>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
                     <input
@@ -999,7 +1070,7 @@ const CoachDashboard = () => {
                         </>
                       )}
                     </button>
-                    
+
                     <button
                       onClick={() => exportEvents()}
                       className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium inline-flex items-center"
@@ -1010,7 +1081,7 @@ const CoachDashboard = () => {
                       Export
                     </button>
                   </div>
-                  
+
                   <div className="text-sm text-gray-500">
                     Showing {coachEvents.length} events
                   </div>
@@ -1034,22 +1105,22 @@ const CoachDashboard = () => {
                               <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(event.dynamicStatus || event.status)}`}>
                                 {getStatusIcon(event.dynamicStatus || event.status)} {event.dynamicStatus || event.status}
                               </span>
-                              
+
                               {/* Event Type Badge */}
                               <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-lg text-xs font-medium">
                                 {event.sport}
                               </span>
                             </div>
-                            
+
                             {/* Event ID Display */}
                             {event.uniqueId && (
                               <div className="text-xs text-gray-500 font-mono mb-2">
                                 Event ID: <span className="text-blue-600 font-semibold">{event.uniqueId}</span>
                               </div>
                             )}
-                            
+
                             <p className="text-gray-600 mb-3 line-clamp-2">{event.description}</p>
-                            
+
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                               <div className="flex items-center text-gray-600">
                                 <FaCalendar className="mr-2 text-gray-400" />
@@ -1076,7 +1147,7 @@ const CoachDashboard = () => {
                                   </div>
                                 </div>
                               </div>
-                              
+
                               <div className="flex items-center text-gray-600">
                                 <FaMapMarkerAlt className="mr-2 text-gray-400" />
                                 <div>
@@ -1084,7 +1155,7 @@ const CoachDashboard = () => {
                                   <div className="text-xs">{event.city}, {event.state}</div>
                                 </div>
                               </div>
-                              
+
                               <div className="flex items-center text-gray-600">
                                 <FaUsers className="mr-2 text-gray-400" />
                                 <div>
@@ -1104,10 +1175,10 @@ const CoachDashboard = () => {
                                   <span>{Math.round(((event.currentParticipants || 0) / event.maxParticipants) * 100)}%</span>
                                 </div>
                                 <div className="w-full bg-gray-200 rounded-full h-2">
-                                  <div 
-                                    className="bg-green-500 h-2 rounded-full transition-all" 
-                                    style={{ 
-                                      width: `${Math.min(((event.currentParticipants || 0) / event.maxParticipants) * 100, 100)}%` 
+                                  <div
+                                    className="bg-green-500 h-2 rounded-full transition-all"
+                                    style={{
+                                      width: `${Math.min(((event.currentParticipants || 0) / event.maxParticipants) * 100, 100)}%`
                                     }}
                                   ></div>
                                 </div>
@@ -1141,7 +1212,7 @@ const CoachDashboard = () => {
                               <FaEye className="mr-2" />
                               View Details
                             </button>
-                            
+
                             {['PENDING', 'APPROVED', 'ACTIVE'].includes(event.status) && (
                               <button
                                 onClick={() => handleEditEvent(event)}
@@ -1151,7 +1222,7 @@ const CoachDashboard = () => {
                                 Edit
                               </button>
                             )}
-                            
+
                             {['APPROVED', 'ACTIVE'].includes(event.status) && (
                               <button
                                 onClick={() => viewRegistrations(event)}
@@ -1184,261 +1255,276 @@ const CoachDashboard = () => {
                                 </Link>
                               </>
                             )}
-                          </div>
-                          
-                          <div className="flex space-x-2">
-                            {event.status === 'PENDING' && (
-                              <button
-                                onClick={() => confirmDeleteEvent(event)}
-                                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 transition-colors inline-flex items-center"
-                              >
-                                <FaTrash className="mr-2" />
-                                Delete
-                              </button>
+
+                            {['COMPLETED'].includes(event.status) && (
+                              <>
+                                <div
+                                  onClick={() => handleEventPayment(event.id)}
+                                  className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-700 transition-colors inline-flex items-center cursor-pointer"
+                                >
+                                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  Payment
+                                </div>
+                              </>
                             )}
-                            
-                            {['APPROVED', 'ACTIVE'].includes(event.status) && new Date(event.startDate) > new Date() && (
-                              <button
-                                onClick={() => cancelEvent(event)}
-                                className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-700 transition-colors"
-                              >
-                                Cancel Event
-                              </button>
-                            )}
+
+
+
+                            <div className="flex space-x-2">
+                              {event.status === 'PENDING' && (
+                                <button
+                                  onClick={() => confirmDeleteEvent(event)}
+                                  className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 transition-colors inline-flex items-center"
+                                >
+                                  <FaTrash className="mr-2" />
+                                  Delete
+                                </button>
+                              )}
+
+                              {['APPROVED', 'ACTIVE'].includes(event.status) && new Date(event.startDate) > new Date() && (
+                                <button
+                                  onClick={() => cancelEvent(event)}
+                                  className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-700 transition-colors"
+                                >
+                                  Cancel Event
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
                     ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <FaCalendar className="text-gray-400 text-3xl" />
+                      </div>
+                    ) : (
+                    <div className="text-center py-12">
+                      <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <FaCalendar className="text-gray-400 text-3xl" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Events Found</h3>
+                      <p className="text-gray-600 mb-6">
+                        {Object.values(eventFilters).some(filter => filter)
+                          ? 'No events match your current filters.'
+                          : 'Create your first event to start managing student activities.'}
+                      </p>
+                      {!Object.values(eventFilters).some(filter => filter) && (
+                        <Link
+                          to="/coach/event/create"
+                          className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium inline-flex items-center"
+                        >
+                          <FaCalendar className="mr-2" />
+                          Create Your First Event
+                        </Link>
+                      )}
                     </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Events Found</h3>
-                    <p className="text-gray-600 mb-6">
-                      {Object.values(eventFilters).some(filter => filter) 
-                        ? 'No events match your current filters.' 
-                        : 'Create your first event to start managing student activities.'}
-                    </p>
-                    {!Object.values(eventFilters).some(filter => filter) && (
-                      <Link
-                        to="/coach/event/create"
-                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium inline-flex items-center"
-                      >
-                        <FaCalendar className="mr-2" />
-                        Create Your First Event
-                      </Link>
-                    )}
+                )}
+                  </div>
+                )}
+
+                {activeTab === 'analytics' && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Student Performance Trends</h4>
+                      <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+                        <p className="text-gray-500">📊 Performance Chart (Chart.js integration)</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Revenue Analytics</h4>
+                      <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+                        <p className="text-gray-500">💰 Revenue Chart (Chart.js integration)</p>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
-            )}
-
-            {activeTab === 'analytics' && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-white border border-gray-200 rounded-lg p-6">
-                  <h4 className="font-semibold text-gray-900 mb-4">Student Performance Trends</h4>
-                  <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                    <p className="text-gray-500">📊 Performance Chart (Chart.js integration)</p>
-                  </div>
-                </div>
-                
-                <div className="bg-white border border-gray-200 rounded-lg p-6">
-                  <h4 className="font-semibold text-gray-900 mb-4">Revenue Analytics</h4>
-                  <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                    <p className="text-gray-500">💰 Revenue Chart (Chart.js integration)</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
-      </div>
+        </div>
 
-      {/* Event Details Modal */}
-      {showEventModal && selectedEvent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-screen overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-gray-900">Event Details</h3>
-                <button
-                  onClick={() => setShowEventModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-            
-            <div className="p-6">
-              <div className="mb-4">
-                <h4 className="text-xl font-bold text-gray-900 mb-2">{selectedEvent.name}</h4>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(selectedEvent.status)}`}>
-                  {getStatusIcon(selectedEvent.status)} {selectedEvent.status}
-                </span>
+        {/* Event Details Modal */}
+        {showEventModal && selectedEvent && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-2xl w-full max-h-screen overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-semibold text-gray-900">Event Details</h3>
+                  <button
+                    onClick={() => setShowEventModal(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Sport</label>
-                    <p className="mt-1 text-sm text-gray-900">{selectedEvent.sport}</p>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Start Date</label>
-                    <p className="mt-1 text-sm text-gray-900">
-                      {new Date(selectedEvent.startDate).toLocaleString()}
-                    </p>
-                  </div>
-                  
-                  {selectedEvent.endDate && (
+              <div className="p-6">
+                <div className="mb-4">
+                  <h4 className="text-xl font-bold text-gray-900 mb-2">{selectedEvent.name}</h4>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(selectedEvent.status)}`}>
+                    {getStatusIcon(selectedEvent.status)} {selectedEvent.status}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">End Date</label>
+                      <label className="block text-sm font-medium text-gray-700">Sport</label>
+                      <p className="mt-1 text-sm text-gray-900">{selectedEvent.sport}</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Start Date</label>
                       <p className="mt-1 text-sm text-gray-900">
-                        {new Date(selectedEvent.endDate).toLocaleString()}
+                        {new Date(selectedEvent.startDate).toLocaleString()}
                       </p>
                     </div>
-                  )}
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Participants</label>
-                    <p className="mt-1 text-sm text-gray-900">
-                      {selectedEvent.currentParticipants || 0} / {selectedEvent.maxParticipants || 'Unlimited'}
-                    </p>
-                  </div>
-                </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Venue</label>
-                    <p className="mt-1 text-sm text-gray-900">{selectedEvent.venue}</p>
-                  </div>
-                  
-                  {selectedEvent.address && (
+                    {selectedEvent.endDate && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">End Date</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {new Date(selectedEvent.endDate).toLocaleString()}
+                        </p>
+                      </div>
+                    )}
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Address</label>
-                      <p className="mt-1 text-sm text-gray-900">{selectedEvent.address}</p>
+                      <label className="block text-sm font-medium text-gray-700">Participants</label>
+                      <p className="mt-1 text-sm text-gray-900">
+                        {selectedEvent.currentParticipants || 0} / {selectedEvent.maxParticipants || 'Unlimited'}
+                      </p>
                     </div>
-                  )}
-                  
-                  {selectedEvent.city && (
+                  </div>
+
+                  <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">City</label>
-                      <p className="mt-1 text-sm text-gray-900">{selectedEvent.city}, {selectedEvent.state}</p>
+                      <label className="block text-sm font-medium text-gray-700">Venue</label>
+                      <p className="mt-1 text-sm text-gray-900">{selectedEvent.venue}</p>
                     </div>
-                  )}
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Created</label>
-                    <p className="mt-1 text-sm text-gray-900">
-                      {new Date(selectedEvent.createdAt).toLocaleDateString()}
-                    </p>
+
+                    {selectedEvent.address && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Address</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEvent.address}</p>
+                      </div>
+                    )}
+
+                    {selectedEvent.city && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">City</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEvent.city}, {selectedEvent.state}</p>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Created</label>
+                      <p className="mt-1 text-sm text-gray-900">
+                        {new Date(selectedEvent.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {selectedEvent.description && (
-                <div className="mt-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                  <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded">{selectedEvent.description}</p>
-                </div>
-              )}
+                {selectedEvent.description && (
+                  <div className="mt-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                    <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded">{selectedEvent.description}</p>
+                  </div>
+                )}
 
-              {selectedEvent.adminNotes && (
-                <div className="mt-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Admin Notes</label>
-                  <p className="text-sm text-gray-900 bg-yellow-50 p-3 rounded border border-yellow-200">{selectedEvent.adminNotes}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t border-gray-200">
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setShowEventModal(false)}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
-                >
-                  Close
-                </button>
-                {['PENDING', 'APPROVED', 'ACTIVE'].includes(selectedEvent.status) && (
-                  <button
-                    onClick={() => {
-                      setShowEventModal(false);
-                      handleEditEvent(selectedEvent);
-                    }}
-                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                  >
-                    Edit Event
-                  </button>
+                {selectedEvent.adminNotes && (
+                  <div className="mt-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Admin Notes</label>
+                    <p className="text-sm text-gray-900 bg-yellow-50 p-3 rounded border border-yellow-200">{selectedEvent.adminNotes}</p>
+                  </div>
                 )}
               </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && eventToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full">
-            <div className="p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
-                  <FaTrash className="text-red-600" />
+              <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t border-gray-200">
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => setShowEventModal(false)}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                  >
+                    Close
+                  </button>
+                  {['PENDING', 'APPROVED', 'ACTIVE'].includes(selectedEvent.status) && (
+                    <button
+                      onClick={() => {
+                        setShowEventModal(false);
+                        handleEditEvent(selectedEvent);
+                      }}
+                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                    >
+                      Edit Event
+                    </button>
+                  )}
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900">Delete Event</h3>
-              </div>
-              
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to delete "<strong>{eventToDelete.name}</strong>"? This action cannot be undone.
-              </p>
-              
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => {
-                    setShowDeleteModal(false);
-                    setEventToDelete(null);
-                  }}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
-                  disabled={actionLoading}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleDeleteEvent(eventToDelete.id)}
-                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
-                  disabled={actionLoading}
-                >
-                  {actionLoading ? 'Deleting...' : 'Delete Event'}
-                </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Participants Modal */}
-      <CoachParticipantsModal
-        isOpen={participantsModal.isOpen}
-        onClose={closeParticipantsModal}
-        eventData={participantsModal.eventData}
-        participants={participantsModal.participants}
-        loading={participantsModal.loading}
-      />
+        {/* Delete Confirmation Modal */}
+        {showDeleteModal && eventToDelete && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-md w-full">
+              <div className="p-6">
+                <div className="flex items-center mb-4">
+                  <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                    <FaTrash className="text-red-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Delete Event</h3>
+                </div>
 
-      {/* Payment Popup */}
-      <PaymentPopup
-        isOpen={showPaymentPopup}
-        onClose={() => dismissPaymentPopup(false)}
-        userType="coach"
-        userProfile={dashboardData?.coach}
-        onPaymentSuccess={onPaymentSuccess}
-      />
-    </div>
-  );
+                <p className="text-gray-600 mb-6">
+                  Are you sure you want to delete "<strong>{eventToDelete.name}</strong>"? This action cannot be undone.
+                </p>
+
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => {
+                      setShowDeleteModal(false);
+                      setEventToDelete(null);
+                    }}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                    disabled={actionLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleDeleteEvent(eventToDelete.id)}
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                    disabled={actionLoading}
+                  >
+                    {actionLoading ? 'Deleting...' : 'Delete Event'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Participants Modal */}
+        <CoachParticipantsModal
+          isOpen={participantsModal.isOpen}
+          onClose={closeParticipantsModal}
+          eventData={participantsModal.eventData}
+          participants={participantsModal.participants}
+          loading={participantsModal.loading}
+        />
+
+        {/* Payment Popup */}
+        <PaymentPopup
+          isOpen={showPaymentPopup}
+          onClose={() => dismissPaymentPopup(false)}
+          userType="coach"
+          userProfile={dashboardData?.coach}
+          onPaymentSuccess={onPaymentSuccess}
+        />
+      </div>
+      );
 };
 
-export default CoachDashboard;
+      export default CoachDashboard;
