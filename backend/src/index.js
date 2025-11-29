@@ -14,6 +14,7 @@ const instituteRoutes = require('./routes/institute');
 const clubRoutes = require('./routes/club');
 const adminRoutes = require('./routes/admin');
 const eventRoutes = require('./routes/event');
+const adminPaymentsRouter = require('./routes/admin/events-payments');
 const paymentRoutes = require('./routes/payment');
 const certificateRoutes = require('./routes/certificates');
 
@@ -167,6 +168,7 @@ app.use('/api/coach', fileUploadMiddleware, coachRoutes);
 app.use('/api/institute', instituteRoutes);
 app.use('/api/club', clubRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api', adminPaymentsRouter);
 app.use('/api/events', eventRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/certificates', certificateRoutes);
