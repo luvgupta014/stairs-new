@@ -148,11 +148,11 @@ router.post('/create-order', authenticate, async (req, res) => {
   }
 });
 
+// Updated: create-order-events route to mirror create-order behavior and avoid FK error
 router.post('/create-order-events', authenticate, async (req, res) => {
   try {
     const { eventId } = req.body;
 
-    // Fetch event details
     // Fetch event details
     const event = await prisma.event.findUnique({
       where: { id: eventId }
@@ -161,16 +161,14 @@ router.post('/create-order-events', authenticate, async (req, res) => {
     if (!event) {
       return res.status(404).json(errorResponse('Event not found.', 404));
     }
-    console.log("Creating payment order for event", event);
+    console.log('Creating payment order for event', event);
 
     const amount = 500 * (event.currentParticipants || 0) * 100; // in paise
 
     // Create Razorpay order
     const timestamp = Date.now().toString().slice(-8); // Last 8 digits
-    // guard against coachId being undefined
-    const userIdForReceipt = (event.coachId || '').toString();
-    const userIdShort = userIdForReceipt.slice(-6); // Last 6 chars of user ID
-    const receipt = `EV_${userIdShort}_${timestamp}`; // Max ~20 chars
+    const userIdForReceipt = (req.user?.id || '').toString().slice(-6); // Last 6 chars of authenticated user ID
+    const receipt = `EV_${userIdForReceipt}_${timestamp}`; // Max ~20 chars
 
     console.log(`Generated receipt: "${receipt}" (length: ${receipt.length})`);
 
@@ -179,84 +177,44 @@ router.post('/create-order-events', authenticate, async (req, res) => {
       currency: 'INR',
       receipt: receipt,
       notes: {
-        userId: event.coachId,
+        userId: req.user.id,   // use authenticated user id (same approach as /create-order)
         eventId: eventId
       }
     });
 
     console.log(`✅ Razorpay order created successfully: ${order.id} for event ${event.name} (₹${amount / 100})`);
 
-    //
-    // === SAFETY CHECK: ensure the referenced user exists AND types match Prisma schema ===
-    //
-    // The Prisma P2003 you saw means the payment.userId (FK) does not match any users.id.
-    // We attempt to find the coach record and coerce numeric ids when necessary.
-    //
-    let coach = null;
-
-    // Try direct lookup first (works for string UUID or int depending on schema)
-    try {
-      coach = await prisma.user.findUnique({ where: { id: event.coachId } });
-    } catch (e) {
-      // If the schema's id is Int and event.coachId is string, the direct call may throw.
-      // We'll ignore and try a numeric coercion below.
-      console.warn('Direct user lookup failed, will try numeric coercion if possible.');
+    // Ensure authenticated user exists in DB (this mirrors /create-order behavior)
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user) {
+      console.error(`Authenticated user not found: ${req.user.id}`);
+      return res.status(400).json(errorResponse('Authenticated user not found. Please contact support.', 400));
     }
 
-    // If not found, and event.coachId looks numeric, try numeric lookup
-    if (!coach) {
-      const maybeNum = Number(event.coachId);
-      if (!Number.isNaN(maybeNum)) {
-        try {
-          coach = await prisma.user.findUnique({ where: { id: maybeNum } });
-          // if found, prefer numeric id for payment creation
-          if (coach) event.coachId = maybeNum;
-        } catch (e) {
-          console.warn('Numeric user lookup also failed.');
-        }
-      }
-    }
+    // OPTIONAL: Ensure the authenticated user is the coach of this event.
+    // If you want to enforce this, uncomment the block below:
+    //
+    // if (String(event.coachId) !== String(req.user.id)) {
+    //   console.warn(`User ${req.user.id} is not the coach for event ${event.id}`);
+    //   return res.status(403).json(errorResponse('You are not authorized to create payment for this event.', 403));
+    // }
 
-    if (!coach) {
-      // No matching user -> return error instead of attempting to create an invalid FK payment
-      console.error(`No user found for coachId=${event.coachId}. Aborting payment create to avoid FK constraint error.`);
-      return res.status(400).json(errorResponse('Coach (user) not found for this event. Please contact support.', 400));
-    }
-
-    // Prepare payment payload.
-    // If your Prisma Payment.metadata field is a Json type, pass object; otherwise stringify.
-    const metadataValue = (() => {
-      // Detect if prisma schema has Json type by trying to pass object (safe to pass object for Json)
-      // If your metadata is defined as String, change to JSON.stringify(...)
-      return {
-        eventId,
-        eventName: event.name
-      };
-    })();
-
-    // Use connect or userId depending on your schema. Both examples are shown; uncomment the one that matches.
-    // Most robust: use connect with the value that matches user.id type
-    const paymentData = {
-      // If your Payment model has a 'userId' scalar of same type as coach.id, use userId:
-      // userId: coach.id,
-      // Or use relation connect (works regardless of scalar name) — ensure the relation name is 'user'
-      user: { connect: { id: coach.id } },
-
-      // fix userType to reflect the actual user role
-      userType: 'COACH', // was 'STUDENT' previously; set according to who is being charged
-      type: 'EVENT_REGISTRATION',
-      amount: amount / 100,
-      currency: 'INR',
-      razorpayOrderId: order.id,
-      status: 'PENDING',
-      description: `Registration for event: ${event.name}`,
-      // If metadata column in Prisma is Json, pass object; if it's String, stringify
-      metadata: metadataValue
-    };
-
-    // Create payment record
+    // Save payment record (use same pattern as /create-order)
     const payment = await prisma.payment.create({
-      data: paymentData
+      data: {
+        userId: req.user.id, // use authenticated user's id to avoid FK mismatch
+        userType: 'COACH', // charging the coach — adjust if business logic differs
+        type: 'EVENT_REGISTRATION',
+        amount: amount / 100,
+        currency: 'INR',
+        razorpayOrderId: order.id,
+        status: 'PENDING',
+        description: `Registration for event: ${event.name}`,
+        metadata: JSON.stringify({
+          eventId: eventId,
+          eventName: event.name
+        })
+      }
     });
 
     res.json(successResponse({
@@ -267,10 +225,14 @@ router.post('/create-order-events', authenticate, async (req, res) => {
       razorpayKeyId: process.env.RAZORPAY_KEY_ID
     }, 'Event payment order created successfully.'));
 
-
-
   } catch (error) {
     console.error('Create payment order error:', error);
+
+    // Helpful log for Prisma FK errors
+    if (error?.code === 'P2003') {
+      console.error('Prisma P2003 (FK violated). This indicates the payment.userId value does not exist in users table.');
+    }
+
     res.status(500).json(errorResponse('Failed to create payment order.', 500));
   }
 });
