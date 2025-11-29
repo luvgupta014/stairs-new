@@ -148,6 +148,75 @@ router.post('/create-order', authenticate, async (req, res) => {
   }
 });
 
+   router.post('/create-order-events', authenticate, async (req, res) => {
+      try {
+        const { eventId } = req.body;
+        
+        // Fetch event details
+        const event = await prisma.event.findUnique({
+          where: { id: eventId }
+        });
+        
+        if (!event) {
+          return res.status(404).json(errorResponse('Event not found.', 404));
+        }
+
+        const amount = 500 * event.currentParticipants.length * 100; // in paise
+
+        // Create Razorpay order
+        const timestamp = Date.now().toString().slice(-8); // Last 8 digits
+        const userIdShort = req.user.id.slice(-6); // Last 6 chars of user ID
+        const receipt = `EV_${userIdShort}_${timestamp}`; // Max ~20 chars
+        
+        console.log(`Generated receipt: "${receipt}" (length: ${receipt.length})`);
+        
+        const order = await razorpay.orders.create({
+          amount: amount,
+          currency: 'INR',
+          receipt: receipt,
+          notes: {
+            userId: req.user.id,
+            eventId: eventId
+          }
+        });
+
+        console.log(`✅ Razorpay order created successfully: ${order.id} for event ${event.name} (₹${amount/100})`);
+
+        // Save payment record
+        const payment = await prisma.payment.create({
+          data: {
+            userId: req.user.id,
+            userType: 'STUDENT',
+            type: 'EVENT_REGISTRATION',
+            amount: amount / 100,
+            currency: 'INR',
+            razorpayOrderId: order.id,
+            status: 'PENDING',
+            description: `Registration for event: ${event.name}`,
+            metadata: JSON.stringify({ 
+              eventId: eventId,
+              eventName: event.name
+            })
+          }
+        });
+
+        res.json(successResponse({
+          orderId: order.id,
+          amount: order.amount,
+          currency: order.currency,
+          eventName: event.name,
+          razorpayKeyId: process.env.RAZORPAY_KEY_ID
+        }, 'Event payment order created successfully.'));
+
+    
+       
+
+  } catch (error) {
+    console.error('Create payment order error:', error);
+    res.status(500).json(errorResponse('Failed to create payment order.', 500));
+  }
+});
+
 // Verify payment (unified for all user types)
 router.post('/verify', authenticate, async (req, res) => {
   try {
