@@ -254,7 +254,7 @@ const CoachDashboard = () => {
       const token = localStorage.getItem("token");
 
       // 1️⃣ Create Razorpay order
-      const res = await fetch("/api/create-order-events", {
+      const res = await fetch("/api/payment/create-order-events", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
