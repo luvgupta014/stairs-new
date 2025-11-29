@@ -1330,8 +1330,6 @@ const CoachDashboard = () => {
                                 Payment
                               </div>
                             }
-                            {console.log(event)};
-
                           </div>
                           <div className="flex space-x-2">
                             {event.status === 'PENDING' && (

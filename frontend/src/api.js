@@ -660,6 +660,30 @@ export const updateEventStatus = async (eventId, status) => {
   }
 };
 
+export const getEventPayments = async (eventId, params = {}) => {
+  if (!eventId) {
+    throw new Error('eventId is required');
+  }
+
+  try {
+    const response = await api.get(`/api/admin/events/${eventId}/payments`, { params });
+    const payload = response.data;
+
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'data')) {
+      return payload.data;
+    }
+
+    return payload;
+  } catch (error) {
+    console.error('Get event payments error:', error);
+
+    const serverError = error?.response?.data || error?.response || error?.message || error;
+    const err = new Error(serverError?.message || 'Failed to fetch event payments');
+    err.details = serverError;
+    throw err;
+  }
+};
+
 // Coach and Institute Approval APIs
 export const getPendingCoaches = async (params = {}) => {
   try {
