@@ -8,6 +8,7 @@ const {
   errorResponse 
 } = require('../utils/helpers');
 const { generateEventUID } = require('../utils/eventUIDGenerator');
+const XLSX = require('xlsx'); // Add at top of file if not present
 
 const prisma = new PrismaClient();
 
@@ -912,32 +913,96 @@ class EventService {
   }
 
   /**
-   * Upload result file for an event
-   * @param {string} eventId - Event ID
-   * @param {Object} file - Uploaded file
-   * @param {string} description - Description of the file
-   * @param {string} uploaderId - ID of the uploader
-   * @param {string} uploaderType - Type of uploader (COACH, INSTITUTE, CLUB, ADMIN)
+   * Enhanced uploadResults: parse Excel/CSV, validate, score, assign winner/runner-up placements.
    */
   async uploadResults(eventId, file, description = '', uploaderId, uploaderType) {
     try {
-      // Verify event exists and uploader has permission
+      // Validate event and permission
       const event = await this._verifyEventAccess(eventId, uploaderId, uploaderType);
+      if (!file || !file.path) throw new Error('No file uploaded.');
 
-      console.log(`📄 Processing file for event ${event.name}`);
-      console.log(`📍 Event database ID: ${event.id}`);
-      console.log(`📍 Event uniqueId: ${event.uniqueId}`);
+      // --- PARSE file ---
+      let workbook, sheet, rows = [];
+      const ext = file.originalname.split('.').pop().toLowerCase();
+      if (["xlsx","xls","csv"].includes(ext)) {
+        workbook = XLSX.readFile(file.path);
+        const firstSheetName = workbook.SheetNames[0];
+        sheet = workbook.Sheets[firstSheetName];
+        rows = XLSX.utils.sheet_to_json(sheet, {defval: ''});
+      } else {
+        throw new Error('Invalid file type. Only .xlsx/.xls/.csv accepted.');
+      }
+      if (!rows.length) throw new Error('Result sheet is empty or could not be parsed.');
 
-      // Process the uploaded file - pass actual database ID, not the provided eventId
-      // because eventId might be uniqueId, but we need the actual database id for FK constraint
-      const uploadResult = await this._processFile(file, event.id, description, uploaderId, uploaderType);
+      // --- VALIDATE HEADERS ---
+      const headers = Object.keys(rows[0]).map(x => x.trim().toLowerCase());
+      if (!headers.includes('studentid') || !headers.includes('score'))
+        throw new Error("Sheet must have column headers: studentId,name,score[,remarks]");
 
+      // --- Validate Students ---
+      const registrations = await prisma.eventRegistration.findMany({
+        where: { eventId: event.id },
+        select: { id: true, studentId: true }
+      });
+      const allowedStudents = new Set(registrations.map(r => r.studentId));
+      const seenIds = new Set();
+      let parseErrors = [];
+
+      const resultsBulk = rows.map((row, i) => {
+        const studentId = String(row.studentId || '').trim();
+        let score = row.score;
+        score = (typeof score === 'string') ? parseFloat(score.replace(/[^0-9.-]/g, '')) : Number(score);
+        if (!studentId) {
+          parseErrors.push({row: i+2, error:'Missing studentId'});
+          return null;
+        }
+        if (!allowedStudents.has(studentId)) {
+          parseErrors.push({row: i+2, studentId, error:'Student not registered for event'});
+          return null;
+        }
+        if (seenIds.has(studentId)) {
+          parseErrors.push({row: i+2, studentId, error:'Duplicate studentId'});
+          return null;
+        }
+        if (isNaN(score)) {
+          parseErrors.push({row: i+2, studentId, error:'Score must be a number'});
+          return null;
+        }
+        seenIds.add(studentId);
+        return { studentId, score };
+      });
+      if (parseErrors.length > 0) {
+        throw new Error('Result sheet parsing errors: ' + JSON.stringify(parseErrors));
+      }
+      // --- Sort and assign placements: highest score first ---
+      let sorted = [...resultsBulk].filter(Boolean);
+      sorted.sort((a, b) => b.score - a.score); // Highest score wins
+      let placement = 1, lastScore = null, tieOffset = 0;
+      for (let i=0; i<sorted.length; ++i) {
+        if (lastScore !== null && sorted[i].score === lastScore) {
+          tieOffset++;
+        } else {
+          placement = i+1;
+          tieOffset = 0;
+        }
+        sorted[i].placement = placement; // Add placement for winner/runner/3rd, etc.
+        lastScore = sorted[i].score;
+      }
+      // --- Bulk update scores/placings in eventRegistration (requires score, placement fields!) ---
+      for (const res of sorted) {
+        await prisma.eventRegistration.updateMany({
+          where: { eventId: event.id, studentId: res.studentId },
+          data: { score: res.score, placement: res.placement }
+        });
+      }
+
+      // --- Mark event status as RESULTS_UPLOADED ---
+      await prisma.event.update({ where: { id: event.id }, data: { status: 'RESULTS_UPLOADED' } });
       return {
-        event: {
-          id: event.id,
-          name: event.name
-        },
-        file: uploadResult
+        event: { id: event.id, name: event.name },
+        numProcessed: sorted.length,
+        winners: sorted.slice(0, 3), // First 3 placings for quick admin view
+        allResults: sorted
       };
     } catch (error) {
       throw error;
@@ -1085,6 +1150,41 @@ class EventService {
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * Mark results as uploaded, update event status
+   * Call when coach uploads results
+   */
+  async markResultsUploaded(eventId) {
+    // NOTE: Requires manual enum update in your DB/schema for RESULTS_UPLOADED
+    return prisma.event.update({
+      where: { id: eventId },
+      data: { status: 'RESULTS_UPLOADED' }
+    });
+  }
+
+  /**
+   * Admin validates event results
+   * Sets status to RESULTS_VALIDATED;
+   * Only callable by admin!
+   */
+  async validateEventResults(eventId, adminId, validationNotes = null) {
+    // NOTE: Requires manual enum update in your DB/schema for RESULTS_VALIDATED
+    return prisma.event.update({
+      where: { id: eventId },
+      data: { status: 'RESULTS_VALIDATED', adminNotes: validationNotes }
+    });
+  }
+
+  /**
+   * Check if certificates can be issued for event
+   * Only allow if status is RESULTS_VALIDATED (and payment if needed)
+   */
+  async canIssueCertificates(eventId) {
+    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    // Add additional checks if needed (e.g. payment complete)
+    return event.status === 'RESULTS_VALIDATED';
   }
 
   /**
