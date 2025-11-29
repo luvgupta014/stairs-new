@@ -4064,4 +4064,21 @@ router.get('/events/:eventId/certificates', authenticate, requireAdmin, async (r
   }
 });
 
+// PUT /api/admin/events/:eventId/validate-results -- admin validates event results
+// Requires EventStatus enum update in DB/schema!
+router.put('/events/:eventId/validate-results', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { notes } = req.body;
+    // Only admin can call this!
+    const adminId = req.admin?.id || req.user.id;
+    const eventService = new (require('../services/eventService'))();
+    const updatedEvent = await eventService.validateEventResults(eventId, adminId, notes);
+    res.json(successResponse(updatedEvent, 'Event results validated. Event is now ready for certificate issuing and visibility.'));
+  } catch (error) {
+    console.error('Admin validate results error:', error);
+    res.status(500).json(errorResponse('Failed to validate results for event.', 500));
+  }
+});
+
 module.exports = router;

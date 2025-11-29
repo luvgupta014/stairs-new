@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = "postgresql://neondb_owner:npg_lCO1hsqYHXn3@ep-aged-hat-ad5gla06-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require"
 }
 
 model User {
@@ -510,6 +510,11 @@ enum EventStatus {
   ACTIVE
   CANCELLED
   COMPLETED
+  RESULTS_UPLOADED
+  RESULTS_VALIDATED
+  FINAL_PAYMENT_COMPLETED
+  CERTIFICATES_ISSUED
+  READY_FOR_NEXT_REGISTRATION
 }
 
 enum RegistrationStatus {
