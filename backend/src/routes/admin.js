@@ -4778,7 +4778,7 @@ router.put('/orders/:orderId/fulfill', authenticate, requireAdmin, async (req, r
   }
 });
 
-// PUT /api/admin/orders/:orderId/price - Admin sets pricing for order
+// PUT /api/admin/orders/:orderId/price - Admin sets pricing for order (specific endpoint - convenience route)
 router.put('/orders/:orderId/price', authenticate, requireAdmin, async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -4786,7 +4786,20 @@ router.put('/orders/:orderId/price', authenticate, requireAdmin, async (req, res
 
     const order = await prisma.eventOrder.findUnique({
       where: { id: orderId },
-      include: { event: true, coach: true }
+      include: { 
+        event: true, 
+        coach: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true
+              }
+            }
+          }
+        }
+      }
     });
 
     if (!order) {
