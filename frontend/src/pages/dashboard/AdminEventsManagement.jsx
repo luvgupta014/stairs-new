@@ -576,6 +576,25 @@ const AdminEventsManagement = () => {
                   <p className="text-sm text-gray-500 mb-4">
                     <strong>File Format:</strong> Excel (.xlsx, .xls) or CSV with columns: studentId, name, score
                   </p>
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const { downloadSampleResultSheet } = await import('../../api');
+                          await downloadSampleResultSheet(event.id, true);
+                        } catch (error) {
+                          alert('Failed to download sample sheet: ' + (error.message || 'Unknown error'));
+                        }
+                      }}
+                      className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                    >
+                      📥 Download Sample Result Sheet
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Download a sample Excel file with the correct format and example data
+                    </p>
+                  </div>
                 </div>
                 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">

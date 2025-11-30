@@ -2935,62 +2935,141 @@ router.post('/events/:eventId/registrations/bulk', authenticate, requireCoach, a
       where: {
         id: { in: studentIds },
         coachConnections: {
-          some: { coachId: req.coach.id }
+          some: { coachId: req.coach.id, status: 'ACCEPTED' }
         }
       }
     });
 
     if (students.length !== studentIds.length) {
-      return res.status(400).json(errorResponse('Some students do not exist or are not connected to you.', 400));
+      const missingStudents = studentIds.filter(id => !students.find(s => s.id === id));
+      return res.status(400).json(errorResponse(
+        `Some students do not exist or are not connected to you. Missing: ${missingStudents.length} student(s).`,
+        400
+      ));
     }
 
-    // Calculate total fee
-    const totalFeeAmount = studentIds.length * eventFeePerStudent;
-
-    // Generate order number
-    const orderCount = await prisma.eventRegistrationOrder.count();
-    const orderNumber = `REG-${event.uniqueId}-${String(orderCount + 1).padStart(4, '0')}`;
-
-    // Create registration order
-    const registrationOrder = await prisma.eventRegistrationOrder.create({
-      data: {
-        orderNumber,
-        eventId,
-        coachId: req.coach.id,
-        eventFeePerStudent,
-        totalStudents: studentIds.length,
-        totalFeeAmount,
-        status: 'PENDING',
-        registrationItems: {
-          createMany: {
-            data: studentIds.map(studentId => ({
-              eventId,
-              studentId,
-              status: 'REGISTERED'
-            }))
-          }
+    // Check for duplicate order (same event + coach combination)
+    const existingOrder = await prisma.eventRegistrationOrder.findUnique({
+      where: {
+        eventId_coachId: {
+          eventId,
+          coachId: req.coach.id
         }
+      }
+    });
+
+    if (existingOrder && existingOrder.paymentStatus !== 'PAID') {
+      return res.status(400).json(errorResponse(
+        `You already have a pending registration order for this event (Order: ${existingOrder.orderNumber}). Please complete payment or cancel the existing order first.`,
+        400
+      ));
+    }
+
+    // Check if students are already registered for this event
+    const existingRegistrations = await prisma.eventRegistration.findMany({
+      where: {
+        eventId,
+        studentId: { in: studentIds }
       },
-      include: {
-        registrationItems: {
-          include: {
-            student: {
-              select: {
-                id: true,
-                name: true,
-                sport: true
-              }
+      select: { studentId: true }
+    });
+
+    if (existingRegistrations.length > 0) {
+      const alreadyRegistered = existingRegistrations.map(r => r.studentId);
+      return res.status(400).json(errorResponse(
+        `Some students are already registered for this event. Already registered: ${alreadyRegistered.length} student(s).`,
+        400
+      ));
+    }
+
+    // Validate event fee
+    const feeFromEvent = event.eventFee || 0;
+    const finalFeePerStudent = eventFeePerStudent > 0 ? eventFeePerStudent : feeFromEvent;
+    
+    if (finalFeePerStudent < 0) {
+      return res.status(400).json(errorResponse('Event fee cannot be negative.', 400));
+    }
+
+    // Calculate total fee with proper validation
+    const totalFeeAmount = Number((studentIds.length * finalFeePerStudent).toFixed(2));
+    
+    if (!isFinite(totalFeeAmount) || totalFeeAmount < 0) {
+      return res.status(400).json(errorResponse('Invalid fee calculation.', 400));
+    }
+
+    // Generate unique order number with retry logic
+    let orderNumber;
+    let attempts = 0;
+    const maxAttempts = 10;
+    do {
+      const orderCount = await prisma.eventRegistrationOrder.count();
+      const timestamp = Date.now().toString().slice(-6);
+      orderNumber = `REG-${event.uniqueId || 'EVT'}-${timestamp}-${String(orderCount + 1).padStart(4, '0')}`;
+      attempts++;
+      
+      // Check if order number already exists
+      const existing = await prisma.eventRegistrationOrder.findUnique({
+        where: { orderNumber }
+      });
+      
+      if (!existing) break;
+      
+      if (attempts >= maxAttempts) {
+        return res.status(500).json(errorResponse('Failed to generate unique order number. Please try again.', 500));
+      }
+    } while (attempts < maxAttempts);
+
+    // Create registration order with transaction for data consistency
+    const registrationOrder = await prisma.$transaction(async (tx) => {
+      // Create the order
+      const order = await tx.eventRegistrationOrder.create({
+        data: {
+          orderNumber,
+          eventId,
+          coachId: req.coach.id,
+          eventFeePerStudent: finalFeePerStudent,
+          totalStudents: studentIds.length,
+          totalFeeAmount,
+          status: 'PENDING',
+          paymentStatus: 'PENDING',
+          registrationItems: {
+            createMany: {
+              data: studentIds.map(studentId => ({
+                eventId,
+                studentId,
+                status: 'REGISTERED'
+              }))
             }
           }
         },
-        event: {
-          select: {
-            id: true,
-            name: true,
-            uniqueId: true
+        include: {
+          registrationItems: {
+            include: {
+              student: {
+                select: {
+                  id: true,
+                  name: true,
+                  sport: true
+                }
+              }
+            }
+          },
+          event: {
+            select: {
+              id: true,
+              name: true,
+              uniqueId: true
+            }
           }
         }
+      });
+
+      // Verify all items were created
+      if (order.registrationItems.length !== studentIds.length) {
+        throw new Error(`Failed to create all registration items. Expected ${studentIds.length}, created ${order.registrationItems.length}`);
       }
+
+      return order;
     });
 
     console.log(`✅ Registration order created:`, {

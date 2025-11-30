@@ -955,52 +955,105 @@ class EventService {
       let parseErrors = [];
 
       const resultsBulk = rows.map((row, i) => {
-        const studentId = String(row.studentId || '').trim();
-        let score = row.score;
-        score = (typeof score === 'string') ? parseFloat(score.replace(/[^0-9.-]/g, '')) : Number(score);
-        if (!studentId) {
-          parseErrors.push({row: i+2, error:'Missing studentId'});
-          return null;
-        }
-        if (!allowedStudents.has(studentId)) {
-          parseErrors.push({row: i+2, studentId, error:'Student not registered for event'});
-          return null;
-        }
-        if (seenIds.has(studentId)) {
-          parseErrors.push({row: i+2, studentId, error:'Duplicate studentId'});
-          return null;
-        }
-        if (isNaN(score)) {
-          parseErrors.push({row: i+2, studentId, error:'Score must be a number'});
-          return null;
-        }
-        seenIds.add(studentId);
-        return { studentId, score };
-      });
-      if (parseErrors.length > 0) {
-        throw new Error('Result sheet parsing errors: ' + JSON.stringify(parseErrors));
-      }
-      // --- Sort and assign placements: highest score first ---
-      let sorted = [...resultsBulk].filter(Boolean);
-      sorted.sort((a, b) => b.score - a.score); // Highest score wins
-      let placement = 1, lastScore = null, tieOffset = 0;
-      for (let i=0; i<sorted.length; ++i) {
-        if (lastScore !== null && sorted[i].score === lastScore) {
-          tieOffset++;
+        // Handle various studentId formats
+        const rawStudentId = row.studentId || row['Student ID'] || row['StudentID'] || row['student_id'] || '';
+        const studentId = String(rawStudentId).trim();
+        
+        // Handle various score formats
+        const rawScore = row.score || row['Score'] || row['SCORE'] || row['score'] || 0;
+        let score = rawScore;
+        
+        // Convert score to number with proper parsing
+        if (typeof score === 'string') {
+          score = parseFloat(score.replace(/[^0-9.-]/g, ''));
         } else {
-          placement = i+1;
-          tieOffset = 0;
+          score = Number(score);
         }
-        sorted[i].placement = placement; // Add placement for winner/runner/3rd, etc.
+        
+        // Validate studentId
+        if (!studentId || studentId === '' || studentId === 'undefined' || studentId === 'null') {
+          parseErrors.push({row: i+2, error:'Missing or invalid studentId', data: row});
+          return null;
+        }
+        
+        // Validate student is registered
+        if (!allowedStudents.has(studentId)) {
+          parseErrors.push({row: i+2, studentId, error:'Student not registered for event', data: row});
+          return null;
+        }
+        
+        // Check for duplicates
+        if (seenIds.has(studentId)) {
+          parseErrors.push({row: i+2, studentId, error:'Duplicate studentId in sheet', data: row});
+          return null;
+        }
+        
+        // Validate score
+        if (isNaN(score) || !isFinite(score)) {
+          parseErrors.push({row: i+2, studentId, error:`Invalid score: ${rawScore}. Score must be a number`, data: row});
+          return null;
+        }
+        
+        // Allow negative scores (for some sports like golf where lower is better)
+        // But validate reasonable range
+        if (Math.abs(score) > 1000000) {
+          parseErrors.push({row: i+2, studentId, error:`Score ${score} is out of reasonable range`, data: row});
+          return null;
+        }
+        
+        seenIds.add(studentId);
+        return { studentId, score: Number(score.toFixed(2)) }; // Round to 2 decimal places
+      });
+      // Filter out null entries
+      const validResults = resultsBulk.filter(Boolean);
+      
+      if (validResults.length === 0) {
+        throw new Error('No valid results found in sheet. All rows had errors.');
+      }
+      
+      if (parseErrors.length > 0) {
+        // Log errors but continue if we have at least some valid results
+        console.warn(`⚠️ ${parseErrors.length} parsing error(s) found:`, parseErrors);
+        // Only throw if ALL rows had errors
+        if (validResults.length === 0) {
+          throw new Error('Result sheet parsing errors: ' + JSON.stringify(parseErrors.slice(0, 10))); // Limit to first 10 errors
+        }
+      }
+      
+      // --- Sort and assign placements: highest score first (can be changed for sports where lower is better) ---
+      let sorted = [...validResults];
+      sorted.sort((a, b) => b.score - a.score); // Highest score wins (change to a.score - b.score for lowest wins)
+      
+      // Handle ties properly
+      let placement = 1;
+      let lastScore = null;
+      
+      for (let i = 0; i < sorted.length; i++) {
+        if (lastScore !== null && sorted[i].score !== lastScore) {
+          placement = i + 1;
+        }
+        sorted[i].placement = placement;
         lastScore = sorted[i].score;
       }
-      // --- Bulk update scores/placings in eventRegistration (requires score, placement fields!) ---
-      for (const res of sorted) {
-        await prisma.eventRegistration.updateMany({
-          where: { eventId: event.id, studentId: res.studentId },
-          data: { score: res.score, placement: res.placement }
-        });
-      }
+      
+      // --- Bulk update scores/placings in eventRegistration with transaction ---
+      await prisma.$transaction(
+        sorted.map(res =>
+          prisma.eventRegistration.updateMany({
+            where: { 
+              eventId: event.id, 
+              studentId: res.studentId 
+            },
+            data: { 
+              score: res.score, 
+              placement: res.placement 
+            }
+          })
+        ),
+        {
+          timeout: 30000 // 30 second timeout for large updates
+        }
+      );
 
       // --- Mark event status as RESULTS_UPLOADED ---
       await prisma.event.update({ where: { id: event.id }, data: { status: 'RESULTS_UPLOADED' } });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { uploadEventResults, getEventResultFiles, deleteEventResultFile, downloadIndividualEventResultFile } from '../../api';
+import { uploadEventResults, getEventResultFiles, deleteEventResultFile, downloadIndividualEventResultFile, downloadSampleResultSheet } from '../../api';
 import { 
   FaUpload, 
   FaFileExcel, 
@@ -231,10 +231,37 @@ const EventResultUpload = () => {
 
         {/* Upload Section */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-            <FaUpload className="mr-2 text-green-600" />
-            Upload Event Result Files
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+              <FaUpload className="mr-2 text-green-600" />
+              Upload Event Result Files
+            </h2>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await downloadSampleResultSheet(eventId, false);
+                  showMessage('success', 'Sample sheet downloaded successfully');
+                } catch (error) {
+                  showMessage('error', 'Failed to download sample sheet: ' + (error.message || 'Unknown error'));
+                }
+              }}
+              className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+            >
+              <FaFileExcel className="mr-2" />
+              Download Sample Sheet
+            </button>
+          </div>
+          
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <h4 className="font-semibold text-blue-900 mb-2">📋 File Format Requirements</h4>
+            <ul className="list-disc list-inside text-sm text-blue-800 space-y-1">
+              <li><strong>Required columns:</strong> studentId, score</li>
+              <li><strong>Optional columns:</strong> name, remarks</li>
+              <li><strong>File types:</strong> Excel (.xlsx, .xls) or CSV</li>
+              <li><strong>Note:</strong> Download the sample sheet above to see the exact format with example data</li>
+            </ul>
+          </div>
           
           <form onSubmit={handleUpload} className="space-y-6">
             <div>
