@@ -713,74 +713,136 @@ const AdminEventsManagement = () => {
   };
 
   // Enhanced helper: render payment status badge with comprehensive information and edge case handling
+  // Made more prominent with better visual indicators
   const renderPaymentCell = (event) => {
     try {
       const summary = getEventPaymentSummary(event);
       const status = summary?.status || 'NO_PAYMENTS';
       
-      // Determine badge colors and text
-      let badgeClass = '';
-      let badgeText = '';
-      let badgeIcon = '';
+      // Determine badge colors, text, and visual styling
+      let badgeConfig = {
+        bgColor: '',
+        textColor: '',
+        borderColor: '',
+        badgeText: '',
+        badgeIcon: '',
+        pulse: false,
+        shadow: false
+      };
       
       switch (status) {
         case 'PAID':
-          badgeClass = 'bg-green-100 text-green-800 border border-green-300';
-          badgeText = 'Payment Complete';
-          badgeIcon = '✅';
+          badgeConfig = {
+            bgColor: 'bg-green-50',
+            textColor: 'text-green-800',
+            borderColor: 'border-green-400',
+            badgeText: 'Payment Complete',
+            badgeIcon: '✅',
+            pulse: false,
+            shadow: true
+          };
           break;
         case 'PARTIAL':
-          badgeClass = 'bg-yellow-100 text-yellow-800 border border-yellow-300';
-          badgeText = 'Payment Pending';
-          badgeIcon = '⚠️';
+          badgeConfig = {
+            bgColor: 'bg-yellow-50',
+            textColor: 'text-yellow-800',
+            borderColor: 'border-yellow-400',
+            badgeText: 'Payment Pending',
+            badgeIcon: '⚠️',
+            pulse: true,
+            shadow: true
+          };
           break;
         case 'PENDING':
-          badgeClass = 'bg-orange-100 text-orange-800 border border-orange-300';
-          badgeText = 'Payment Pending';
-          badgeIcon = '⏳';
+          badgeConfig = {
+            bgColor: 'bg-orange-50',
+            textColor: 'text-orange-800',
+            borderColor: 'border-orange-400',
+            badgeText: 'Payment Pending',
+            badgeIcon: '⏳',
+            pulse: true,
+            shadow: true
+          };
           break;
         default:
-          badgeClass = 'bg-gray-100 text-gray-600 border border-gray-300';
-          badgeText = 'No Payments';
-          badgeIcon = '—';
+          badgeConfig = {
+            bgColor: 'bg-gray-50',
+            textColor: 'text-gray-600',
+            borderColor: 'border-gray-300',
+            badgeText: 'No Payments',
+            badgeIcon: '—',
+            pulse: false,
+            shadow: false
+          };
       }
 
+      const paymentPercentage = summary?.totalAmount > 0 
+        ? Math.round((summary.paidAmount / summary.totalAmount) * 100) 
+        : 0;
+
       return (
-        <div className="flex flex-col space-y-1.5">
-          <div className="flex items-center space-x-2">
-            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center space-x-1 ${badgeClass}`}>
-              <span>{badgeIcon}</span>
-              <span>{badgeText}</span>
-            </span>
+        <div className="flex flex-col space-y-2 min-w-[180px]">
+          {/* Prominent Status Badge */}
+          <div className={`relative ${badgeConfig.bgColor} border-2 ${badgeConfig.borderColor} rounded-lg p-2.5 ${badgeConfig.shadow ? 'shadow-md' : 'shadow-sm'} ${badgeConfig.pulse ? 'animate-pulse' : ''} transition-all hover:scale-105`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="text-lg">{badgeConfig.badgeIcon}</span>
+                <span className={`font-bold text-sm ${badgeConfig.textColor}`}>
+                  {badgeConfig.badgeText}
+                </span>
+              </div>
+              {status === 'PAID' && (
+                <span className="text-green-600 text-xs font-semibold">100%</span>
+              )}
+              {status === 'PARTIAL' && (
+                <span className="text-yellow-600 text-xs font-semibold">{paymentPercentage}%</span>
+              )}
+            </div>
+            
+            {/* Progress bar for partial payments */}
+            {status === 'PARTIAL' && summary?.totalAmount > 0 && (
+              <div className="mt-2 w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div 
+                  className="bg-yellow-500 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${paymentPercentage}%` }}
+                ></div>
+              </div>
+            )}
           </div>
           
-          {/* Payment details */}
+          {/* Payment Details Card */}
           {summary && summary.totalAmount > 0 && (
-            <div className="text-xs text-gray-600 space-y-0.5">
-              <div className="flex items-center justify-between">
-                <span>Total:</span>
-                <span className="font-medium">₹{(summary.totalAmount || 0).toLocaleString('en-IN')}</span>
+            <div className="bg-white border border-gray-200 rounded-lg p-2 space-y-1.5 shadow-sm">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-600 font-medium">Total:</span>
+                <span className="font-bold text-gray-900">₹{(summary.totalAmount || 0).toLocaleString('en-IN')}</span>
               </div>
               {summary.paidAmount > 0 && (
-                <div className="flex items-center justify-between">
-                  <span>Paid:</span>
-                  <span className="font-medium text-green-700">₹{(summary.paidAmount || 0).toLocaleString('en-IN')}</span>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-600 font-medium">Paid:</span>
+                  <span className="font-bold text-green-700">₹{(summary.paidAmount || 0).toLocaleString('en-IN')}</span>
                 </div>
               )}
               {summary.orderCount > 0 && (
-                <div className="text-gray-500 text-xs">
-                  {summary.paidOrderCount || 0}/{summary.orderCount || 0} orders paid
+                <div className="pt-1 border-t border-gray-200">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">Orders:</span>
+                    <span className={`font-semibold ${status === 'PAID' ? 'text-green-700' : 'text-yellow-700'}`}>
+                      {summary.paidOrderCount || 0}/{summary.orderCount || 0} paid
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* View Details button */}
+          {/* View Details button - more prominent */}
           <button
             onClick={() => handleViewEventDetails(event)}
-            className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors h-6 mt-1 w-full"
+            className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-blue-700 hover:shadow-md transition-all transform hover:scale-105 w-full flex items-center justify-center space-x-1"
           >
-            👁️ View Details
+            <span>👁️</span>
+            <span>View Details</span>
           </button>
         </div>
       );
@@ -788,13 +850,16 @@ const AdminEventsManagement = () => {
       console.error('Error rendering payment cell:', error);
       // Fallback UI on error
       return (
-        <div className="flex flex-col space-y-1">
-          <span className="px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
-            Error
-          </span>
+        <div className="flex flex-col space-y-2 min-w-[180px]">
+          <div className="bg-red-50 border-2 border-red-300 rounded-lg p-2.5 shadow-sm">
+            <div className="flex items-center space-x-2">
+              <span className="text-lg">❌</span>
+              <span className="font-bold text-sm text-red-800">Error Loading</span>
+            </div>
+          </div>
           <button
             onClick={() => handleViewEventDetails(event)}
-            className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors h-6 mt-1"
+            className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-blue-700 transition-colors w-full"
           >
             👁️ View Details
           </button>
@@ -910,7 +975,12 @@ const AdminEventsManagement = () => {
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Date</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Location</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Status</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-900">Payment</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-900">
+                      <div className="flex items-center space-x-2">
+                        <span>💳 Payment Status</span>
+                        <span className="text-xs text-gray-500 font-normal">(Click to view)</span>
+                      </div>
+                    </th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Actions</th>
                   </tr>
                 </thead>
@@ -979,8 +1049,10 @@ const AdminEventsManagement = () => {
                           {getDynamicEventStatus(event)}
                         </span>
                       </td>
-                      <td className="py-3 px-4">
-                        {renderPaymentCell(event)}
+                      <td className="py-3 px-4 align-top">
+                        <div className="min-w-[200px]">
+                          {renderPaymentCell(event)}
+                        </div>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex flex-col space-y-2">
