@@ -623,13 +623,19 @@ class EventService {
         throw new Error('Event not found');
       }
 
-      // Check event status
-      if (!['APPROVED', 'ACTIVE'].includes(event.status)) {
+      // Check event status - allow registration for APPROVED, ACTIVE, and after validation (for next cycle)
+      const allowedStatuses = ['APPROVED', 'ACTIVE', 'RESULTS_VALIDATED', 'READY_FOR_NEXT_REGISTRATION'];
+      if (!allowedStatuses.includes(event.status)) {
         throw new Error('Event is not available for registration');
       }
 
-      // Check if event is in the future
-      if (new Date(event.startDate) <= new Date()) {
+      // For events that have been validated, allow registration for next cycle (new event instance)
+      // For initial registration, event must be in the future
+      if (['RESULTS_VALIDATED', 'READY_FOR_NEXT_REGISTRATION'].includes(event.status)) {
+        // After validation, allow new registrations (next cycle) - no date restriction
+        // The event can be reopened for a new registration cycle
+      } else if (new Date(event.startDate) <= new Date()) {
+        // For initial registration, event must be in the future
         throw new Error('Cannot register for past events');
       }
 
@@ -1032,16 +1038,25 @@ class EventService {
         // For students, just verify event exists (already done by resolveEventId)
       }
 
-      // Get event details using actual database ID
+      // Get event details using actual database ID (including status for validation check)
       const event = await prisma.event.findUnique({
         where: { id: actualEventId },
         select: {
           id: true,
           name: true,
           startDate: true,
-          endDate: true
+          endDate: true,
+          status: true
         }
       });
+
+      // WORKFLOW ENFORCEMENT: Results are only visible to students/coordinators after admin validation
+      // Admins and coaches (event creators) can always see results
+      if (userType === 'STUDENT' || userType === 'COORDINATOR') {
+        if (!['RESULTS_VALIDATED', 'READY_FOR_NEXT_REGISTRATION', 'CERTIFICATES_ISSUED'].includes(event.status)) {
+          throw new Error('Results are not yet available. Please wait for admin validation.');
+        }
+      }
 
       const [files, total] = await Promise.all([
         prisma.eventResultFile.findMany({
@@ -1167,24 +1182,121 @@ class EventService {
   /**
    * Admin validates event results
    * Sets status to RESULTS_VALIDATED;
+   * After validation: results become visible to students/coordinators
+   * Event opens for next registration cycle
    * Only callable by admin!
    */
   async validateEventResults(eventId, adminId, validationNotes = null) {
     // NOTE: Requires manual enum update in your DB/schema for RESULTS_VALIDATED
+    // After validation, set status to READY_FOR_NEXT_REGISTRATION to allow new registrations
     return prisma.event.update({
       where: { id: eventId },
-      data: { status: 'RESULTS_VALIDATED', adminNotes: validationNotes }
+      data: { 
+        status: 'READY_FOR_NEXT_REGISTRATION', // Opens event for next registration cycle
+        adminNotes: validationNotes 
+      }
     });
   }
 
   /**
    * Check if certificates can be issued for event
-   * Only allow if status is RESULTS_VALIDATED (and payment if needed)
+   * Only allow if status is RESULTS_VALIDATED or READY_FOR_NEXT_REGISTRATION (and payment if needed)
    */
   async canIssueCertificates(eventId) {
     const event = await prisma.event.findUnique({ where: { id: eventId } });
     // Add additional checks if needed (e.g. payment complete)
-    return event.status === 'RESULTS_VALIDATED';
+    return ['RESULTS_VALIDATED', 'READY_FOR_NEXT_REGISTRATION', 'CERTIFICATES_ISSUED'].includes(event.status);
+  }
+
+  /**
+   * Get student results with scores and placements for an event
+   * Only available after admin validation (RESULTS_VALIDATED or later)
+   * @param {string} eventId - Event ID
+   * @param {string} studentId - Optional student ID to filter results
+   * @param {Object} pagination - Pagination options
+   */
+  async getStudentResults(eventId, studentId = null, pagination = {}) {
+    try {
+      const { page = 1, limit = 50 } = pagination;
+      const { skip, take } = getPaginationParams(page, limit);
+
+      // Resolve event ID
+      const event = await this.resolveEventId(eventId);
+
+      // WORKFLOW ENFORCEMENT: Results only available after validation
+      if (!['RESULTS_VALIDATED', 'READY_FOR_NEXT_REGISTRATION', 'CERTIFICATES_ISSUED'].includes(event.status)) {
+        throw new Error('Results are not yet available. Please wait for admin validation.');
+      }
+
+      // Build where clause
+      const where = {
+        eventId: event.id,
+        ...(studentId && { studentId })
+      };
+
+      // Get registrations with scores and placements
+      const [registrations, total] = await Promise.all([
+        prisma.eventRegistration.findMany({
+          where,
+          include: {
+            student: {
+              select: {
+                id: true,
+                name: true,
+                user: {
+                  select: {
+                    uniqueId: true,
+                    email: true
+                  }
+                }
+              }
+            }
+          },
+          orderBy: [
+            { placement: 'asc' }, // Winners first
+            { score: 'desc' }     // Then by score
+          ],
+          skip,
+          take
+        }),
+        prisma.eventRegistration.count({ where })
+      ]);
+
+      // Format results
+      const results = registrations.map(reg => ({
+        studentId: reg.studentId,
+        studentName: reg.student.name,
+        studentUniqueId: reg.student.user?.uniqueId,
+        score: reg.score,
+        placement: reg.placement,
+        positionText: reg.placement === 1 ? 'Winner' : 
+                     reg.placement === 2 ? 'Runner-Up' : 
+                     reg.placement === 3 ? 'Second Runner-Up' : 
+                     `Position ${reg.placement}`,
+        status: reg.status,
+        registeredAt: reg.createdAt
+      }));
+
+      const paginationMeta = getPaginationMeta(total, parseInt(page), parseInt(limit));
+
+      return {
+        event: {
+          id: event.id,
+          name: event.name,
+          sport: event.sport,
+          status: event.status
+        },
+        results,
+        pagination: paginationMeta,
+        summary: {
+          totalParticipants: total,
+          winners: results.filter(r => r.placement === 1).length,
+          runnersUp: results.filter(r => r.placement === 2).length
+        }
+      };
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**

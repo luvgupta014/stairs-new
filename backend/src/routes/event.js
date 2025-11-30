@@ -213,10 +213,16 @@ router.post('/:eventId/results',
   eventController.uploadResults.bind(eventController)
 );
 
-// Get event results
+// Get event results (files)
 router.get('/:eventId/results', 
   authenticate,
   eventController.getResults.bind(eventController)
+);
+
+// Get student results with scores and placements (only after validation)
+router.get('/:eventId/student-results', 
+  authenticate,
+  eventController.getStudentResults.bind(eventController)
 );
 
 // Download event results (coaches only for now due to schema limitations)

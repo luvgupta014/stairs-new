@@ -40,6 +40,18 @@ router.post('/issue', authenticate, requireAdmin, async (req, res) => {
       return res.status(404).json(errorResponse('Event not found or you do not have permission'));
     }
 
+    // Check payment status - must have completed payment for certificate issuance
+    const registrationOrder = await prisma.eventRegistrationOrder.findFirst({
+      where: {
+        eventId: event.id,
+        paymentStatus: 'SUCCESS'
+      }
+    });
+
+    if (!registrationOrder) {
+      return res.status(402).json(errorResponse('Payment is pending for this event. Please complete payment before issuing certificates.', 402));
+    }
+
     // COMMENTED OUT: Order verification and payment check
     // Admin can now issue certificates without order completion constraint
     /*
@@ -174,6 +186,169 @@ router.post('/issue', authenticate, requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('❌ Error issuing certificates:', error);
     res.status(500).json(errorResponse('Failed to issue certificates. Please try again.', 500));
+  }
+});
+
+/**
+ * @route   POST /api/certificates/issue-winner
+ * @desc    Issue winner certificates to selected students with positions (Admin only)
+ * @access  Private (Admin)
+ */
+router.post('/issue-winner', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId, selectedStudentsWithPositions } = req.body; // [{studentId, position, positionText}]
+
+    console.log(`🏆 Winner certificate issuance request:`, { eventId, students: selectedStudentsWithPositions?.length });
+
+    if (!eventId || !selectedStudentsWithPositions || selectedStudentsWithPositions.length === 0) {
+      return res.status(400).json(errorResponse('Missing required fields: eventId or selectedStudentsWithPositions'));
+    }
+
+    let event;
+    try {
+      event = await eventService.resolveEventId(eventId);
+    } catch (error) {
+      return res.status(404).json(errorResponse('Event not found'));
+    }
+
+    // Check payment status
+    const registrationOrder = await prisma.eventRegistrationOrder.findFirst({
+      where: {
+        eventId: event.id,
+        paymentStatus: 'SUCCESS'
+      }
+    });
+
+    if (!registrationOrder) {
+      return res.status(402).json(errorResponse('Payment is pending for this event. Please complete payment before issuing winner certificates.', 402));
+    }
+
+    // Get student details
+    const studentIds = selectedStudentsWithPositions.map(s => s.studentId);
+    const students = await prisma.student.findMany({
+      where: { id: { in: studentIds } },
+      select: {
+        id: true,
+        name: true,
+        user: { select: { uniqueId: true } }
+      }
+    });
+
+    if (students.length !== studentIds.length) {
+      return res.status(400).json(errorResponse('Some selected students were not found'));
+    }
+
+    // Check for existing winner certificates
+    const existingCertificates = await prisma.certificate.findMany({
+      where: {
+        eventId: event.id,
+        studentId: { in: studentIds },
+        uniqueId: { contains: 'WINNER' }
+      },
+      select: { studentId: true }
+    });
+
+    if (existingCertificates.length > 0) {
+      return res.status(400).json(errorResponse('Winner certificates already issued for some students'));
+    }
+
+    const eventDate = new Date(event.startDate).toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+
+    // Prepare winner certificate data
+    const certificatesData = selectedStudentsWithPositions.map(({ studentId, position, positionText }) => {
+      const student = students.find(s => s.id === studentId);
+      if (!student) throw new Error(`Student ${studentId} not found`);
+      
+      return {
+        participantName: student.name,
+        sportName: event.sport,
+        eventName: event.name,
+        eventDate: eventDate,
+        date: eventDate,
+        studentId: student.id,
+        studentUniqueId: student.user.uniqueId,
+        eventId: event.id,
+        eventUniqueId: event.uniqueId,
+        orderId: registrationOrder.id,
+        position: parseInt(position),
+        positionText: positionText || null
+      };
+    });
+
+    console.log(`🏆 Generating ${certificatesData.length} winner certificate(s)...`);
+    const { results, errors } = await certificateService.generateBulkWinnerCertificates(certificatesData);
+
+    // Create notifications
+    for (const certificate of results) {
+      const studentData = certificatesData.find(c => c.studentId === certificate.studentId);
+      await prisma.notification.create({
+        data: {
+          userId: (await prisma.student.findUnique({ 
+            where: { id: certificate.studentId },
+            select: { userId: true }
+          })).userId,
+          type: 'GENERAL',
+          title: '🏆 Winner Certificate Issued!',
+          message: `Congratulations! Your winner certificate (${studentData.positionText || `Position ${studentData.position}`}) for ${event.name} has been issued.`,
+          data: JSON.stringify({ 
+            certificateId: certificate.id,
+            certificateUrl: certificate.certificateUrl 
+          })
+        }
+      });
+    }
+
+    console.log(`✅ Successfully issued ${results.length} winner certificate(s)`);
+
+    res.json(successResponse({
+      issued: results.length,
+      failed: errors.length,
+      certificates: results,
+      errors
+    }, `Successfully issued ${results.length} winner certificate(s)`));
+
+  } catch (error) {
+    console.error('❌ Error issuing winner certificates:', error);
+    res.status(500).json(errorResponse('Failed to issue winner certificates. Please try again.', 500));
+  }
+});
+
+/**
+ * @route   GET /api/certificates/event/:eventId/payment-status
+ * @desc    Check payment status for event certificate issuance
+ * @access  Private (Admin)
+ */
+router.get('/event/:eventId/payment-status', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    
+    let event;
+    try {
+      event = await eventService.resolveEventId(eventId);
+    } catch (error) {
+      return res.status(404).json(errorResponse('Event not found'));
+    }
+
+    const registrationOrder = await prisma.eventRegistrationOrder.findFirst({
+      where: { eventId: event.id },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(successResponse({
+      paymentStatus: registrationOrder?.paymentStatus || 'PENDING',
+      paymentCompleted: registrationOrder?.paymentStatus === 'SUCCESS',
+      orderId: registrationOrder?.id,
+      totalAmount: registrationOrder?.totalFeeAmount,
+      paymentDate: registrationOrder?.paymentDate
+    }, 'Payment status retrieved successfully'));
+
+  } catch (error) {
+    console.error('❌ Error checking payment status:', error);
+    res.status(500).json(errorResponse('Failed to check payment status', 500));
   }
 });
 

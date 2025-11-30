@@ -833,7 +833,15 @@ export const uploadEventResults = async (eventId, formData) => {
   try {
     // When uploading files with FormData, axios interceptor will automatically
     // remove Content-Type header to allow browser to set it with proper boundary
-    const response = await api.post(`/api/events/${eventId}/results`, formData);
+    // Check if user is admin and use admin route, otherwise use coach route
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const isAdmin = user.role === 'ADMIN';
+    
+    const endpoint = isAdmin 
+      ? `/api/admin/events/${eventId}/results`
+      : `/api/events/${eventId}/results`;
+    
+    const response = await api.post(endpoint, formData);
     return response.data;
   } catch (error) {
     console.error('Upload event results error:', error);
@@ -983,6 +991,32 @@ export const issueCertificates = async (certificateData) => {
     return response.data;
   } catch (error) {
     console.error('Issue certificates error:', error);
+    if (error.response?.status === 402) {
+      throw { message: error.response.data.message || 'Payment is pending for this event', paymentPending: true };
+    }
+    throw error.response?.data || error.message;
+  }
+};
+
+export const issueWinnerCertificates = async (certificateData) => {
+  try {
+    const response = await api.post('/api/certificates/issue-winner', certificateData);
+    return response.data;
+  } catch (error) {
+    console.error('Issue winner certificates error:', error);
+    if (error.response?.status === 402) {
+      throw { message: error.response.data.message || 'Payment is pending for this event', paymentPending: true };
+    }
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getEventPaymentStatus = async (eventId) => {
+  try {
+    const response = await api.get(`/api/certificates/event/${eventId}/payment-status`);
+    return response.data;
+  } catch (error) {
+    console.error('Get event payment status error:', error);
     throw error.response?.data || error.message;
   }
 };

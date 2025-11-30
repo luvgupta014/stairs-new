@@ -2,6 +2,7 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
+const { createOrderInvoice, createEventPaymentInvoice } = require('../services/invoiceService');
 const { authenticate, requireCoach, requireApproved } = require('../utils/authMiddleware');
 const {
   successResponse,
@@ -1130,24 +1131,24 @@ async function processBulkStudents(studentData, coachId, results, errors) {
 // Helper function to calculate profile completion percentage
 function calculateProfileCompletion(data) {
   const requiredFields = ['name', 'email', 'phone', 'sport'];
-  const optionalFields = ['fatherName', 'dateOfBirth', 'address', 'city', 'state'];
+  const optionalFields = ['fatherName', 'dateOfBirth', 'address', 'city', 'state', 'district', 'pincode', 'gender', 'school', 'club', 'level'];
 
   let completedRequired = 0;
   let completedOptional = 0;
 
   requiredFields.forEach(field => {
-    if (data[field]) completedRequired++;
+    if (data[field] && data[field] !== null && data[field] !== '') completedRequired++;
   });
 
   optionalFields.forEach(field => {
-    if (data[field]) completedOptional++;
+    if (data[field] && data[field] !== null && data[field] !== '') completedOptional++;
   });
 
-  // Required fields are 70% of total, optional are 30%
-  const requiredPercentage = (completedRequired / requiredFields.length) * 70;
-  const optionalPercentage = (completedOptional / optionalFields.length) * 30;
+  // Required fields are 60% of total, optional are 40%
+  const requiredPercentage = (completedRequired / requiredFields.length) * 60;
+  const optionalPercentage = (completedOptional / optionalFields.length) * 40;
 
-  return Math.round(requiredPercentage + optionalPercentage);
+  return Math.min(Math.round(requiredPercentage + optionalPercentage), 100);
 }
 
 // Create event
@@ -2121,8 +2122,8 @@ router.get('/dashboard', authenticate, requireCoach, async (req, res) => {
       }
     });
 
-    // Get recent students (last 5 connections)
-    const recentStudents = await prisma.studentCoachConnection.findMany({
+    // Get ALL students (not just recent 5)
+    const allStudents = await prisma.studentCoachConnection.findMany({
       where: { coachId, status: 'ACCEPTED' },
       include: {
         student: {
@@ -2131,13 +2132,23 @@ router.get('/dashboard', authenticate, requireCoach, async (req, res) => {
             name: true,
             sport: true,
             level: true,
-            achievements: true
+            achievements: true,
+            profileCompletion: true,
+            user: {
+              select: {
+                email: true,
+                phone: true,
+                uniqueId: true
+              }
+            }
           }
         }
       },
-      orderBy: { createdAt: 'desc' },
-      take: 5
+      orderBy: { createdAt: 'desc' }
     });
+
+    // Get recent students (last 5) for overview
+    const recentStudents = allStudents.slice(0, 5);
 
     // Get recent events (last 5)
     const recentEvents = await prisma.event.findMany({
@@ -2189,15 +2200,29 @@ router.get('/dashboard', authenticate, requireCoach, async (req, res) => {
         paymentStatus: coach?.paymentStatus || 'PENDING',
         isActive: coach?.isActive || false
       },
-      // Students data
-      students: recentStudents.map(conn => ({
+      // Students data - ALL students for "My Athletes" tab
+      students: allStudents.map(conn => ({
         id: conn.student.id,
         name: conn.student.name,
         sport: conn.student.sport || 'General',
         level: conn.student.level || 'Beginner',
-        achievements: conn.student.achievements ? JSON.parse(conn.student.achievements) : [],
+        achievements: conn.student.achievements ? (typeof conn.student.achievements === 'string' ? JSON.parse(conn.student.achievements) : conn.student.achievements) : [],
+        profileCompletion: conn.student.profileCompletion || 0,
+        email: conn.student.user?.email,
+        phone: conn.student.user?.phone,
+        uniqueId: conn.student.user?.uniqueId,
         joinedDate: conn.createdAt,
-        performance: Math.floor(Math.random() * 30) + 70 // Mock performance data
+        connectionId: conn.id,
+        connectionStatus: conn.status
+      })),
+      // Recent students for overview
+      recentStudents: recentStudents.map(conn => ({
+        id: conn.student.id,
+        name: conn.student.name,
+        sport: conn.student.sport || 'General',
+        level: conn.student.level || 'Beginner',
+        achievements: conn.student.achievements ? (typeof conn.student.achievements === 'string' ? JSON.parse(conn.student.achievements) : conn.student.achievements) : [],
+        joinedDate: conn.createdAt
       })),
       // Events data
       recentEvents: recentEvents.map(event => ({
@@ -2564,6 +2589,43 @@ router.post('/orders/:orderId/verify-payment', authenticate, requireCoach, async
     });
 
     console.log(`✅ Payment verified for order ${order.orderNumber}: ${razorpay_payment_id}`);
+
+    // Get coach details for invoice
+    const coach = await prisma.coach.findUnique({
+      where: { id: req.coach.id },
+      include: {
+        user: {
+          select: {
+            email: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    // Create invoice and send receipt email
+    if (coach && coach.user) {
+      try {
+        await createOrderInvoice({
+          razorpayPaymentId: razorpay_payment_id,
+          razorpayOrderId: razorpay_order_id,
+          userEmail: coach.user.email,
+          userName: coach.name || coach.user.name || 'Coach',
+          amount: order.totalAmount || 0,
+          currency: 'INR',
+          description: `Order ${order.orderNumber} - ${order.event?.name || 'Event'}`,
+          metadata: {
+            orderNumber: order.orderNumber,
+            eventName: order.event?.name,
+            certificates: order.certificates,
+            medals: order.medals,
+            trophies: order.trophies
+          }
+        });
+      } catch (invoiceError) {
+        console.error('⚠️ Invoice generation failed (non-critical):', invoiceError);
+      }
+    }
 
     // TODO: Send notification to admin about completed payment
     // For now, we'll just log it
@@ -3140,14 +3202,49 @@ router.post('/events/:eventId/registrations/orders/:orderId/payment-success', au
 
     console.log(`✅ Payment successful for order ${orderId}. ${updatedOrder.registrationItems.length} students registered.`);
 
-    res.json(successResponse(updatedOrder, 'Payment successful! Students have been registered for the event.'));
+    // Get coach details for invoice
+    const coach = await prisma.coach.findUnique({
+      where: { id: req.coach.id },
+      include: {
+        user: {
+          select: {
+            email: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    // Create invoice and send receipt email
+    if (coach && coach.user) {
+      try {
+        await createEventPaymentInvoice({
+          razorpayPaymentId: razorpayPaymentId,
+          razorpayOrderId: registrationOrder.razorpayOrderId,
+          userEmail: coach.user.email,
+          userName: coach.name || coach.user.name || 'Coach',
+          amount: updatedOrder.totalFeeAmount || 0,
+          currency: 'INR',
+          description: `Event Registration Payment - ${updatedOrder.event?.name || 'Event'}`,
+          eventName: updatedOrder.event?.name,
+          metadata: {
+            eventId: updatedOrder.eventId,
+            eventName: updatedOrder.event?.name,
+            studentsCount: updatedOrder.registrationItems.length,
+            orderId: orderId
+          }
+        });
+      } catch (invoiceError) {
+        console.error('⚠️ Invoice generation failed (non-critical):', invoiceError);
+      }
+    }
+
+    res.json(successResponse(updatedOrder, 'Payment successful! Students have been registered for the event. Receipt has been sent to your email.'));
 
   } catch (error) {
     console.error('❌ Payment verification error:', error);
     res.status(500).json(errorResponse('Failed to verify payment: ' + error.message, 500));
   }
 });
-
-module.exports = router;
 
 module.exports = router;
