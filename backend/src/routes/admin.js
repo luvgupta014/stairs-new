@@ -9,7 +9,7 @@ const {
   getPaginationMeta,
   hashPassword
 } = require('../utils/helpers');
-const { sendEventModerationEmail, sendOrderStatusEmail } = require('../utils/emailService');
+const { sendEventModerationEmail, sendOrderStatusEmail, sendEventCompletionEmail } = require('../utils/emailService');
 const EventService = require('../services/eventService');
 const { generateEventUID } = require('../utils/uidGenerator');
 
@@ -1455,8 +1455,66 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
 
     const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
 
-    // Format events for admin view with correct field names
-    const formattedEvents = events.map(event => ({
+    // Calculate payment status for each event from registration orders
+    const eventsWithPaymentStatus = await Promise.all(
+      events.map(async (event) => {
+        try {
+          // Get all registration orders for this event
+          const registrationOrders = await prisma.eventRegistrationOrder.findMany({
+            where: { eventId: event.id },
+            select: {
+              totalFeeAmount: true,
+              paymentStatus: true,
+              paymentDate: true
+            }
+          });
+
+          // Calculate payment summary
+          const totalAmount = registrationOrders.reduce((sum, order) => sum + (order.totalFeeAmount || 0), 0);
+          const paidAmount = registrationOrders
+            .filter(order => order.paymentStatus === 'PAID' || order.paymentStatus === 'SUCCESS')
+            .reduce((sum, order) => sum + (order.totalFeeAmount || 0), 0);
+          
+          let paymentStatus = 'NO_PAYMENTS';
+          if (totalAmount > 0) {
+            if (paidAmount >= totalAmount) {
+              paymentStatus = 'PAID';
+            } else if (paidAmount > 0) {
+              paymentStatus = 'PARTIAL';
+            } else {
+              paymentStatus = 'PENDING';
+            }
+          }
+
+          return {
+            ...event,
+            paymentSummary: {
+              totalAmount,
+              paidAmount,
+              status: paymentStatus,
+              orderCount: registrationOrders.length,
+              paidOrderCount: registrationOrders.filter(o => o.paymentStatus === 'PAID' || o.paymentStatus === 'SUCCESS').length
+            }
+          };
+        } catch (error) {
+          console.error(`Error calculating payment status for event ${event.id}:`, error);
+          // Return event with default payment status on error
+          return {
+            ...event,
+            paymentSummary: {
+              totalAmount: 0,
+              paidAmount: 0,
+              status: 'NO_PAYMENTS',
+              orderCount: 0,
+              paidOrderCount: 0
+            }
+          };
+        }
+      })
+    );
+
+    // Format events for admin view with correct field names, including payment summary
+    const formattedEvents = eventsWithPaymentStatus.map(event => ({
       id: event.id,
       uniqueId: event.uniqueId, // Custom event UID
       title: event.name,                                            // FIXED: Map name to title for frontend
@@ -1477,6 +1535,13 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
       status: event.status,
       adminNotes: event.adminNotes,
       createdAt: event.createdAt,
+      paymentSummary: event.paymentSummary || { // Include payment summary from registration orders
+        totalAmount: 0,
+        paidAmount: 0,
+        status: 'NO_PAYMENTS',
+        orderCount: 0,
+        paidOrderCount: 0
+      },
       organizer: {
         id: event.coach?.user?.id,
         email: event.coach?.user?.email,
@@ -3828,7 +3893,7 @@ router.get('/events/:eventId/registrations/orders', authenticate, requireAdmin, 
 
   } catch (error) {
     console.error('❌ Get event registration orders error:', error);
-    res.status(500).json(errorResponse('Failed to retrieve registration orders.', 500));
+    res.status(500).json(errorResponse('Registration orders not found.', 500));
   }
 });
 
@@ -3846,15 +3911,17 @@ router.post('/events/:eventId/registrations/notify-completion', authenticate, re
       return res.status(404).json(errorResponse('Event not found.', 404));
     }
 
+    // Allow notification even if event is not COMPLETED (admin can notify early)
+    // But warn if event is not completed
     if (event.status !== 'COMPLETED') {
-      return res.status(400).json(errorResponse('Event must be marked as COMPLETED before notifying for final payment.', 400));
+      console.warn(`⚠️ Notifying for event ${eventId} with status: ${event.status} (not COMPLETED)`);
     }
 
     // Find all paid registration orders for this event
     const registrationOrders = await prisma.eventRegistrationOrder.findMany({
       where: {
         eventId,
-        paymentStatus: 'PAID'
+        paymentStatus: 'PAID' // Only notify coaches who have paid
       },
       include: {
         registrationItems: {
@@ -3880,6 +3947,11 @@ router.post('/events/:eventId/registrations/notify-completion', authenticate, re
       }
     });
 
+    // Check if there are any paid orders
+    if (registrationOrders.length === 0) {
+      return res.status(400).json(errorResponse('No paid registration orders found for this event. Coaches must complete payment before notifications can be sent.', 400));
+    }
+
     // Mark orders as notified and ready for certificate generation
     const updatedOrders = await Promise.all(
       registrationOrders.map(order =>
@@ -3893,31 +3965,113 @@ router.post('/events/:eventId/registrations/notify-completion', authenticate, re
       )
     );
 
-    // Send notifications to coaches
-    const notificationPromises = registrationOrders.map(order =>
-      prisma.notification.create({
-        data: {
-          userId: order.coach.user.id,
-          type: 'GENERAL',
-          title: `Event Completed - Certificates Ready: ${event.name}`,
-          message: `Your event "${event.name}" has been completed. ${order.registrationItems.length} student certificates are ready for generation. Please check the dashboard for details.`,
-          data: JSON.stringify({
-            eventId,
-            registrationOrderId: order.id,
-            studentCount: order.registrationItems.length
-          })
+    // Send notifications to coaches (database notifications + emails) with comprehensive error handling
+    const notificationPromises = registrationOrders.map(async (order) => {
+      let dbNotification = null;
+      let emailSent = false;
+      const errors = [];
+
+      // Create database notification - use ORDER_COMPLETED type for better visibility in coordinator dashboard
+      try {
+        if (!order.coach?.user?.id) {
+          throw new Error(`Coach ${order.coach?.id} missing user ID`);
         }
-      })
-    );
 
-    await Promise.all(notificationPromises);
+        dbNotification = await prisma.notification.create({
+          data: {
+            userId: order.coach.user.id,
+            type: 'ORDER_COMPLETED', // More specific than GENERAL - shows in coordinator dashboard with proper icon/color
+            title: `Event Completed - Certificates Ready: ${event.name}`,
+            message: notifyMessage || `Your event "${event.name}" has been completed. ${order.registrationItems.length} student certificate(s) are ready for generation. Please check your dashboard for details.${order.totalFeeAmount ? ` Total amount: ₹${order.totalFeeAmount.toLocaleString()}` : ''}`,
+            data: JSON.stringify({
+              eventId,
+              eventName: event.name,
+              registrationOrderId: order.id,
+              studentCount: order.registrationItems.length,
+              totalAmount: order.totalFeeAmount,
+              notificationType: 'event_completion',
+              actionUrl: `/coach/events/${eventId}`
+            })
+          }
+        });
+        console.log(`✅ Database notification created for coach ${order.coach.id} (user ${order.coach.user.id})`);
+      } catch (notificationError) {
+        const errorMsg = `Failed to create notification for coach ${order.coach?.id}: ${notificationError.message}`;
+        console.error(`❌ ${errorMsg}`);
+        errors.push(errorMsg);
+        // Continue with email even if notification creation fails
+      }
 
-    console.log(`✅ Notified ${registrationOrders.length} coaches for event completion`);
+      // Send email notification to coach
+      if (order.coach?.user?.email && order.coach?.name) {
+        try {
+          const emailResult = await sendEventCompletionEmail(
+            order.coach.user.email,
+            order.coach.name,
+            event.name,
+            order.registrationItems.length,
+            order.totalFeeAmount,
+            notifyMessage || ''
+          );
+          
+          if (emailResult.success) {
+            emailSent = true;
+            console.log(`📧 Event completion email sent to ${order.coach.user.email}`);
+          } else {
+            const errorMsg = `Failed to send email to ${order.coach.user.email}: ${emailResult.error}`;
+            console.error(`⚠️ ${errorMsg}`);
+            errors.push(errorMsg);
+          }
+        } catch (emailError) {
+          const errorMsg = `Error sending email to ${order.coach.user.email}: ${emailError.message}`;
+          console.error(`⚠️ ${errorMsg}`);
+          errors.push(errorMsg);
+          // Don't fail the request if email fails
+        }
+      } else {
+        const warningMsg = `Coach ${order.coach?.id} missing email or name, skipping email notification`;
+        console.warn(`⚠️ ${warningMsg}`);
+        errors.push(warningMsg);
+      }
+
+      return {
+        notification: dbNotification,
+        emailSent,
+        errors,
+        coachId: order.coach?.id,
+        coachName: order.coach?.name
+      };
+    });
+
+    const notificationResults = await Promise.all(notificationPromises);
+
+    // Calculate statistics
+    const successfulNotifications = notificationResults.filter(r => r.notification !== null).length;
+    const successfulEmails = notificationResults.filter(r => r.emailSent).length;
+    const totalErrors = notificationResults.reduce((sum, r) => sum + r.errors.length, 0);
+    const totalStudents = updatedOrders.reduce((sum, order) => sum + (order.registrationItems?.length || 0), 0);
+    const totalAmount = updatedOrders.reduce((sum, order) => sum + (order.totalFeeAmount || 0), 0);
+
+    console.log(`✅ Notified ${successfulNotifications}/${registrationOrders.length} coaches (database), ${successfulEmails}/${registrationOrders.length} (email)`);
+    if (totalErrors > 0) {
+      console.warn(`⚠️ ${totalErrors} error(s) occurred during notification process`);
+    }
 
     res.json(successResponse({
       ordersNotified: updatedOrders.length,
-      totalStudentsForCertificates: updatedOrders.reduce((sum, order) => sum + order.registrationItems.length, 0),
-      message: 'Coaches have been notified. Certificates can now be generated.'
+      totalStudentsForCertificates: totalStudents,
+      totalAmount: totalAmount,
+      notificationsCreated: successfulNotifications,
+      emailsSent: successfulEmails,
+      totalErrors: totalErrors,
+      coachesNotified: notificationResults.map(r => ({
+        coachId: r.coachId,
+        coachName: r.coachName,
+        notificationCreated: r.notification !== null,
+        emailSent: r.emailSent,
+        errors: r.errors
+      })),
+      message: `Successfully notified ${successfulNotifications} coordinator(s) via dashboard. ${successfulEmails} email(s) sent. ${totalStudents} certificate(s) ready for generation.${totalErrors > 0 ? ` ${totalErrors} warning(s) occurred.` : ''}`
     }, 'Completion notification sent successfully.'));
 
   } catch (error) {
@@ -4084,12 +4238,13 @@ router.put('/events/:eventId/validate-results', authenticate, requireAdmin, asyn
 // POST /api/admin/events/:eventId/results -- admin uploads result sheet
 // Allows admin to upload result sheets (same functionality as coach upload)
 const multer = require('multer');
-const fs = require('fs');
+// Note: path and fs are already required at the top of the file
 
 // Configure multer for admin result uploads
 const adminUploadsDir = path.join(__dirname, '../../uploads/event-results');
-if (!fs.existsSync(adminUploadsDir)) {
-  fs.mkdirSync(adminUploadsDir, { recursive: true });
+// fs is used inline below - no need to declare if already available
+if (!require('fs').existsSync(adminUploadsDir)) {
+  require('fs').mkdirSync(adminUploadsDir, { recursive: true });
 }
 
 const adminStorage = multer.diskStorage({

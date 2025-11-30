@@ -37,7 +37,7 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
       setLoading(true);
       const ordersResponse = await getEventRegistrationOrdersAdmin(event.id);
       if (ordersResponse.success) {
-        setRegistrationOrders(ordersResponse.data.orders);
+        setRegistrationOrders(ordersResponse.data.orders || []);
       }
 
       const certsResponse = await getEventCertificatesAdmin(event.id);
@@ -53,26 +53,26 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
   };
 
   const handleNotifyCompletion = async () => {
-    if (!notifyMessage.trim()) {
-      setError('Please enter a message for coordinators.');
-      return;
-    }
+    // Message is optional - if empty, use default message
+    const messageToSend = notifyMessage.trim() || `Your event "${event.name}" has been completed. Certificates are ready for generation. Please check your dashboard for details.`;
 
     try {
       setNotifying(true);
       setError('');
-      const response = await notifyCoordinatorForCompletion(event.id, notifyMessage);
+      const response = await notifyCoordinatorForCompletion(event.id, messageToSend);
       if (response.success) {
+        const data = response.data;
         setSuccess(
-          `✅ ${response.data.ordersNotified} coordinators notified. ${response.data.totalStudentsForCertificates} certificates ready to be generated.`
+          `✅ ${data.ordersNotified || 0} coordinator(s) notified successfully! ${data.totalStudentsForCertificates || 0} student certificate(s) ready to be generated. Email notifications have been sent to all coaches.`
         );
         setNotifyMessage('');
         await loadData();
       } else {
-        setError(response.message);
+        setError(response.message || 'Failed to send notification');
       }
     } catch (err) {
-      setError(err.message || 'Failed to send notification');
+      console.error('Notification error:', err);
+      setError(err.message || 'Failed to send notification. Please try again.');
     } finally {
       setNotifying(false);
     }
@@ -208,25 +208,61 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
             </div>
           )}
 
-          {/* Notification Section */}
-          {event.status === 'COMPLETED' && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <h4 className="font-semibold text-blue-900 mb-3 flex items-center">
+          {/* Notification Section - Always show, but warn if not completed */}
+          <div className={event.status === 'COMPLETED' ? 'bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6' : 'bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6'}>
+              <h4 className={`font-semibold mb-3 flex items-center ${event.status === 'COMPLETED' ? 'text-blue-900' : 'text-orange-900'}`}>
                 <FaBell className="mr-2" />
                 Step 2: Notify Coordinators for Final Payment & Certificates
               </h4>
+              {event.status !== 'COMPLETED' && (
+                <div className="bg-orange-100 border border-orange-300 rounded-lg p-3 mb-3">
+                  <p className="text-sm text-orange-800 font-medium">
+                    ⚠️ Note: Event is not marked as COMPLETED. You can still send notifications, but it's recommended to mark the event as completed first.
+                  </p>
+                </div>
+              )}
+              <p className={`text-sm mb-3 ${event.status === 'COMPLETED' ? 'text-blue-800' : 'text-orange-800'}`}>
+                Send notifications to all coaches/coordinators who have <strong>paid</strong> registration orders for this event. They will receive both in-app notifications and email notifications.
+              </p>
+              {(() => {
+                const paidOrders = registrationOrders.filter(order => order.paymentStatus === 'PAID');
+                if (paidOrders.length === 0) {
+                  return (
+                    <div className="bg-gray-100 border border-gray-300 rounded-lg p-4 mb-3">
+                      <p className="text-sm text-gray-700 font-medium">
+                        ⚠️ No paid registration orders found for this event. Coaches must complete payment before notifications can be sent.
+                      </p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="bg-green-100 border border-green-300 rounded-lg p-3 mb-3">
+                    <p className="text-sm text-green-800 font-medium">
+                      ✅ Found {paidOrders.length} paid registration order(s) ready for notification. {paidOrders.reduce((sum, o) => sum + (o.totalStudents || o.registrationItems?.length || 0), 0)} student certificate(s) will be ready.
+                    </p>
+                  </div>
+                );
+              })()}
               <div className="space-y-3">
-                <textarea
-                  value={notifyMessage}
-                  onChange={(e) => setNotifyMessage(e.target.value)}
-                  placeholder="Enter message to send to coordinators (e.g., event completed, payment due for certificates)"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows={3}
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Custom Message (Optional)
+                  </label>
+                  <textarea
+                    value={notifyMessage}
+                    onChange={(e) => setNotifyMessage(e.target.value)}
+                    placeholder="Enter a custom message for coordinators (optional). If left empty, a default message will be sent."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={3}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Leave empty to use default message, or customize to include payment details, certificate information, etc.
+                  </p>
+                </div>
                 <button
                   onClick={handleNotifyCompletion}
-                  disabled={notifying || !notifyMessage.trim()}
-                  className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors inline-flex items-center justify-center"
+                  disabled={notifying || registrationOrders.filter(order => order.paymentStatus === 'PAID').length === 0}
+                  className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center"
                 >
                   {notifying ? (
                     <>
@@ -241,8 +277,7 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
                   )}
                 </button>
               </div>
-            </div>
-          )}
+          </div>
 
           {/* Orders List */}
           {registrationOrders.length === 0 ? (
