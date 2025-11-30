@@ -703,7 +703,7 @@ router.get('/event/:eventId/eligible-students', authenticate, requireAdmin, asyn
       certificatesRemaining: eligibleStudents.length, // All eligible students can get certificates
       eventName: event.name,
       eventStatus: event.status
-    }, 'Eligible students retrieved successfully'));
+    }, 'No eligible students found'));
 
   } catch (error) {
     console.error('❌ Error fetching eligible students:', error);
