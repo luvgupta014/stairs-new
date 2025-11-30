@@ -900,6 +900,17 @@ export const downloadSampleResultSheet = async (eventId, isAdmin = false) => {
   }
 };
 
+// Get event result analytics with winner prediction
+export const getEventResultAnalytics = async (eventId) => {
+  try {
+    const response = await api.get(`/api/admin/events/${eventId}/results/analytics`);
+    return response.data;
+  } catch (error) {
+    console.error('Get event result analytics error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 export const deleteEventResultFile = async (eventId, fileId = null) => {
   try {
     // If fileId is provided, delete specific file, otherwise delete all files

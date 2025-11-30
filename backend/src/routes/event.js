@@ -244,7 +244,11 @@ router.get('/:eventId/results/sample-sheet', authenticate, requireCoach, async (
           select: {
             id: true,
             name: true,
-            uniqueId: true
+            user: {
+              select: {
+                uniqueId: true
+              }
+            }
           }
         }
       },
