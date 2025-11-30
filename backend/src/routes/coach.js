@@ -3048,7 +3048,7 @@ router.get('/events/:eventId/registrations/orders', authenticate, requireCoach, 
 
   } catch (error) {
     console.error('❌ Get registration orders error:', error);
-    res.status(500).json(errorResponse('Failed to retrieve registration orders.', 500));
+    res.status(500).json(errorResponse('Registration orders not found.', 500));
   }
 });
 
