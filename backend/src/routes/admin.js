@@ -4084,7 +4084,6 @@ router.put('/events/:eventId/validate-results', authenticate, requireAdmin, asyn
 // POST /api/admin/events/:eventId/results -- admin uploads result sheet
 // Allows admin to upload result sheets (same functionality as coach upload)
 const multer = require('multer');
-const path = require('path');
 const fs = require('fs');
 
 // Configure multer for admin result uploads
