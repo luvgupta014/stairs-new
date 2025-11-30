@@ -213,6 +213,107 @@ router.post('/:eventId/results',
   eventController.uploadResults.bind(eventController)
 );
 
+// GET /api/events/:eventId/results/sample-sheet - Download sample result sheet template (for coaches)
+router.get('/:eventId/results/sample-sheet', authenticate, requireCoach, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const XLSX = require('xlsx');
+    const { PrismaClient } = require('@prisma/client');
+    const { errorResponse } = require('../utils/helpers');
+    const prisma = new PrismaClient();
+    
+    // Resolve event ID and verify coach access
+    const eventService = new (require('../services/eventService'))();
+    let event;
+    try {
+      event = await eventService.resolveEventId(eventId);
+    } catch (error) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    // Verify event belongs to coach
+    if (event.coachId !== req.coach.id) {
+      return res.status(403).json(errorResponse('You can only download sample sheets for your own events.', 403));
+    }
+
+    // Get registered students for this event to populate sample data
+    const registrations = await prisma.eventRegistration.findMany({
+      where: { eventId: event.id },
+      include: {
+        student: {
+          select: {
+            id: true,
+            name: true,
+            uniqueId: true
+          }
+        }
+      },
+      take: 10 // Limit to 10 sample rows
+    });
+
+    // Create sample data
+    const sampleData = [
+      // Header row
+      { studentId: 'studentId', name: 'name', score: 'score', remarks: 'remarks (optional)' },
+      // Instructions row
+      { studentId: 'REQUIRED', name: 'OPTIONAL', score: 'REQUIRED', remarks: 'OPTIONAL' },
+      { studentId: 'Student Database ID', name: 'Student Name', score: 'Numeric Score', remarks: 'Any notes' }
+    ];
+
+    // Add sample student data if available
+    if (registrations.length > 0) {
+      registrations.forEach((reg, index) => {
+        sampleData.push({
+          studentId: reg.student.id, // Use actual student ID
+          name: reg.student.name || `Student ${index + 1}`,
+          score: (100 - index * 5).toFixed(2), // Sample scores decreasing
+          remarks: index === 0 ? 'Winner' : index === 1 ? 'Runner-up' : ''
+        });
+      });
+    } else {
+      // Add dummy data if no registrations
+      for (let i = 1; i <= 5; i++) {
+        sampleData.push({
+          studentId: `STU-${String(i).padStart(6, '0')}`,
+          name: `Sample Student ${i}`,
+          score: (100 - i * 5).toFixed(2),
+          remarks: i === 1 ? 'Winner' : i === 2 ? 'Runner-up' : ''
+        });
+      }
+    }
+
+    // Create workbook and worksheet
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(sampleData, { skipHeader: false });
+
+    // Set column widths
+    worksheet['!cols'] = [
+      { wch: 20 }, // studentId
+      { wch: 25 }, // name
+      { wch: 15 }, // score
+      { wch: 30 }  // remarks
+    ];
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Results');
+
+    // Generate buffer
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // Set response headers
+    const filename = `Sample_Result_Sheet_${event.uniqueId || event.id}_${Date.now()}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+
+    res.send(buffer);
+
+  } catch (error) {
+    console.error('❌ Generate sample sheet error:', error);
+    res.status(500).json(errorResponse('Failed to generate sample sheet: ' + error.message, 500));
+  }
+});
+
 // Get event results (files)
 router.get('/:eventId/results', 
   authenticate,
