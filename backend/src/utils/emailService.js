@@ -759,10 +759,281 @@ const sendOrderStatusEmail = async (email, name, status, orderData, adminRemarks
   }
 };
 
+/**
+ * Send payment receipt/invoice email
+ * @param {Object} receiptData - Receipt information
+ * @param {string} receiptData.email - Recipient email
+ * @param {string} receiptData.name - User name
+ * @param {string} receiptData.paymentId - Razorpay payment ID
+ * @param {string} receiptData.orderId - Razorpay order ID
+ * @param {string} receiptData.invoiceId - Razorpay invoice ID (optional)
+ * @param {string} receiptData.invoiceUrl - Invoice URL (optional)
+ * @param {number} receiptData.amount - Payment amount
+ * @param {string} receiptData.currency - Currency
+ * @param {string} receiptData.description - Payment description
+ * @param {string} receiptData.invoiceNumber - Invoice number
+ * @param {string} receiptData.paidAt - Payment date
+ * @param {Object} receiptData.metadata - Additional metadata
+ * @returns {Promise<Object>} Email send result
+ */
+const sendPaymentReceiptEmail = async (receiptData) => {
+  try {
+    // Check if transporter is available
+    if (!transporter) {
+      console.warn('⚠️ Email service not available - Payment receipt email not sent');
+      return { success: false, error: 'Email service not configured' };
+    }
+
+    const {
+      email,
+      name,
+      paymentId,
+      orderId,
+      invoiceId,
+      invoiceUrl,
+      amount,
+      currency = 'INR',
+      description,
+      invoiceNumber,
+      paidAt,
+      metadata = {}
+    } = receiptData;
+
+    const formattedAmount = new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: currency
+    }).format(amount);
+
+    const mailOptions = {
+      from: `"STAIRS Talent Hub" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Payment Receipt - STAIRS Talent Hub',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              line-height: 1.6;
+              color: #333;
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+            }
+            .container {
+              background-color: #f9f9f9;
+              border-radius: 10px;
+              padding: 30px;
+              box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            }
+            .header {
+              text-align: center;
+              color: #2563eb;
+              margin-bottom: 30px;
+            }
+            .receipt-box {
+              background-color: #fff;
+              border: 2px solid #10b981;
+              border-radius: 8px;
+              padding: 25px;
+              margin: 20px 0;
+            }
+            .receipt-header {
+              text-align: center;
+              color: #10b981;
+              margin-bottom: 20px;
+            }
+            .receipt-details {
+              background-color: #f8fafc;
+              border-radius: 8px;
+              padding: 15px;
+              margin: 15px 0;
+            }
+            .detail-row {
+              display: flex;
+              justify-content: space-between;
+              padding: 8px 0;
+              border-bottom: 1px solid #e5e7eb;
+            }
+            .detail-row:last-child {
+              border-bottom: none;
+            }
+            .detail-label {
+              font-weight: 600;
+              color: #666;
+            }
+            .detail-value {
+              color: #333;
+              font-weight: 500;
+            }
+            .amount-box {
+              background-color: #10b981;
+              color: white;
+              padding: 20px;
+              border-radius: 8px;
+              text-align: center;
+              margin: 20px 0;
+            }
+            .amount-label {
+              font-size: 14px;
+              opacity: 0.9;
+            }
+            .amount-value {
+              font-size: 32px;
+              font-weight: bold;
+              margin: 10px 0;
+            }
+            .invoice-link {
+              display: inline-block;
+              padding: 12px 30px;
+              background-color: #2563eb;
+              color: white;
+              text-decoration: none;
+              border-radius: 5px;
+              margin: 20px 0;
+            }
+            .footer {
+              margin-top: 30px;
+              text-align: center;
+              font-size: 12px;
+              color: #666;
+            }
+            .success-badge {
+              display: inline-block;
+              background-color: #10b981;
+              color: white;
+              padding: 6px 12px;
+              border-radius: 20px;
+              font-size: 12px;
+              font-weight: 600;
+              margin-bottom: 15px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🏃‍♂️ STAIRS Talent Hub</h1>
+            </div>
+            
+            <div class="receipt-box">
+              <div class="receipt-header">
+                <span class="success-badge">✅ Payment Successful</span>
+                <h2 style="margin: 10px 0;">Payment Receipt</h2>
+              </div>
+              
+              <div class="amount-box">
+                <div class="amount-label">Amount Paid</div>
+                <div class="amount-value">${formattedAmount}</div>
+              </div>
+              
+              <div class="receipt-details">
+                <div class="detail-row">
+                  <span class="detail-label">Invoice Number:</span>
+                  <span class="detail-value">${invoiceNumber || paymentId}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Payment ID:</span>
+                  <span class="detail-value">${paymentId}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Order ID:</span>
+                  <span class="detail-value">${orderId}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Payment Date:</span>
+                  <span class="detail-value">${new Date(paidAt).toLocaleString('en-IN', { 
+                    dateStyle: 'long', 
+                    timeStyle: 'short' 
+                  })}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Description:</span>
+                  <span class="detail-value">${description || 'Payment'}</span>
+                </div>
+                ${metadata.eventName ? `
+                <div class="detail-row">
+                  <span class="detail-label">Event:</span>
+                  <span class="detail-value">${metadata.eventName}</span>
+                </div>
+                ` : ''}
+                ${metadata.planName ? `
+                <div class="detail-row">
+                  <span class="detail-label">Plan:</span>
+                  <span class="detail-value">${metadata.planName}</span>
+                </div>
+                ` : ''}
+                ${metadata.orderNumber ? `
+                <div class="detail-row">
+                  <span class="detail-label">Order Number:</span>
+                  <span class="detail-value">${metadata.orderNumber}</span>
+                </div>
+                ` : ''}
+              </div>
+              
+              ${invoiceUrl ? `
+              <div style="text-align: center; margin-top: 20px;">
+                <a href="${invoiceUrl}" class="invoice-link" target="_blank">
+                  View/Download Invoice
+                </a>
+              </div>
+              ` : ''}
+            </div>
+            
+            <p style="text-align: center; color: #666; font-size: 14px;">
+              This is an official receipt for your payment. Please keep this email for your records.
+            </p>
+            
+            <div class="footer">
+              <p>© ${new Date().getFullYear()} STAIRS Talent Hub. All rights reserved.</p>
+              <p>This is an automated message, please do not reply to this email.</p>
+              <p>For any queries, please contact our support team.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `
+        Payment Receipt - STAIRS Talent Hub
+        
+        Payment Successful ✅
+        
+        Amount Paid: ${formattedAmount}
+        
+        Invoice Number: ${invoiceNumber || paymentId}
+        Payment ID: ${paymentId}
+        Order ID: ${orderId}
+        Payment Date: ${new Date(paidAt).toLocaleString('en-IN')}
+        Description: ${description || 'Payment'}
+        
+        ${metadata.eventName ? `Event: ${metadata.eventName}\n` : ''}
+        ${metadata.planName ? `Plan: ${metadata.planName}\n` : ''}
+        ${metadata.orderNumber ? `Order Number: ${metadata.orderNumber}\n` : ''}
+        
+        ${invoiceUrl ? `Invoice URL: ${invoiceUrl}\n` : ''}
+        
+        This is an official receipt for your payment. Please keep this email for your records.
+        
+        © ${new Date().getFullYear()} STAIRS Talent Hub
+      `
+    };
+
+    console.log(`📧 Sending payment receipt email to: ${email}`);
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Payment receipt email sent successfully:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('❌ Error sending payment receipt email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendOTPEmail,
   sendPasswordResetEmail,
   sendWelcomeEmail,
   sendEventModerationEmail,
-  sendOrderStatusEmail
+  sendOrderStatusEmail,
+  sendPaymentReceiptEmail
 };

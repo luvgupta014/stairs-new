@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { getPlansForUserType, getUserTypeDisplayName } = require('../config/paymentPlans');
 const { successResponse, errorResponse } = require('../utils/helpers');
 const { authenticate, requireCoach, requireInstitute, requireClub, requireStudent } = require('../utils/authMiddleware');
+const { createSubscriptionInvoice } = require('../services/invoiceService');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -334,12 +335,58 @@ router.post('/verify', authenticate, async (req, res) => {
       console.log('✅ Institute profile updated successfully');
     }
 
+    // Get user details for invoice
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        email: true,
+        name: true
+      }
+    });
+
+    // Get payment details
+    const paymentRecord = await prisma.payment.findFirst({
+      where: {
+        razorpayOrderId: razorpay_order_id,
+        userId: req.user.id
+      },
+      select: {
+        amount: true,
+        description: true,
+        metadata: true
+      }
+    });
+
+    // Create invoice and send receipt email
+    if (user && paymentRecord) {
+      try {
+        const metadata = paymentRecord.metadata ? JSON.parse(paymentRecord.metadata) : {};
+        await createSubscriptionInvoice({
+          razorpayPaymentId: razorpay_payment_id,
+          razorpayOrderId: razorpay_order_id,
+          userEmail: user.email,
+          userName: user.name || 'User',
+          amount: paymentRecord.amount,
+          currency: 'INR',
+          description: paymentRecord.description || 'Subscription Payment',
+          metadata: {
+            planName: metadata.planName,
+            planId: metadata.planId,
+            userType: userType
+          }
+        });
+      } catch (invoiceError) {
+        console.error('⚠️ Invoice generation failed (non-critical):', invoiceError);
+        // Don't fail payment verification if invoice fails
+      }
+    }
+
     console.log('✅ Payment verification completed successfully');
 
     res.json(successResponse({
       paymentId: razorpay_payment_id,
       status: 'SUCCESS'
-    }, 'Payment verified successfully.'));
+    }, 'Payment verified successfully. Receipt has been sent to your email.'));
 
   } catch (error) {
     console.error('❌ Verify payment error:', error);

@@ -439,9 +439,17 @@ class EventController {
       console.log('📄 Files:', req.files);
       console.log('📄 Description:', description);
 
-      // Get coach ID (guaranteed by requireCoach middleware)
-      const uploaderId = req.coach.id;
-      const uploaderType = 'COACH';
+      // Determine uploader - admin or coach
+      let uploaderId, uploaderType;
+      if (user.role === 'ADMIN' && req.admin) {
+        uploaderId = req.admin.id;
+        uploaderType = 'ADMIN';
+      } else if (req.coach) {
+        uploaderId = req.coach.id;
+        uploaderType = 'COACH';
+      } else {
+        return res.status(403).json(errorResponse('Only coaches or admins can upload results', 403));
+      }
 
       if (!req.files || req.files.length === 0) {
         return res.status(400).json(errorResponse('No files uploaded', 400));
@@ -514,6 +522,50 @@ class EventController {
       const statusCode = error.message.includes('not found') ? 404 : 
                         error.message.includes('permission') ? 403 : 500;
       res.status(statusCode).json(errorResponse(error.message || 'Failed to retrieve result files', statusCode));
+    }
+  }
+
+  /**
+   * Get student results with scores and placements
+   * GET /api/events/:eventId/student-results
+   * Only available after admin validation
+   */
+  async getStudentResults(req, res) {
+    try {
+      const { eventId } = req.params;
+      const { page = 1, limit = 50, studentId } = req.query;
+      const { user } = req;
+
+      console.log(`📊 Getting student results for event ${eventId}`);
+
+      // Students can only see their own results, admins/coaches can see all
+      let filterStudentId = null;
+      if (user.role === 'STUDENT') {
+        const student = await prisma.student.findUnique({
+          where: { userId: user.id },
+          select: { id: true }
+        });
+        if (student) {
+          filterStudentId = student.id;
+        }
+      } else if (studentId) {
+        // Admins/coaches can filter by studentId if provided
+        filterStudentId = studentId;
+      }
+
+      const result = await eventService.getStudentResults(
+        eventId,
+        filterStudentId,
+        { page, limit }
+      );
+
+      res.json(successResponse(result, 'Student results retrieved successfully'));
+    } catch (error) {
+      console.error('❌ Get student results error:', error);
+      const statusCode = error.message.includes('not found') ? 404 : 
+                        error.message.includes('not yet available') ? 403 :
+                        error.message.includes('permission') ? 403 : 500;
+      res.status(statusCode).json(errorResponse(error.message || 'Failed to retrieve student results', statusCode));
     }
   }
 

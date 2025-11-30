@@ -4081,4 +4081,95 @@ router.put('/events/:eventId/validate-results', authenticate, requireAdmin, asyn
   }
 });
 
+// POST /api/admin/events/:eventId/results -- admin uploads result sheet
+// Allows admin to upload result sheets (same functionality as coach upload)
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Configure multer for admin result uploads
+const adminUploadsDir = path.join(__dirname, '../../uploads/event-results');
+if (!fs.existsSync(adminUploadsDir)) {
+  fs.mkdirSync(adminUploadsDir, { recursive: true });
+}
+
+const adminStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, adminUploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `admin-${uniqueSuffix}-${file.originalname}`);
+  }
+});
+
+const adminUpload = multer({
+  storage: adminStorage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/csv',
+      'application/csv'
+    ];
+    if (allowedTypes.includes(file.mimetype) || 
+        file.originalname.endsWith('.xlsx') || 
+        file.originalname.endsWith('.xls') || 
+        file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only Excel (.xlsx, .xls) and CSV files are allowed'), false);
+    }
+  }
+});
+
+router.post('/events/:eventId/results', 
+  authenticate, 
+  requireAdmin,
+  adminUpload.array('files', 5),
+  async (req, res) => {
+    try {
+      const { eventId } = req.params;
+      const description = req.body?.description || '';
+      const { user } = req;
+
+      console.log(`📁 Admin uploading result files for event ${eventId}`);
+      console.log(`📋 Admin ID: ${req.admin?.id || user.id}, Role: ${user?.role}`);
+      console.log('📄 Files:', req.files);
+
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json(errorResponse('No files uploaded', 400));
+      }
+
+      const eventService = new (require('../services/eventService'))();
+      const adminId = req.admin?.id || user.id;
+      const results = [];
+
+      // Process each uploaded file
+      for (const file of req.files) {
+        const result = await eventService.uploadResults(
+          eventId,
+          file,
+          description,
+          adminId,
+          'ADMIN'
+        );
+        results.push(result);
+      }
+
+      res.json(successResponse(
+        {
+          uploadedFiles: results,
+          count: results.length
+        },
+        `Successfully uploaded ${results.length} file(s) for event. Results processed and scores updated.`
+      ));
+    } catch (error) {
+      console.error('❌ Admin upload results error:', error);
+      res.status(500).json(errorResponse(error.message || 'Failed to upload result file', 500));
+    }
+  }
+);
+
 module.exports = router;

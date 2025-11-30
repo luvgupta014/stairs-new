@@ -369,6 +369,16 @@ const AdminEventsManagement = () => {
               Event Details & Participants
             </button>
             <button
+              onClick={() => setModalTab('results')}
+              className={`px-6 py-3 font-medium text-sm transition-colors ${
+                modalTab === 'results'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              📊 Upload Results
+            </button>
+            <button
               onClick={() => setModalTab('certificates')}
               className={`px-6 py-3 font-medium text-sm transition-colors ${
                 modalTab === 'certificates'
@@ -532,6 +542,119 @@ const AdminEventsManagement = () => {
                   )}
                 </div>
               </>
+            )}
+
+            {/* Results Tab - Admin can upload result sheets */}
+            {modalTab === 'results' && (
+              <div className="p-6">
+                <div className="mb-6">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Upload Result Sheet</h3>
+                  <p className="text-gray-600 mb-4">
+                    Upload Excel/CSV file with student results. System will automatically update scores and calculate winners.
+                  </p>
+                  <p className="text-sm text-gray-500 mb-4">
+                    <strong>File Format:</strong> Excel (.xlsx, .xls) or CSV with columns: studentId, name, score
+                  </p>
+                </div>
+                
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <h4 className="font-semibold text-blue-900 mb-2">Result Upload Instructions</h4>
+                  <ol className="list-decimal list-inside text-sm text-blue-800 space-y-1">
+                    <li>Event must be completed or ended</li>
+                    <li>Upload Excel/CSV file with student results</li>
+                    <li>System will parse and update scores automatically</li>
+                    <li>Winners and runners-up will be calculated automatically</li>
+                    <li>Admin must validate results before they become visible to students</li>
+                  </ol>
+                </div>
+
+                <div className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-6">
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const formData = new FormData(e.target);
+                      const fileInput = e.target.querySelector('input[type="file"]');
+                      
+                      if (!fileInput.files || fileInput.files.length === 0) {
+                        alert('Please select a file to upload');
+                        return;
+                      }
+
+                      const uploadFormData = new FormData();
+                      Array.from(fileInput.files).forEach(file => {
+                        uploadFormData.append('files', file);
+                      });
+                      
+                      const description = formData.get('description') || '';
+                      if (description) {
+                        uploadFormData.append('description', description);
+                      }
+
+                      try {
+                        const { uploadEventResults } = await import('../../api');
+                        const response = await uploadEventResults(event.id, uploadFormData);
+                        
+                        if (response.success) {
+                          alert(`✅ Successfully uploaded ${response.data.uploadedFiles?.length || response.data.count || 0} file(s). Scores updated and winners calculated.`);
+                          fileInput.value = '';
+                          e.target.reset();
+                          // Reload event data
+                          handleViewEventDetails(event);
+                        } else {
+                          alert('Failed to upload: ' + (response.message || 'Unknown error'));
+                        }
+                      } catch (error) {
+                        console.error('Upload error:', error);
+                        alert('Failed to upload: ' + (error.message || 'Unknown error'));
+                      }
+                    }}
+                  >
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Select Result File(s)
+                      </label>
+                      <input
+                        type="file"
+                        name="files"
+                        multiple
+                        accept=".xlsx,.xls,.csv"
+                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        required
+                      />
+                    </div>
+                    
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Description (Optional)
+                      </label>
+                      <textarea
+                        name="description"
+                        rows={2}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g., Final results for event completion"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                    >
+                      📤 Upload Result Sheet
+                    </button>
+                  </form>
+                </div>
+
+                <div className="mt-6 bg-gray-50 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 mb-2">After Upload:</h4>
+                  <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
+                    <li>System will process the file and update student scores</li>
+                    <li>Winners and runners-up will be automatically calculated</li>
+                    <li>Event status will change to "RESULTS_UPLOADED"</li>
+                    <li>Admin must validate results to make them visible to students</li>
+                    <li>After validation, event opens for next registration cycle</li>
+                  </ol>
+                </div>
+              </div>
             )}
 
             {/* Certificates Tab */}

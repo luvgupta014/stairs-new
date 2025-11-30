@@ -97,43 +97,40 @@ const StudentDashboard = () => {
 
   const loadDashboardData = async () => {
     try {
-      const data = await getStudentDashboard();
-      console.log('✅ Dashboard data loaded:', data);
-      setDashboardData(data.data || data);
-      setConnectedCoaches(data.data?.connectedCoaches || data.connectedCoaches || []);
+      const response = await getStudentDashboard();
+      console.log('✅ Dashboard data loaded:', response);
+      const data = response.data || response;
+      setDashboardData(data);
+      
+      // Set connected coaches from API data
+      const connectedCoachesList = data.connectedCoaches || data.recentConnections || [];
+      setConnectedCoaches(connectedCoachesList.map(c => c.id));
     } catch (error) {
       console.error('Failed to load dashboard:', error);
-      // Using mock data for demo
+      // Set empty data structure
       setDashboardData({
         student: {
-          name: 'John Doe',
-          sport: 'Football',
-          level: 'Intermediate',
-          joinedDate: '2024-03-01',
-          profileCompletion: 85,
-          achievements: ['Regional Champion', 'Team Captain'],
-          upcomingEvents: 3,
-          trainingHours: 24
+          name: localProfile.name || 'Student',
+          sport: localProfile.sport || 'Sports',
+          level: localProfile.level || 'Beginner',
+          profileCompletion: localProfile.profileCompletion || 0,
+          achievements: [],
+          trainingHours: 0
         },
-        events: [
-          { id: 1, name: 'State Championship', date: '2025-12-15', status: 'registered', category: 'Competition' },
-          { id: 2, name: 'Regional Trials', date: '2025-11-20', status: 'pending', category: 'Selection' },
-          { id: 3, name: 'Summer Training Camp', date: '2025-12-01', status: 'registered', category: 'Training' }
-        ],
-        connectedCoaches: [1, 2],
-        notifications: [
-          { id: 1, type: 'event', message: 'State Championship registration confirmed', time: '2 hours ago' },
-          { id: 2, type: 'coach', message: 'New message from Coach Mike Johnson', time: '5 hours ago' },
-          { id: 3, type: 'achievement', message: 'Congratulations! You earned a new badge', time: '1 day ago' }
-        ],
-        progress: {
-          skillLevel: 75,
-          physicalFitness: 82,
-          mentalStrength: 68,
-          teamwork: 90
-        }
+        analytics: {
+          totalConnections: 0,
+          pendingConnections: 0,
+          totalEvents: 0,
+          upcomingEvents: 0,
+          trainingHours: 0,
+          achievementsCount: 0
+        },
+        connectedCoaches: [],
+        recentConnections: [],
+        upcomingEvents: [],
+        progress: {}
       });
-      setConnectedCoaches([1, 2]);
+      setConnectedCoaches([]);
     } finally {
       setLoading(false);
     }
@@ -142,46 +139,15 @@ const StudentDashboard = () => {
   const loadCoaches = async () => {
     try {
       const coachesData = await getAvailableCoaches();
-      setCoaches(coachesData.data?.coaches || []);
-      console.log('Fetched coaches:', coachesData);
+      if (coachesData.success) {
+        setCoaches(coachesData.data?.coaches || []);
+        console.log('Fetched coaches:', coachesData.data?.coaches?.length || 0);
+      } else {
+        setCoaches([]);
+      }
     } catch (error) {
       console.error('Failed to load coaches:', error);
-      // Using mock data for demo
-      setCoaches([
-        {
-          id: 1,
-          name: 'Mike Johnson',
-          specialization: 'Football Training',
-          experience: 5,
-          location: 'New York',
-          rating: 4.8,
-          certifications: ['FIFA Level 1', 'Sports Science'],
-          students: 24,
-          successRate: 92
-        },
-        {
-          id: 2,
-          name: 'Sarah Williams',
-          specialization: 'Athletics',
-          experience: 8,
-          location: 'California',
-          rating: 4.9,
-          certifications: ['IAAF Level 2', 'Nutrition'],
-          students: 18,
-          successRate: 95
-        },
-        {
-          id: 3,
-          name: 'David Chen',
-          specialization: 'Swimming',
-          experience: 6,
-          location: 'Florida',
-          rating: 4.7,
-          certifications: ['Swimming Australia Level 3'],
-          students: 15,
-          successRate: 88
-        }
-      ]);
+      setCoaches([]);
     }
   };
 
@@ -408,11 +374,10 @@ const StudentDashboard = () => {
               </p>
               <div className="mt-3 flex items-center space-x-4">
                 <span className="bg-blue-500 px-3 py-1 rounded-full text-sm">
-                  🏆 {(getStudentField('achievements') || []).length}
-                  {' Achievements'}
+                  🏆 {dashboardData?.student?.achievements?.length || dashboardData?.analytics?.achievementsCount || 0} Achievements
                 </span>
                 <span className="bg-blue-500 px-3 py-1 rounded-full text-sm">
-                  ⏱️ {getStudentField('trainingHours', 0)}h Training
+                  ⏱️ {dashboardData?.student?.trainingHours || dashboardData?.analytics?.trainingHours || 0}h Training
                 </span>
               </div>
             </div>
@@ -457,8 +422,8 @@ const StudentDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Connected Coaches</p>
-                <p className="text-3xl font-bold text-gray-900">{connectedCoaches.length}</p>
-                <p className="text-sm text-green-600 mt-1">Active connections</p>
+                <p className="text-3xl font-bold text-gray-900">{dashboardData?.analytics?.totalConnections || dashboardData?.connectedCoaches?.length || connectedCoaches.length}</p>
+                <p className="text-sm text-green-600 mt-1">{dashboardData?.analytics?.pendingConnections || 0} pending</p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                 <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -539,11 +504,11 @@ const StudentDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Profile Completion</p>
-                <p className="text-3xl font-bold text-gray-900">{getStudentField('profileCompletion', 0)}%</p>
+                <p className="text-3xl font-bold text-gray-900">{dashboardData?.student?.profileCompletion || getStudentField('profileCompletion', 0)}%</p>
                 <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                   <div 
                     className="bg-purple-500 h-2 rounded-full" 
-                    style={{ width: `${getStudentField('profileCompletion', 0)}%` }}
+                    style={{ width: `${dashboardData?.student?.profileCompletion || getStudentField('profileCompletion', 0)}%` }}
                   ></div>
                 </div>
               </div>
@@ -677,14 +642,23 @@ const StudentDashboard = () => {
 
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Achievements</h3>
                   <div className="space-y-3">
-                    {dashboardData?.student?.achievements?.map((achievement, index) => (
-                      <div key={index} className="flex items-center space-x-3 p-3 bg-yellow-50 rounded-lg">
-                        <div className="w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center">
-                          <span className="text-white text-sm">🏅</span>
+                    {dashboardData?.student?.achievements && dashboardData.student.achievements.length > 0 ? (
+                      dashboardData.student.achievements.map((achievement, index) => (
+                        <div key={index} className="flex items-center space-x-3 p-3 bg-yellow-50 rounded-lg">
+                          <div className="w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center">
+                            <span className="text-white text-sm">🏅</span>
+                          </div>
+                          <span className="text-sm font-medium text-gray-900">
+                            {typeof achievement === 'string' ? achievement : achievement.title || achievement}
+                          </span>
                         </div>
-                        <span className="text-sm font-medium text-gray-900">{achievement}</span>
+                      ))
+                    ) : (
+                      <div className="text-center py-4 text-gray-500">
+                        <p className="text-sm">No achievements yet</p>
+                        <p className="text-xs mt-1">Participate in events to earn achievements!</p>
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
               </div>
@@ -693,7 +667,7 @@ const StudentDashboard = () => {
             {activeTab === 'coaches' && (
               <div>
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900">Connected Coaches ({connectedCoaches.length})</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">My Coaches ({dashboardData?.connectedCoaches?.length || dashboardData?.analytics?.totalConnections || 0})</h3>
                   <button
                     onClick={() => setShowCoachModal(true)}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
@@ -702,42 +676,44 @@ const StudentDashboard = () => {
                   </button>
                 </div>
 
-                {connectedCoaches.length > 0 ? (
+                {dashboardData?.connectedCoaches && dashboardData.connectedCoaches.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {coaches
-                      .filter(coach => connectedCoaches.includes(coach.id))
-                      .map(coach => (
+                    {dashboardData.connectedCoaches.map(coach => (
                         <div key={coach.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
                           <div className="flex items-center space-x-4 mb-4">
                             <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold">
-                              {coach.name.charAt(0)}
+                              {coach.name?.charAt(0) || 'C'}
                             </div>
                             <div>
                               <h4 className="font-semibold text-gray-900">{coach.name}</h4>
-                              <p className="text-sm text-gray-600">{coach.specialization}</p>
+                              <p className="text-sm text-gray-600">{coach.specialization || coach.primarySport || 'Sports Coach'}</p>
                             </div>
                           </div>
                           
                           <div className="space-y-2 mb-4">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Experience</span>
-                              <span className="font-medium">{coach.experience} years</span>
-                            </div>
+                            {coach.experience && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">Experience</span>
+                                <span className="font-medium">{coach.experience} years</span>
+                              </div>
+                            )}
                             <div className="flex justify-between text-sm">
                               <span className="text-gray-600">Rating</span>
-                              <span className="font-medium">⭐ {coach.rating}</span>
+                              <span className="font-medium">⭐ {coach.rating || 0}</span>
                             </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Students</span>
-                              <span className="font-medium">{coach.students}</span>
-                            </div>
+                            {coach.uniqueId && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">UID</span>
+                                <span className="font-mono text-xs">{coach.uniqueId}</span>
+                              </div>
+                            )}
                           </div>
 
                           <div className="flex space-x-2">
-                            <button className="flex-1 bg-green-600 text-white px-3 py-2 rounded text-sm hover:bg-green-700 transition-colors">
-                              Message
-                            </button>
-                            <button className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
+                            <button 
+                              onClick={() => navigate(`/admin/users/${coach.uniqueId}`)}
+                              className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors"
+                            >
                               View Profile
                             </button>
                           </div>
@@ -990,29 +966,88 @@ const StudentDashboard = () => {
             {activeTab === 'progress' && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="bg-white border border-gray-200 rounded-lg p-6">
-                  <h4 className="font-semibold text-gray-900 mb-6">Skill Assessment</h4>
+                  <h4 className="font-semibold text-gray-900 mb-6">Event Participation Analytics</h4>
                   <div className="space-y-4">
-                    {Object.entries(dashboardData?.progress || {}).map(([skill, value]) => (
-                      <div key={skill}>
-                        <div className="flex justify-between mb-1">
-                          <span className="text-sm font-medium text-gray-700 capitalize">{skill.replace(/([A-Z])/g, ' $1')}</span>
-                          <span className="text-sm text-gray-600">{value}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
-                            className="bg-blue-500 h-2 rounded-full" 
-                            style={{ width: `${value}%` }}
-                          ></div>
-                        </div>
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-sm font-medium text-gray-700">Total Events</span>
+                        <span className="text-sm text-gray-600">{dashboardData?.analytics?.totalEvents || dashboardData?.progress?.totalEventsParticipated || 0}</span>
                       </div>
-                    ))}
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-500 h-2 rounded-full" 
+                          style={{ width: `${Math.min((dashboardData?.analytics?.totalEvents || 0) * 10, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-sm font-medium text-gray-700">Completed Events</span>
+                        <span className="text-sm text-gray-600">{dashboardData?.progress?.completedEvents || 0}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-green-500 h-2 rounded-full" 
+                          style={{ width: `${dashboardData?.analytics?.totalEvents > 0 ? Math.round((dashboardData?.progress?.completedEvents || 0) / dashboardData?.analytics?.totalEvents * 100) : 0}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-sm font-medium text-gray-700">Upcoming Events</span>
+                        <span className="text-sm text-gray-600">{dashboardData?.analytics?.upcomingEvents || 0}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-orange-500 h-2 rounded-full" 
+                          style={{ width: `${Math.min((dashboardData?.analytics?.upcomingEvents || 0) * 20, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-sm font-medium text-gray-700">Training Hours</span>
+                        <span className="text-sm text-gray-600">{dashboardData?.student?.trainingHours || dashboardData?.analytics?.trainingHours || 0}h</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-purple-500 h-2 rounded-full" 
+                          style={{ width: `${Math.min((dashboardData?.student?.trainingHours || 0) * 2, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 
                 <div className="bg-white border border-gray-200 rounded-lg p-6">
-                  <h4 className="font-semibold text-gray-900 mb-6">Training Progress</h4>
-                  <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                    <p className="text-gray-500">📊 Training Progress Chart (Chart.js integration)</p>
+                  <h4 className="font-semibold text-gray-900 mb-6">Performance Summary</h4>
+                  <div className="space-y-4">
+                    <div className="p-4 bg-blue-50 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-gray-700">Total Achievements</span>
+                        <span className="text-2xl font-bold text-blue-600">{dashboardData?.student?.achievements?.length || dashboardData?.analytics?.achievementsCount || 0}</span>
+                      </div>
+                    </div>
+                    <div className="p-4 bg-green-50 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-gray-700">Connected Coaches</span>
+                        <span className="text-2xl font-bold text-green-600">{dashboardData?.analytics?.totalConnections || 0}</span>
+                      </div>
+                    </div>
+                    <div className="p-4 bg-purple-50 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-gray-700">Profile Completion</span>
+                        <span className="text-2xl font-bold text-purple-600">{dashboardData?.student?.profileCompletion || 0}%</span>
+                      </div>
+                    </div>
+                    {dashboardData?.progress?.averageEventDuration > 0 && (
+                      <div className="p-4 bg-orange-50 rounded-lg">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium text-gray-700">Avg Event Duration</span>
+                          <span className="text-2xl font-bold text-orange-600">{dashboardData.progress.averageEventDuration}h</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

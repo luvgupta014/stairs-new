@@ -133,6 +133,59 @@ router.put('/profile', authenticate, requireStudent, async (req, res) => {
 
     console.log('Update data:', updateData);
 
+    // Get current student data to calculate profile completion
+    const currentStudent = await prisma.student.findUnique({
+      where: { userId: req.user.id },
+      include: {
+        user: {
+          select: {
+            email: true,
+            phone: true
+          }
+        }
+      }
+    });
+
+    // Calculate profile completion
+    const profileData = {
+      name: updateData.name !== undefined ? updateData.name : currentStudent?.name,
+      email: currentStudent?.user?.email,
+      phone: phone || currentStudent?.user?.phone,
+      sport: updateData.sport !== undefined ? updateData.sport : currentStudent?.sport,
+      fatherName: updateData.fatherName !== undefined ? updateData.fatherName : currentStudent?.fatherName,
+      dateOfBirth: updateData.dateOfBirth !== undefined ? updateData.dateOfBirth : currentStudent?.dateOfBirth,
+      address: updateData.address !== undefined ? updateData.address : currentStudent?.address,
+      city: currentStudent?.city || null,
+      state: updateData.state !== undefined ? updateData.state : currentStudent?.state,
+      district: updateData.district !== undefined ? updateData.district : currentStudent?.district,
+      pincode: updateData.pincode !== undefined ? updateData.pincode : currentStudent?.pincode,
+      gender: updateData.gender !== undefined ? updateData.gender : currentStudent?.gender,
+      school: updateData.school !== undefined ? updateData.school : currentStudent?.school,
+      club: updateData.club !== undefined ? updateData.club : currentStudent?.club,
+      level: updateData.level !== undefined ? updateData.level : currentStudent?.level
+    };
+
+    // Calculate profile completion
+    const requiredFields = ['name', 'email', 'phone', 'sport'];
+    const optionalFields = ['fatherName', 'dateOfBirth', 'address', 'city', 'state', 'district', 'pincode', 'gender', 'school', 'club', 'level'];
+
+    let completedRequired = 0;
+    let completedOptional = 0;
+
+    requiredFields.forEach(field => {
+      if (profileData[field] && profileData[field] !== null && profileData[field] !== '') completedRequired++;
+    });
+
+    optionalFields.forEach(field => {
+      if (profileData[field] && profileData[field] !== null && profileData[field] !== '') completedOptional++;
+    });
+
+    const requiredPercentage = (completedRequired / requiredFields.length) * 60;
+    const optionalPercentage = (completedOptional / optionalFields.length) * 40;
+    const profileCompletion = Math.min(Math.round(requiredPercentage + optionalPercentage), 100);
+
+    updateData.profileCompletion = profileCompletion;
+
     const updatedStudent = await prisma.student.update({
       where: { userId: req.user.id },
       data: updateData,
@@ -724,13 +777,18 @@ router.post('/events/:eventId/register', authenticate, requireStudent, async (re
       return res.status(404).json(errorResponse('Event not found.', 404));
     }
 
-    // FIXED: Check for approved or active events
-    if (!['APPROVED', 'ACTIVE'].includes(event.status)) {
+    // FIXED: Check for approved, active, or validated events (for next registration cycle)
+    const allowedStatuses = ['APPROVED', 'ACTIVE', 'RESULTS_VALIDATED', 'READY_FOR_NEXT_REGISTRATION'];
+    if (!allowedStatuses.includes(event.status)) {
       return res.status(400).json(errorResponse('Event is not available for registration.', 400));
     }
 
-    if (new Date() > event.startDate) {
-      return res.status(400).json(errorResponse('Event has already started.', 400));
+    // For validated events (next cycle), allow registration regardless of date
+    // For initial registration, event must be in the future
+    if (!['RESULTS_VALIDATED', 'READY_FOR_NEXT_REGISTRATION'].includes(event.status)) {
+      if (new Date() > event.startDate) {
+        return res.status(400).json(errorResponse('Event has already started.', 400));
+      }
     }
 
     if (event.currentParticipants >= event.maxParticipants) {
@@ -918,6 +976,45 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
 
     const studentId = student.id;
 
+    // Get all event registrations to calculate training hours
+    const allEventRegistrations = await prisma.eventRegistration.findMany({
+      where: { studentId },
+      include: {
+        event: {
+          select: {
+            id: true,
+            startDate: true,
+            endDate: true,
+            status: true
+          }
+        }
+      }
+    });
+
+    // Calculate training hours from completed events
+    let trainingHours = 0;
+    allEventRegistrations.forEach(reg => {
+      if (reg.event.endDate && reg.event.status === 'COMPLETED') {
+        const start = new Date(reg.event.startDate);
+        const end = new Date(reg.event.endDate);
+        const hours = (end - start) / (1000 * 60 * 60); // Convert to hours
+        trainingHours += Math.max(0, hours);
+      }
+    });
+
+    // Get achievements from student profile
+    let achievements = [];
+    if (student.achievements) {
+      try {
+        achievements = typeof student.achievements === 'string' 
+          ? JSON.parse(student.achievements) 
+          : student.achievements;
+      } catch (e) {
+        console.error('Error parsing achievements:', e);
+        achievements = [];
+      }
+    }
+
     // Get dashboard analytics
     const [
       totalConnections,
@@ -925,7 +1022,8 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
       totalEvents,
       upcomingEvents,
       recentConnections,
-      recentEventRegistrations
+      recentEventRegistrations,
+      allConnections
     ] = await Promise.all([
       prisma.studentCoachConnection.count({
         where: { studentId, status: 'ACCEPTED' }
@@ -940,20 +1038,28 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
         where: { 
           studentId,
           event: {
-            startDate: { gt: new Date() },                     // Changed to gt: exclude current/past events
+            startDate: { gt: new Date() },
             status: { in: ['APPROVED', 'ACTIVE'] }
           }
         }
       }),
       prisma.studentCoachConnection.findMany({
-        where: { studentId },
+        where: { studentId, status: 'ACCEPTED' },
         include: {
           coach: {
             select: {
               id: true,
               name: true,
+              specialization: true,
               primarySport: true,
-              rating: true
+              rating: true,
+              user: {
+                select: {
+                  email: true,
+                  phone: true,
+                  uniqueId: true
+                }
+              }
             }
           }
         },
@@ -964,7 +1070,7 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
         where: { 
           studentId,
           event: {
-            startDate: { gt: new Date() },                     // Changed to gt: exclude current/past events
+            startDate: { gt: new Date() },
             status: { in: ['APPROVED', 'ACTIVE'] }
           }
         },
@@ -987,23 +1093,83 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
           }
         },
         take: 5
+      }),
+      // Get ALL connections for "My Coaches" tab
+      prisma.studentCoachConnection.findMany({
+        where: { studentId, status: 'ACCEPTED' },
+        include: {
+          coach: {
+            select: {
+              id: true,
+              name: true,
+              specialization: true,
+              primarySport: true,
+              rating: true,
+              experience: true,
+              user: {
+                select: {
+                  email: true,
+                  phone: true,
+                  uniqueId: true
+                }
+              }
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
       })
     ]);
 
     const dashboardData = {
+      // Student profile data
+      student: {
+        id: student.id,
+        name: student.name,
+        sport: student.sport,
+        level: student.level,
+        profileCompletion: student.profileCompletion || 0,
+        achievements: achievements,
+        trainingHours: Math.round(trainingHours),
+        joinedDate: student.createdAt
+      },
+      // Analytics
       analytics: {
         totalConnections,
         pendingConnections,
         totalEvents,
-        upcomingEvents
+        upcomingEvents,
+        trainingHours: Math.round(trainingHours),
+        achievementsCount: achievements.length
       },
-      recentConnections,
+      // Connected coaches (all)
+      connectedCoaches: allConnections.map(conn => ({
+        id: conn.coach.id,
+        name: conn.coach.name,
+        specialization: conn.coach.specialization,
+        primarySport: conn.coach.primarySport,
+        rating: conn.coach.rating || 0,
+        experience: conn.coach.experience || 0,
+        email: conn.coach.user?.email,
+        phone: conn.coach.user?.phone,
+        uniqueId: conn.coach.user?.uniqueId,
+        connectedAt: conn.createdAt,
+        connectionId: conn.id
+      })),
+      // Recent connections for overview
+      recentConnections: recentConnections.map(conn => ({
+        id: conn.coach.id,
+        name: conn.coach.name,
+        specialization: conn.coach.specialization,
+        rating: conn.coach.rating || 0,
+        connectedAt: conn.createdAt
+      })),
+      // Upcoming events
       upcomingEvents: recentEventRegistrations.map(reg => ({
         id: reg.id,
         registrationStatus: reg.status,
         event: {
           id: reg.event.id,
-          uniqueId: reg.event.uniqueId, // Custom event UID
+          uniqueId: reg.event.uniqueId,
           title: reg.event.name,
           name: reg.event.name,
           sport: reg.event.sport,
@@ -1013,7 +1179,15 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
           fees: reg.event.eventFee,
           status: reg.event.status
         }
-      }))
+      })),
+      // Progress analytics
+      progress: {
+        totalEventsParticipated: totalEvents,
+        completedEvents: allEventRegistrations.filter(r => r.event.status === 'COMPLETED').length,
+        upcomingEvents: upcomingEvents,
+        totalTrainingHours: Math.round(trainingHours),
+        averageEventDuration: totalEvents > 0 ? Math.round(trainingHours / totalEvents) : 0
+      }
     };
 
     console.log('✅ Student dashboard data retrieved successfully');
