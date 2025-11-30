@@ -263,24 +263,45 @@ const AdminEventsManagement = () => {
     return event.status;
   };
 
-  // New helper: derive payment status / summary for an event object
+  // Enhanced helper: derive payment status / summary for an event object with comprehensive edge case handling
   const getEventPaymentSummary = (event, modalPayments = []) => {
-    // Prefer server-provided summary fields if present
-    if (event.paymentSummary) return event.paymentSummary;
-    if (event.paymentsSummary) return event.paymentsSummary;
-    // If event has payments array embedded
+    // Prefer server-provided summary fields if present (from registration orders)
+    if (event.paymentSummary && typeof event.paymentSummary === 'object') {
+      return {
+        totalAmount: event.paymentSummary.totalAmount || 0,
+        paidAmount: event.paymentSummary.paidAmount || 0,
+        status: event.paymentSummary.status || 'NO_PAYMENTS',
+        orderCount: event.paymentSummary.orderCount || 0,
+        paidOrderCount: event.paymentSummary.paidOrderCount || 0
+      };
+    }
+    if (event.paymentsSummary && typeof event.paymentsSummary === 'object') {
+      return event.paymentsSummary;
+    }
+    // If event has payments array embedded (legacy support)
     if (Array.isArray(event.payments) && event.payments.length > 0) {
-      const total = event.payments.reduce((s, p) => s + (p.amount || 0), 0);
-      const paid = event.payments.reduce((s, p) => s + ((p.status === 'COMPLETED' || p.status === 'SUCCESS') ? (p.amount || 0) : 0), 0);
-      return { totalAmount: total, paidAmount: paid, status: paid >= total ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'PENDING') };
+      const total = event.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const paid = event.payments.reduce((s, p) => {
+        const amount = Number(p.amount) || 0;
+        const isPaid = p.status === 'COMPLETED' || p.status === 'SUCCESS' || p.status === 'PAID';
+        return isPaid ? s + amount : s;
+      }, 0);
+      const status = total > 0 ? (paid >= total ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'PENDING')) : 'NO_PAYMENTS';
+      return { totalAmount: total, paidAmount: paid, status, orderCount: event.payments.length, paidOrderCount: event.payments.filter(p => p.status === 'COMPLETED' || p.status === 'SUCCESS' || p.status === 'PAID').length };
     }
     // Fallback: if modalPayments were loaded (used in modal)
     if (Array.isArray(modalPayments) && modalPayments.length > 0) {
-      const total = modalPayments.reduce((s, p) => s + (p.amount || 0), 0);
-      const paid = modalPayments.reduce((s, p) => s + ((p.status === 'COMPLETED' || p.status === 'SUCCESS') ? (p.amount || 0) : 0), 0);
-      return { totalAmount: total, paidAmount: paid, status: paid >= total ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'PENDING') };
+      const total = modalPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const paid = modalPayments.reduce((s, p) => {
+        const amount = Number(p.amount) || 0;
+        const isPaid = p.status === 'COMPLETED' || p.status === 'SUCCESS' || p.status === 'PAID';
+        return isPaid ? s + amount : s;
+      }, 0);
+      const status = total > 0 ? (paid >= total ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'PENDING')) : 'NO_PAYMENTS';
+      return { totalAmount: total, paidAmount: paid, status, orderCount: modalPayments.length, paidOrderCount: modalPayments.filter(p => p.status === 'COMPLETED' || p.status === 'SUCCESS' || p.status === 'PAID').length };
     }
-    return { totalAmount: 0, paidAmount: 0, status: 'NO_PAYMENTS' };
+    // Default: no payments found
+    return { totalAmount: 0, paidAmount: 0, status: 'NO_PAYMENTS', orderCount: 0, paidOrderCount: 0 };
   };
 
   // Event Details Modal Component
@@ -691,30 +712,95 @@ const AdminEventsManagement = () => {
     );
   };
 
-  // Helper used when rendering table rows: small badge showing payment status if the event object already contains summary
+  // Enhanced helper: render payment status badge with comprehensive information and edge case handling
   const renderPaymentCell = (event) => {
-    const summary = getEventPaymentSummary(event);
-    const status = summary?.status || 'NO_PAYMENTS';
-    return (
-      <div className="flex flex-col space-y-1">
-        <div className="flex items-center space-x-2">
-          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${status === 'PAID' ? 'bg-green-100 text-green-800' : status === 'PARTIAL' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>
-            {status === 'NO_PAYMENTS' ? 'No payments' : status}
-          </span>
-          {summary && summary.totalAmount > 0 && (
-            <span className="text-xs text-gray-500">₹{(summary.totalAmount || 0).toLocaleString()}</span>
-          )}
-        </div>
+    try {
+      const summary = getEventPaymentSummary(event);
+      const status = summary?.status || 'NO_PAYMENTS';
+      
+      // Determine badge colors and text
+      let badgeClass = '';
+      let badgeText = '';
+      let badgeIcon = '';
+      
+      switch (status) {
+        case 'PAID':
+          badgeClass = 'bg-green-100 text-green-800 border border-green-300';
+          badgeText = 'Payment Complete';
+          badgeIcon = '✅';
+          break;
+        case 'PARTIAL':
+          badgeClass = 'bg-yellow-100 text-yellow-800 border border-yellow-300';
+          badgeText = 'Payment Pending';
+          badgeIcon = '⚠️';
+          break;
+        case 'PENDING':
+          badgeClass = 'bg-orange-100 text-orange-800 border border-orange-300';
+          badgeText = 'Payment Pending';
+          badgeIcon = '⏳';
+          break;
+        default:
+          badgeClass = 'bg-gray-100 text-gray-600 border border-gray-300';
+          badgeText = 'No Payments';
+          badgeIcon = '—';
+      }
 
-        {/* View Details button (keeps existing behavior) */}
-        <button
-          onClick={() => handleViewEventDetails(event)}
-          className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors h-6 mt-1"
-        >
-          👁️ View Details
-        </button>
-      </div>
-    );
+      return (
+        <div className="flex flex-col space-y-1.5">
+          <div className="flex items-center space-x-2">
+            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center space-x-1 ${badgeClass}`}>
+              <span>{badgeIcon}</span>
+              <span>{badgeText}</span>
+            </span>
+          </div>
+          
+          {/* Payment details */}
+          {summary && summary.totalAmount > 0 && (
+            <div className="text-xs text-gray-600 space-y-0.5">
+              <div className="flex items-center justify-between">
+                <span>Total:</span>
+                <span className="font-medium">₹{(summary.totalAmount || 0).toLocaleString('en-IN')}</span>
+              </div>
+              {summary.paidAmount > 0 && (
+                <div className="flex items-center justify-between">
+                  <span>Paid:</span>
+                  <span className="font-medium text-green-700">₹{(summary.paidAmount || 0).toLocaleString('en-IN')}</span>
+                </div>
+              )}
+              {summary.orderCount > 0 && (
+                <div className="text-gray-500 text-xs">
+                  {summary.paidOrderCount || 0}/{summary.orderCount || 0} orders paid
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* View Details button */}
+          <button
+            onClick={() => handleViewEventDetails(event)}
+            className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors h-6 mt-1 w-full"
+          >
+            👁️ View Details
+          </button>
+        </div>
+      );
+    } catch (error) {
+      console.error('Error rendering payment cell:', error);
+      // Fallback UI on error
+      return (
+        <div className="flex flex-col space-y-1">
+          <span className="px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
+            Error
+          </span>
+          <button
+            onClick={() => handleViewEventDetails(event)}
+            className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors h-6 mt-1"
+          >
+            👁️ View Details
+          </button>
+        </div>
+      );
+    }
   };
 
   return (

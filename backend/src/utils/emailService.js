@@ -760,6 +760,124 @@ const sendOrderStatusEmail = async (email, name, status, orderData, adminRemarks
 };
 
 /**
+ * Send event completion notification email to coordinator/coach
+ * @param {string} email - Coach/Coordinator email
+ * @param {string} name - Coach/Coordinator name
+ * @param {string} eventName - Event name
+ * @param {number} studentCount - Number of students
+ * @param {number} totalAmount - Total payment amount (optional)
+ * @param {string} customMessage - Custom message from admin (optional)
+ * @returns {Promise<Object>} Email send result
+ */
+const sendEventCompletionEmail = async (email, name, eventName, studentCount, totalAmount = null, customMessage = '') => {
+  try {
+    if (!transporter) {
+      console.warn('⚠️ Email service not available - Event completion email not sent');
+      return { success: false, error: 'Email service not configured' };
+    }
+
+    const mailOptions = {
+      from: `"STAIRS Talent Hub" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: `Event Completed - Certificates Ready: ${eventName}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+            .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10b981; }
+            .button { display: inline-block; background: #10b981; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+            .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 12px; }
+            .highlight { color: #10b981; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🎉 Event Completed!</h1>
+              <p>Certificates Ready for Generation</p>
+            </div>
+            <div class="content">
+              <h2>Hello ${name}!</h2>
+              <p>Great news! Your event <strong>"${eventName}"</strong> has been completed successfully.</p>
+              
+              ${customMessage ? `<div class="info-box"><p><strong>Message from Admin:</strong></p><p>${customMessage}</p></div>` : ''}
+              
+              <div class="info-box">
+                <h3 style="margin-top: 0;">📊 Event Summary</h3>
+                <p><strong>Event Name:</strong> ${eventName}</p>
+                <p><strong>Students Registered:</strong> <span class="highlight">${studentCount}</span></p>
+                ${totalAmount ? `<p><strong>Total Payment:</strong> <span class="highlight">₹${totalAmount.toLocaleString()}</span></p>` : ''}
+                <p><strong>Status:</strong> <span class="highlight">Certificates Ready for Generation</span></p>
+              </div>
+
+              <div class="info-box">
+                <h3 style="margin-top: 0;">📋 Next Steps</h3>
+                <ol>
+                  <li>Log in to your STAIRS Talent Hub dashboard</li>
+                  <li>Navigate to the event details page</li>
+                  <li>Review the certificate issuance section</li>
+                  <li>Certificates will be generated and issued to your students</li>
+                </ol>
+              </div>
+
+              <p style="text-align: center;">
+                <a href="${process.env.FRONTEND_URL || 'https://stairs-talent-hub.com'}/coach/dashboard" class="button">View Dashboard</a>
+              </p>
+
+              <p>If you have any questions or need assistance, please contact our support team.</p>
+
+              <div class="footer">
+                <p>© ${new Date().getFullYear()} STAIRS Talent Hub. All rights reserved.</p>
+                <p>This is an automated message, please do not reply to this email.</p>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `
+        Hello ${name}!
+
+        Great news! Your event "${eventName}" has been completed successfully.
+
+        ${customMessage ? `Message from Admin: ${customMessage}\n\n` : ''}
+        
+        Event Summary:
+        - Event Name: ${eventName}
+        - Students Registered: ${studentCount}
+        ${totalAmount ? `- Total Payment: ₹${totalAmount.toLocaleString()}\n` : ''}
+        - Status: Certificates Ready for Generation
+
+        Next Steps:
+        1. Log in to your STAIRS Talent Hub dashboard
+        2. Navigate to the event details page
+        3. Review the certificate issuance section
+        4. Certificates will be generated and issued to your students
+
+        View Dashboard: ${process.env.FRONTEND_URL || 'https://stairs-talent-hub.com'}/coach/dashboard
+
+        If you have any questions, please contact our support team.
+
+        © ${new Date().getFullYear()} STAIRS Talent Hub
+      `
+    };
+
+    console.log(`📧 Sending event completion email to: ${email} for event: ${eventName}`);
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Event completion email sent successfully:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('❌ Error sending event completion email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
  * Send payment receipt/invoice email
  * @param {Object} receiptData - Receipt information
  * @param {string} receiptData.email - Recipient email
@@ -1035,5 +1153,6 @@ module.exports = {
   sendWelcomeEmail,
   sendEventModerationEmail,
   sendOrderStatusEmail,
-  sendPaymentReceiptEmail
+  sendPaymentReceiptEmail,
+  sendEventCompletionEmail
 };

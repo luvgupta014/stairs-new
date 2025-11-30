@@ -520,7 +520,7 @@ const CoachDashboard = () => {
       EVENT_RESTARTED: '🔄',
       ORDER_CONFIRMED: '📋',
       ORDER_IN_PROGRESS: '⚙️',
-      ORDER_COMPLETED: '🎉',
+      ORDER_COMPLETED: '🎉', // Used for event completion and certificates ready
       ORDER_CANCELLED: '❌',
       PAYMENT_RECEIVED: '💰',
       PAYMENT_FAILED: '💳',
