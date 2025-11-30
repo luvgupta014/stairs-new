@@ -1623,13 +1623,30 @@ router.post('/coach/payment', async (req, res) => {
     }
 
     if (subscriptionType) {
-      updateData.subscriptionType = subscriptionType;
-      const expirationDate = new Date();
+      // Proration logic: If coach has existing subscription, calculate prorated amount
+      const existingExpiry = coach.subscriptionExpiresAt;
+      const now = new Date();
+      let expirationDate = new Date();
+      
       if (subscriptionType === 'MONTHLY') {
         expirationDate.setMonth(expirationDate.getMonth() + 1);
       } else if (subscriptionType === 'ANNUAL') {
         expirationDate.setFullYear(expirationDate.getFullYear() + 1);
       }
+
+      // If coach has active subscription, extend from current expiry date (proration)
+      if (existingExpiry && existingExpiry > now) {
+        // Extend from existing expiry date
+        expirationDate = new Date(existingExpiry);
+        if (subscriptionType === 'MONTHLY') {
+          expirationDate.setMonth(expirationDate.getMonth() + 1);
+        } else if (subscriptionType === 'ANNUAL') {
+          expirationDate.setFullYear(expirationDate.getFullYear() + 1);
+        }
+        console.log(`📅 Proration: Extending subscription from ${existingExpiry.toISOString()} to ${expirationDate.toISOString()}`);
+      }
+
+      updateData.subscriptionType = subscriptionType;
       updateData.subscriptionExpiresAt = expirationDate;
     }
 

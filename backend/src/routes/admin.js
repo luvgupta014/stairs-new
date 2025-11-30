@@ -4607,4 +4607,250 @@ router.get('/events/:eventId/results/analytics', authenticate, requireAdmin, asy
   }
 });
 
+// GET /api/admin/orders - Get all event orders with filters
+router.get('/orders', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { status, paymentStatus, eventId, coachId, page = 1, limit = 20 } = req.query;
+    const { skip, take } = getPaginationParams(parseInt(page), parseInt(limit));
+
+    const where = {};
+    if (status) where.status = status;
+    if (paymentStatus) where.paymentStatus = paymentStatus;
+    if (eventId) where.eventId = eventId;
+    if (coachId) where.coachId = coachId;
+
+    const [orders, total] = await Promise.all([
+      prisma.eventOrder.findMany({
+        where,
+        include: {
+          event: {
+            select: {
+              id: true,
+              name: true,
+              sport: true,
+              uniqueId: true
+            }
+          },
+          coach: {
+            select: {
+              id: true,
+              name: true,
+              user: {
+                select: {
+                  email: true,
+                  phone: true
+                }
+              }
+            }
+          },
+          admin: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take
+      }),
+      prisma.eventOrder.count({ where })
+    ]);
+
+    res.json(successResponse({
+      orders,
+      pagination: getPaginationMeta(parseInt(page), parseInt(limit), total)
+    }, 'Orders retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get orders error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve orders: ' + error.message, 500));
+  }
+});
+
+// PUT /api/admin/orders/:orderId/fulfill - Mark order as fulfilled/processed (inventory issued)
+router.put('/orders/:orderId/fulfill', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { adminRemarks, status = 'COMPLETED' } = req.body;
+
+    const order = await prisma.eventOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        event: true,
+        coach: {
+          include: {
+            user: {
+              select: {
+                email: true,
+                name: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json(errorResponse('Order not found.', 404));
+    }
+
+    if (order.paymentStatus !== 'SUCCESS') {
+      return res.status(400).json(errorResponse('Order payment must be completed before fulfillment.', 400));
+    }
+
+    // Update order status and mark as processed
+    const updatedOrder = await prisma.eventOrder.update({
+      where: { id: orderId },
+      data: {
+        status: status,
+        processedAt: new Date(),
+        processedBy: req.admin.id,
+        adminRemarks: adminRemarks || order.adminRemarks,
+        completedAt: status === 'COMPLETED' ? new Date() : null
+      },
+      include: {
+        event: true,
+        coach: {
+          include: {
+            user: {
+              select: {
+                email: true,
+                name: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Send notification to coach about order fulfillment
+    try {
+      await prisma.notification.create({
+        data: {
+          userId: order.coach.user.id,
+          type: 'ORDER_COMPLETED',
+          title: '📦 Order Fulfilled',
+          message: `Your order ${order.orderNumber} has been ${status === 'COMPLETED' ? 'completed and shipped' : 'processed'}. Items: ${order.certificates} certificates, ${order.medals} medals, ${order.trophies} trophies.`,
+          data: JSON.stringify({
+            orderId: updatedOrder.id,
+            orderNumber: order.orderNumber,
+            status: status
+          })
+        }
+      });
+
+      // Send email notification
+      if (order.coach.user.email) {
+        await sendOrderStatusEmail(
+          order.coach.user.email,
+          order.coach.name || order.coach.user.name || 'Coach',
+          status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS',
+          {
+            orderNumber: order.orderNumber,
+            eventName: order.event.name,
+            certificates: order.certificates,
+            medals: order.medals,
+            trophies: order.trophies,
+            totalAmount: order.totalAmount
+          },
+          adminRemarks || ''
+        );
+      }
+    } catch (notifError) {
+      console.error('⚠️ Failed to send fulfillment notification (non-critical):', notifError);
+    }
+
+    console.log(`✅ Order ${order.orderNumber} marked as ${status} by admin ${req.admin.id}`);
+
+    res.json(successResponse({
+      order: updatedOrder,
+      inventoryIssued: {
+        certificates: order.certificates,
+        medals: order.medals,
+        trophies: order.trophies
+      }
+    }, `Order ${status === 'COMPLETED' ? 'fulfilled and completed' : 'processed'} successfully.`));
+
+  } catch (error) {
+    console.error('❌ Fulfill order error:', error);
+    res.status(500).json(errorResponse('Failed to fulfill order: ' + error.message, 500));
+  }
+});
+
+// PUT /api/admin/orders/:orderId/price - Admin sets pricing for order
+router.put('/orders/:orderId/price', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { certificatePrice, medalPrice, trophyPrice, totalAmount } = req.body;
+
+    const order = await prisma.eventOrder.findUnique({
+      where: { id: orderId },
+      include: { event: true, coach: true }
+    });
+
+    if (!order) {
+      return res.status(404).json(errorResponse('Order not found.', 404));
+    }
+
+    // Calculate total if not provided
+    let calculatedTotal = totalAmount;
+    if (!calculatedTotal) {
+      calculatedTotal = 
+        (order.certificates * (certificatePrice || 0)) +
+        (order.medals * (medalPrice || 0)) +
+        (order.trophies * (trophyPrice || 0));
+    }
+
+    const updatedOrder = await prisma.eventOrder.update({
+      where: { id: orderId },
+      data: {
+        certificatePrice: certificatePrice !== undefined ? parseFloat(certificatePrice) : order.certificatePrice,
+        medalPrice: medalPrice !== undefined ? parseFloat(medalPrice) : order.medalPrice,
+        trophyPrice: trophyPrice !== undefined ? parseFloat(trophyPrice) : order.trophyPrice,
+        totalAmount: calculatedTotal,
+        status: 'CONFIRMED' // Move to confirmed once priced
+      },
+      include: {
+        event: true,
+        coach: {
+          include: {
+            user: {
+              select: {
+                email: true,
+                name: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Notify coach about pricing
+    try {
+      await prisma.notification.create({
+        data: {
+          userId: order.coach.user.id,
+          type: 'ORDER_CONFIRMED',
+          title: '💰 Order Priced',
+          message: `Your order ${order.orderNumber} has been priced. Total: ₹${calculatedTotal}. Please proceed with payment.`,
+          data: JSON.stringify({
+            orderId: updatedOrder.id,
+            orderNumber: order.orderNumber,
+            totalAmount: calculatedTotal
+          })
+        }
+      });
+    } catch (notifError) {
+      console.error('⚠️ Failed to send pricing notification (non-critical):', notifError);
+    }
+
+    res.json(successResponse(updatedOrder, 'Order priced successfully.'));
+
+  } catch (error) {
+    console.error('❌ Price order error:', error);
+    res.status(500).json(errorResponse('Failed to price order: ' + error.message, 500));
+  }
+});
+
 module.exports = router;

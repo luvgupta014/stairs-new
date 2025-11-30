@@ -2391,9 +2391,22 @@ router.post('/verify-payment', authenticate, requireCoach, async (req, res) => {
       return res.status(404).json(errorResponse('Payment record not found.', 404));
     }
 
-    // Update coach status
-    const subscriptionExpiresAt = new Date();
+    // Update coach status with proration logic
+    const coach = await prisma.coach.findUnique({
+      where: { id: req.coach.id },
+      select: { subscriptionExpiresAt: true, subscriptionType: true }
+    });
+
+    const now = new Date();
+    let subscriptionExpiresAt = new Date();
     subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1);
+
+    // Proration: If coach has active subscription, extend from current expiry
+    if (coach?.subscriptionExpiresAt && coach.subscriptionExpiresAt > now) {
+      subscriptionExpiresAt = new Date(coach.subscriptionExpiresAt);
+      subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1);
+      console.log(`📅 Proration: Extending subscription from ${coach.subscriptionExpiresAt.toISOString()} to ${subscriptionExpiresAt.toISOString()}`);
+    }
 
     await prisma.coach.update({
       where: { id: req.coach.id },
@@ -2627,9 +2640,47 @@ router.post('/orders/:orderId/verify-payment', authenticate, requireCoach, async
       }
     }
 
-    // TODO: Send notification to admin about completed payment
-    // For now, we'll just log it
-    console.log(`📧 NOTIFICATION: Order ${order.orderNumber} payment completed - Admin should be notified`);
+    // Send notification to all admins about completed payment
+    try {
+      const admins = await prisma.admin.findMany({
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              name: true
+            }
+          }
+        }
+      });
+
+      // Create notifications for all admins
+      const notificationPromises = admins.map(admin =>
+        prisma.notification.create({
+          data: {
+            userId: admin.user.id,
+            type: 'ORDER_COMPLETED',
+            title: '💰 New Order Payment Received',
+            message: `Order ${order.orderNumber} payment completed for event "${order.event?.name || 'Unknown'}". Total: ₹${order.totalAmount || 0}. Items: ${order.certificates} certificates, ${order.medals} medals, ${order.trophies} trophies.`,
+            data: JSON.stringify({
+              orderId: updatedOrder.id,
+              orderNumber: order.orderNumber,
+              eventId: order.eventId,
+              eventName: order.event?.name,
+              totalAmount: order.totalAmount,
+              certificates: order.certificates,
+              medals: order.medals,
+              trophies: order.trophies
+            })
+          }
+        })
+      );
+
+      await Promise.all(notificationPromises);
+      console.log(`✅ Notified ${admins.length} admin(s) about order payment`);
+    } catch (notifError) {
+      console.error('⚠️ Failed to send admin notifications (non-critical):', notifError);
+    }
 
     res.json(successResponse({
       paymentId: razorpay_payment_id,

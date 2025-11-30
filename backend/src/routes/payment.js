@@ -286,8 +286,25 @@ router.post('/verify', authenticate, async (req, res) => {
     // Update user profile based on userType
     console.log(`🔄 Updating ${userType} profile for user ${req.user.id}`);
 
-    const subscriptionExpiresAt = new Date();
+    // Get existing subscription for proration
+    let existingSubscription = null;
+    if (userType.toLowerCase() === 'coach') {
+      existingSubscription = await prisma.coach.findUnique({
+        where: { userId: req.user.id },
+        select: { subscriptionExpiresAt: true, subscriptionType: true }
+      });
+    }
+
+    const now = new Date();
+    let subscriptionExpiresAt = new Date();
     subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1); // 1 month subscription
+
+    // Proration: If user has active subscription, extend from current expiry
+    if (existingSubscription?.subscriptionExpiresAt && existingSubscription.subscriptionExpiresAt > now) {
+      subscriptionExpiresAt = new Date(existingSubscription.subscriptionExpiresAt);
+      subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1);
+      console.log(`📅 Proration: Extending subscription from ${existingSubscription.subscriptionExpiresAt.toISOString()} to ${subscriptionExpiresAt.toISOString()}`);
+    }
 
     if (userType.toLowerCase() === 'coach') {
       await prisma.coach.update({

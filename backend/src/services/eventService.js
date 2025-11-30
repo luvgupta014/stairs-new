@@ -930,15 +930,35 @@ class EventService {
       // --- PARSE file ---
       let workbook, sheet, rows = [];
       const ext = file.originalname.split('.').pop().toLowerCase();
-      if (["xlsx","xls","csv"].includes(ext)) {
-        workbook = XLSX.readFile(file.path);
-        const firstSheetName = workbook.SheetNames[0];
-        sheet = workbook.Sheets[firstSheetName];
-        rows = XLSX.utils.sheet_to_json(sheet, {defval: ''});
-      } else {
-        throw new Error('Invalid file type. Only .xlsx/.xls/.csv accepted.');
+      
+      // Verify file exists
+      if (!file.path || !fs.existsSync(file.path)) {
+        throw new Error(`File not found at path: ${file.path}`);
       }
-      if (!rows.length) throw new Error('Result sheet is empty or could not be parsed.');
+      
+      try {
+        if (["xlsx","xls","csv"].includes(ext)) {
+          workbook = XLSX.readFile(file.path);
+          if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+            throw new Error('Excel file has no sheets');
+          }
+          const firstSheetName = workbook.SheetNames[0];
+          sheet = workbook.Sheets[firstSheetName];
+          if (!sheet) {
+            throw new Error(`Sheet "${firstSheetName}" not found in Excel file`);
+          }
+          rows = XLSX.utils.sheet_to_json(sheet, {defval: '', raw: false});
+        } else {
+          throw new Error('Invalid file type. Only .xlsx/.xls/.csv accepted.');
+        }
+      } catch (parseError) {
+        console.error('❌ Excel parsing error:', parseError);
+        throw new Error(`Failed to parse Excel file: ${parseError.message}`);
+      }
+      
+      if (!rows || rows.length === 0) {
+        throw new Error('Result sheet is empty or could not be parsed. Please ensure the file has data rows.');
+      }
 
       // --- VALIDATE HEADERS ---
       const headers = Object.keys(rows[0]).map(x => x.trim().toLowerCase());
