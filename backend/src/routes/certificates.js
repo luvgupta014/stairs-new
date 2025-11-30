@@ -91,7 +91,7 @@ router.post('/issue', authenticate, requireAdmin, async (req, res) => {
         name: true,
         user: {
           select: {
-            uniqueId: true
+            id: true
           }
         }
       }
