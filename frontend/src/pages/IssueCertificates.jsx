@@ -81,25 +81,29 @@ const IssueCertificates = () => {
     try {
       setLoadingStudents(true);
       setError(null);
-
+  
       const response = await getEligibleStudents(eventId, null);
-      
-      if (response.success) {
-        setEligibleStudents(response.data.eligibleStudents || []);
-        
-        if (response.data.eligibleStudents.length === 0) {
-          setError('No eligible students found. All certificates may have been issued already.');
-        }
-      } else {
-        throw new Error(response.message || 'Failed to load eligible students');
+  
+      if (!response.success) {
+        setError(response.message || "Payment is pending for the student.");
+        setEligibleStudents([]);
+        return;
+      }
+  
+      const students = response?.data?.eligibleStudents || [];
+      setEligibleStudents(students);
+  
+      if (students.length === 0) {
+        setError(response.message || "No eligible students found. Payment may be pending.");
       }
     } catch (err) {
-      console.error('Error loading eligible students:', err);
-      setError(err.message || 'Failed to load eligible students');
+      console.error("Error loading eligible students:", err);
+      setError(err.message || "Failed to load eligible students");
     } finally {
       setLoadingStudents(false);
     }
   };
+  
 
   const handleStudentToggle = (studentId) => {
     setSelectedStudents(prev => {
@@ -435,6 +439,18 @@ const IssueCertificates = () => {
               Issue Participant Certificates
             </h2>
 
+            {/* NEW: Inline Payment Pending Warning */}
+            {paymentStatus && !paymentStatus.paymentCompleted && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">
+                    <p className="text-red-700 font-medium flex items-center">
+                        <svg className="w-5 h-5 text-red-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                        **Payment Pending:** Certificates cannot be issued until the event payment is complete.
+                    </p>
+                </div>
+            )}
+            
             {loadingStudents ? (
               <div className="text-center py-12">
                 <Spinner />
@@ -508,7 +524,7 @@ const IssueCertificates = () => {
                 <div className="mt-6 pt-6 border-t border-gray-200">
                   <button
                     onClick={handleIssueCertificates}
-                    disabled={selectedStudents.length === 0 || issuing}
+                    disabled={selectedStudents.length === 0 || issuing || (paymentStatus && !paymentStatus.paymentCompleted)}
                     className="w-full bg-teal-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                   >
                     {issuing ? (
@@ -546,6 +562,19 @@ const IssueCertificates = () => {
             <p className="text-sm text-gray-600 mb-6">
               Select winners and assign their positions (1st, 2nd, 3rd, etc.)
             </p>
+            
+            {/* NEW: Inline Payment Pending Warning */}
+            {paymentStatus && !paymentStatus.paymentCompleted && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">
+                    <p className="text-red-700 font-medium flex items-center">
+                        <svg className="w-5 h-5 text-red-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                        **Payment Pending:** Certificates cannot be issued until the event payment is complete.
+                    </p>
+                </div>
+            )}
+
 
             {loadingStudents ? (
               <div className="text-center py-12">
@@ -593,7 +622,7 @@ const IssueCertificates = () => {
                               </div>
                               {isSelected && (
                                 <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">
-                                  Position {winnerData.position}
+                                  {winnerData.positionText || `Position ${winnerData.position}`}
                                 </span>
                               )}
                             </div>
@@ -642,7 +671,7 @@ const IssueCertificates = () => {
                 <div className="mt-6 pt-6 border-t border-gray-200">
                   <button
                     onClick={handleIssueWinnerCertificates}
-                    disabled={selectedWinners.length === 0 || issuing}
+                    disabled={selectedWinners.length === 0 || issuing || (paymentStatus && !paymentStatus.paymentCompleted)}
                     className="w-full bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-yellow-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                   >
                     {issuing ? (
