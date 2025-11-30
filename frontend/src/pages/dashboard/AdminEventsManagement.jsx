@@ -34,6 +34,31 @@ const AdminEventsManagement = () => {
   });
 
   const [modalTab, setModalTab] = useState('details'); // 'details', 'certificates'
+  const [analytics, setAnalytics] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+  // Load analytics when results tab is opened
+  useEffect(() => {
+    if (modalTab === 'results' && eventDetailsModal.event) {
+      loadAnalytics(eventDetailsModal.event.id);
+    }
+  }, [modalTab, eventDetailsModal.event]);
+
+  const loadAnalytics = async (eventId) => {
+    try {
+      setAnalyticsLoading(true);
+      const { getEventResultAnalytics } = await import('../../api');
+      const response = await getEventResultAnalytics(eventId);
+      if (response.success) {
+        setAnalytics(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading analytics:', error);
+      setAnalytics(null);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchAllEvents();
@@ -638,8 +663,9 @@ const AdminEventsManagement = () => {
                           alert(`✅ Successfully uploaded ${response.data.uploadedFiles?.length || response.data.count || 0} file(s). Scores updated and winners calculated.`);
                           fileInput.value = '';
                           e.target.reset();
-                          // Reload event data
+                          // Reload event data and analytics
                           handleViewEventDetails(event);
+                          loadAnalytics(event.id);
                         } else {
                           alert('Failed to upload: ' + (response.message || 'Unknown error'));
                         }
@@ -693,6 +719,189 @@ const AdminEventsManagement = () => {
                     <li>Admin must validate results to make them visible to students</li>
                     <li>After validation, event opens for next registration cycle</li>
                   </ol>
+                </div>
+
+                {/* Analytics Section */}
+                <div className="mt-8 border-t border-gray-200 pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-gray-900">Result Analytics & Predictions</h3>
+                    <button
+                      onClick={() => loadAnalytics(event.id)}
+                      disabled={analyticsLoading}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50"
+                    >
+                      {analyticsLoading ? 'Loading...' : '🔄 Refresh'}
+                    </button>
+                  </div>
+
+                  {analyticsLoading ? (
+                    <div className="text-center py-8">
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                      <p className="mt-2 text-gray-600">Loading analytics...</p>
+                    </div>
+                  ) : analytics ? (
+                    <div className="space-y-6">
+                      {/* Statistics */}
+                      {analytics.statistics && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                            <p className="text-sm text-blue-600 font-medium">Total Participants</p>
+                            <p className="text-2xl font-bold text-blue-900">{analytics.statistics.totalParticipants || 0}</p>
+                          </div>
+                          <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                            <p className="text-sm text-green-600 font-medium">With Scores</p>
+                            <p className="text-2xl font-bold text-green-900">{analytics.statistics.participantsWithScores || 0}</p>
+                          </div>
+                          <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                            <p className="text-sm text-yellow-600 font-medium">Without Scores</p>
+                            <p className="text-2xl font-bold text-yellow-900">{analytics.statistics.participantsWithoutScores || 0}</p>
+                          </div>
+                          <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                            <p className="text-sm text-purple-600 font-medium">Completion Rate</p>
+                            <p className="text-2xl font-bold text-purple-900">{analytics.statistics.completionRate || '0%'}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Winners */}
+                      {analytics.winners && analytics.winners.length > 0 && (
+                        <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg p-6 border border-yellow-200">
+                          <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                            🏆 Winners (Top 3)
+                          </h4>
+                          <div className="space-y-3">
+                            {analytics.winners.map((winner, idx) => (
+                              <div key={idx} className="bg-white rounded-lg p-4 border border-yellow-200 flex items-center justify-between">
+                                <div className="flex items-center space-x-4">
+                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white ${
+                                    winner.placement === 1 ? 'bg-yellow-500' : winner.placement === 2 ? 'bg-gray-400' : 'bg-orange-600'
+                                  }`}>
+                                    {winner.placement}
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold text-gray-900">{winner.studentName}</p>
+                                    {winner.studentUniqueId && (
+                                      <p className="text-xs text-gray-500">ID: {winner.studentUniqueId}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-lg font-bold text-gray-900">Score: {winner.score?.toFixed(2) || 'N/A'}</p>
+                                  {winner.sport && (
+                                    <p className="text-xs text-gray-500">{winner.sport}</p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Predicted Winners */}
+                      {analytics.predictedWinners && analytics.predictedWinners.length > 0 && (
+                        <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
+                          <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                            🔮 Predicted Winners
+                          </h4>
+                          <div className="space-y-3">
+                            {analytics.predictedWinners.map((prediction, idx) => (
+                              <div key={idx} className="bg-white rounded-lg p-4 border border-blue-200">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-4">
+                                    <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center font-bold text-white">
+                                      {prediction.predictedPlacement}
+                                    </div>
+                                    <div>
+                                      <p className="font-semibold text-gray-900">{prediction.studentName}</p>
+                                      {prediction.studentUniqueId && (
+                                        <p className="text-xs text-gray-500">ID: {prediction.studentUniqueId}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    {prediction.currentScore !== null && (
+                                      <p className="text-lg font-bold text-gray-900">Score: {prediction.currentScore?.toFixed(2) || 'N/A'}</p>
+                                    )}
+                                    <span className={`text-xs px-2 py-1 rounded ${
+                                      prediction.confidence === 'high' ? 'bg-green-100 text-green-800' :
+                                      prediction.confidence === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {prediction.confidence} confidence
+                                    </span>
+                                    {prediction.note && (
+                                      <p className="text-xs text-gray-500 mt-1">{prediction.note}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Score Statistics */}
+                      {analytics.scoreStatistics && (
+                        <div className="bg-white rounded-lg p-6 border border-gray-200">
+                          <h4 className="text-lg font-bold text-gray-900 mb-4">📊 Score Statistics</h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                              <p className="text-sm text-gray-600">Minimum</p>
+                              <p className="text-xl font-bold text-gray-900">{analytics.scoreStatistics.min?.toFixed(2) || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600">Maximum</p>
+                              <p className="text-xl font-bold text-gray-900">{analytics.scoreStatistics.max?.toFixed(2) || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600">Average</p>
+                              <p className="text-xl font-bold text-gray-900">{analytics.scoreStatistics.avg?.toFixed(2) || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600">Median</p>
+                              <p className="text-xl font-bold text-gray-900">{analytics.scoreStatistics.median?.toFixed(2) || 'N/A'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Ties */}
+                      {analytics.ties && analytics.ties.length > 0 && (
+                        <div className="bg-orange-50 rounded-lg p-6 border border-orange-200">
+                          <h4 className="text-lg font-bold text-gray-900 mb-4">⚠️ Tied Scores</h4>
+                          <div className="space-y-2">
+                            {analytics.ties.map((tie, idx) => (
+                              <div key={idx} className="bg-white rounded-lg p-3 border border-orange-200">
+                                <p className="font-semibold text-gray-900">
+                                  Score: {tie.score?.toFixed(2)} - {tie.count} participant{tie.count !== 1 ? 's' : ''}
+                                </p>
+                                <div className="mt-2 text-sm text-gray-600">
+                                  {tie.students.map((s, i) => (
+                                    <span key={i}>
+                                      {s.studentName} (Place: {s.placement || 'N/A'}){i < tie.students.length - 1 ? ', ' : ''}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* No Results Message */}
+                      {(!analytics.winners || analytics.winners.length === 0) && 
+                       (!analytics.predictedWinners || analytics.predictedWinners.length === 0) && 
+                       (!analytics.statistics || analytics.statistics.participantsWithScores === 0) && (
+                        <div className="bg-gray-50 rounded-lg p-6 border border-gray-200 text-center">
+                          <p className="text-gray-600">No results uploaded yet. Upload a result sheet to see analytics and predictions.</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200 text-center">
+                      <p className="text-gray-600">Click "Refresh" to load analytics.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

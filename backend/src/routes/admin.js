@@ -4349,7 +4349,11 @@ router.get('/events/:eventId/results/sample-sheet', authenticate, requireAdmin, 
           select: {
             id: true,
             name: true,
-            uniqueId: true
+            user: {
+              select: {
+                uniqueId: true
+              }
+            }
           }
         }
       },
@@ -4369,7 +4373,7 @@ router.get('/events/:eventId/results/sample-sheet', authenticate, requireAdmin, 
     if (registrations.length > 0) {
       registrations.forEach((reg, index) => {
         sampleData.push({
-          studentId: reg.student.id, // Use actual student ID
+          studentId: reg.student.id, // Use actual student ID (database ID)
           name: reg.student.name || `Student ${index + 1}`,
           score: (100 - index * 5).toFixed(2), // Sample scores decreasing
           remarks: index === 0 ? 'Winner' : index === 1 ? 'Runner-up' : ''
@@ -4441,8 +4445,12 @@ router.get('/events/:eventId/results/analytics', authenticate, requireAdmin, asy
           select: {
             id: true,
             name: true,
-            uniqueId: true,
-            sport: true
+            sport: true,
+            user: {
+              select: {
+                uniqueId: true
+              }
+            }
           }
         }
       },
@@ -4473,7 +4481,7 @@ router.get('/events/:eventId/results/analytics', authenticate, requireAdmin, asy
         placement: r.placement,
         studentId: r.student.id,
         studentName: r.student.name,
-        studentUniqueId: r.student.uniqueId,
+        studentUniqueId: r.student.user?.uniqueId || null,
         score: r.score,
         sport: r.student.sport
       }));
@@ -4485,7 +4493,7 @@ router.get('/events/:eventId/results/analytics', authenticate, requireAdmin, asy
       max: Math.max(...scores),
       avg: Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2)),
       median: scores.length > 0 
-        ? Number(scores.sort((a, b) => a - b)[Math.floor(scores.length / 2)].toFixed(2))
+        ? Number([...scores].sort((a, b) => a - b)[Math.floor(scores.length / 2)].toFixed(2))
         : 0
     } : null;
 
@@ -4500,7 +4508,7 @@ router.get('/events/:eventId/results/analytics', authenticate, requireAdmin, asy
           predictedPlacement: idx + 1,
           studentId: r.student.id,
           studentName: r.student.name,
-          studentUniqueId: r.student.uniqueId,
+          studentUniqueId: r.student.user?.uniqueId || null,
           currentScore: r.score,
           confidence: participantsWithScores / totalParticipants > 0.8 ? 'high' : 'medium'
         }));
@@ -4511,7 +4519,7 @@ router.get('/events/:eventId/results/analytics', authenticate, requireAdmin, asy
         predictedPlacement: idx + 1,
         studentId: r.student.id,
         studentName: r.student.name,
-        studentUniqueId: r.student.uniqueId,
+        studentUniqueId: r.student.user?.uniqueId || null,
         currentScore: null,
         confidence: 'low',
         note: 'No scores available yet. Prediction based on registration order.'
@@ -4581,14 +4589,14 @@ router.get('/events/:eventId/results/analytics', authenticate, requireAdmin, asy
         ? withoutScores.slice(0, 10).map(r => ({
             studentId: r.student.id,
             studentName: r.student.name,
-            studentUniqueId: r.student.uniqueId
+            studentUniqueId: r.student.user?.uniqueId || null
           }))
         : [],
       allResults: withScores.map(r => ({
         placement: r.placement,
         studentId: r.student.id,
         studentName: r.student.name,
-        studentUniqueId: r.student.uniqueId,
+        studentUniqueId: r.student.user?.uniqueId || null,
         score: r.score
       }))
     }, 'Result analytics retrieved successfully.'));
