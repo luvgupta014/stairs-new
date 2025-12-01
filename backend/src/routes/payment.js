@@ -362,7 +362,7 @@ router.post('/verify', authenticate, async (req, res) => {
     });
 
     // Get payment details
-    const paymentRecord = await prisma.payment.findFirst({
+    const paymentRecord = await prisma.Payment.findFirst({
       where: {
         razorpayOrderId: razorpay_order_id,
         userId: req.user.id
