@@ -308,7 +308,13 @@ const CoachDashboard = () => {
         body: JSON.stringify({ eventId })
       });
 
-      const orderData = await createOrderResponse.json();
+      let orderData;
+      try {
+        orderData = await createOrderResponse.json();
+      } catch (parseError) {
+        console.error('Failed to parse order response:', parseError);
+        throw new Error('Server returned invalid response. Please try again.');
+      }
       
       if (!createOrderResponse.ok || !orderData.success) {
         if (createOrderResponse.status === 401) {
@@ -316,18 +322,27 @@ const CoachDashboard = () => {
           localStorage.removeItem('userRole');
           throw new Error('Your session has expired. Please login again.');
         }
+        if (createOrderResponse.status === 403) {
+          throw new Error(orderData.message || 'You are not authorized to make payment for this event.');
+        }
         throw new Error(orderData.message || `Server error: ${createOrderResponse.status}`);
       }
 
-      const { orderId, amount, currency, eventName, razorpayKeyId } = orderData.data;
+      const { orderId, amount, currency, eventName, razorpayKeyId } = orderData.data || {};
+
+      // Validate response data
+      if (!orderId || !amount || !razorpayKeyId) {
+        console.error('Invalid order data received:', orderData);
+        throw new Error('Invalid payment order data. Please try again.');
+      }
 
       // Configure Razorpay options
       const options = {
         key: razorpayKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
         amount: amount,
-        currency: currency,
+        currency: currency || 'INR',
         name: 'STAIRS Event Fee',
-        description: `Payment for ${eventName}`,
+        description: `Payment for ${eventName || 'Event'}`,
         order_id: orderId,
         handler: async function (response) {
           try {
@@ -347,18 +362,25 @@ const CoachDashboard = () => {
               })
             });
 
-            const verifyData = await verifyResponse.json();
+            let verifyData;
+            try {
+              verifyData = await verifyResponse.json();
+            } catch (parseError) {
+              console.error('Failed to parse verification response:', parseError);
+              throw new Error('Server returned invalid response during verification.');
+            }
             
-            if (verifyData.success) {
-              console.log('Payment verified successfully:', verifyData);
-              alert('Payment Successful! Your event fee has been paid.');
-              await loadCoachEvents();
-            } else {
+            if (!verifyResponse.ok || !verifyData.success) {
               throw new Error(verifyData.message || 'Payment verification failed');
             }
+            
+            console.log('Payment verified successfully:', verifyData);
+            alert('Payment Successful! Your event fee has been paid.');
+            await loadCoachEvents();
           } catch (verifyError) {
             console.error('Payment verification error:', verifyError);
-            alert('Payment verification failed. Please contact support.');
+            const errorMsg = verifyError.message || 'Payment verification failed';
+            alert(`${errorMsg}. Please contact support with payment ID: ${response.razorpay_payment_id || 'N/A'}`);
           }
         },
         prefill: {
@@ -386,7 +408,27 @@ const CoachDashboard = () => {
 
     } catch (err) {
       console.error('Payment error:', err);
-      alert(err.message || 'Payment initialization failed. Please try again.');
+      console.error('Error details:', {
+        message: err.message,
+        name: err.name,
+        eventId: eventId,
+        hasAuthToken: !!localStorage.getItem('authToken')
+      });
+      
+      // More user-friendly error messages
+      let errorMessage = err.message || 'Payment initialization failed. Please try again.';
+      
+      if (err.message && err.message.includes('not authorized')) {
+        errorMessage = 'You are not authorized to make payment for this event. Please ensure you are the event creator.';
+      } else if (err.message && err.message.includes('session has expired')) {
+        errorMessage = 'Your session has expired. Please login again.';
+      } else if (err.message && err.message.includes('invalid response')) {
+        errorMessage = 'Server returned invalid response. Please try again or contact support.';
+      } else if (err.message && err.message.includes('Razorpay SDK')) {
+        errorMessage = 'Payment gateway failed to load. Please check your internet connection and try again.';
+      }
+      
+      alert(errorMessage);
     }
   };
 

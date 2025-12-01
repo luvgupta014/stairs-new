@@ -150,6 +150,7 @@ router.post('/create-order', authenticate, async (req, res) => {
 });
 
 // Updated: create-order-events route to mirror create-order behavior and avoid FK error
+// Note: Using authenticate only (not requireCoach) to allow flexibility, but we verify coach ownership
 router.post('/create-order-events', authenticate, async (req, res) => {
   try {
     const { eventId } = req.body;
@@ -165,6 +166,7 @@ router.post('/create-order-events', authenticate, async (req, res) => {
       include: {
         coach: {
           select: {
+            id: true,
             userId: true
           }
         }
@@ -176,8 +178,16 @@ router.post('/create-order-events', authenticate, async (req, res) => {
     }
 
     // Verify the user is the coach of this event
-    if (String(event.coachId) !== String(req.user.id)) {
-      console.warn(`⚠️ User ${req.user.id} is not the coach for event ${event.id}`);
+    // event.coachId is the Coach table ID, not User ID
+    // We need to check if the coach's userId matches req.user.id
+    if (!event.coach || String(event.coach.userId) !== String(req.user.id)) {
+      console.warn(`⚠️ Authorization check failed:`, {
+        eventId: event.id,
+        eventCoachId: event.coachId,
+        coachUserId: event.coach?.userId,
+        reqUserId: req.user.id,
+        userRole: req.user.role
+      });
       return res.status(403).json(errorResponse('You are not authorized to create payment for this event.', 403));
     }
 
@@ -577,8 +587,14 @@ async function handleEventPaymentVerification(req, res, { razorpay_order_id, raz
     }
 
     // Verify the user is authorized (coach of the event)
-    if (String(event.coachId) !== String(userId)) {
-      console.warn(`⚠️ User ${userId} is not the coach for event ${eventId}`);
+    // event.coachId is the Coach table ID, we need to check coach.userId
+    if (!event.coach || String(event.coach.userId) !== String(userId)) {
+      console.warn(`⚠️ Authorization check failed in verification:`, {
+        eventId: eventId,
+        eventCoachId: event.coachId,
+        coachUserId: event.coach?.userId,
+        userId: userId
+      });
       // Still allow if they created the payment order, but log warning
     }
 
