@@ -195,7 +195,7 @@ router.post('/create-order-events', authenticate, async (req, res) => {
 
     // Calculate amount: ₹2 per participant
     const participantCount = event.currentParticipants || 0;
-    const amountInRupees = 2 * participantCount;
+    const amountInRupees = 500 * participantCount;
     const amount = Math.round(amountInRupees * 100); // in paise
 
     // Edge case: Zero amount payment
