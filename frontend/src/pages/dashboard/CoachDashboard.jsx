@@ -286,37 +286,83 @@ const CoachDashboard = () => {
   const handleEventPayment = async (eventId) => {
     try {
       const token = localStorage.getItem('token');
-
-      // 1️⃣ Create Razorpay order on backend
-      const res = await fetch('/api/payment/create-order-events', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ eventId })
-      });
-
-      if (!res.ok) {
-        const txt = await res.text();
-        console.error('Create order HTTP error', res.status, txt);
-        alert('Failed to create Razorpay order (network error).');
+      
+      if (!token) {
+        alert('Please login to continue with payment.');
         return;
       }
 
-      const data = await res.json();
+      if (!eventId) {
+        alert('Invalid event. Please refresh the page and try again.');
+        return;
+      }
+
+      // 1️⃣ Create Razorpay order on backend
+      let res;
+      try {
+        res = await fetch('/api/payment/create-order-events', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ eventId })
+        });
+      } catch (networkError) {
+        console.error('Network error creating order:', networkError);
+        alert('Network error: Could not connect to server. Please check your internet connection and try again.');
+        return;
+      }
+
+      let data;
+      try {
+        const text = await res.text();
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        alert('Server returned invalid response. Please try again or contact support.');
+        return;
+      }
+
       console.log('create-order-events response:', data);
+
+      if (!res.ok) {
+        console.error('Create order HTTP error', res.status, data);
+        const errorMessage = data?.message || `Server error (${res.status}). Please try again.`;
+        alert(errorMessage);
+        return;
+      }
 
       if (!data?.success) {
         console.error('Server returned error when creating order:', data);
-        alert(data?.message || 'Failed to create Razorpay order');
+        const errorMessage = data?.message || 'Failed to create payment order.';
+        
+        // Handle specific error cases
+        if (errorMessage.includes('no participants') || errorMessage.includes('participants')) {
+          alert('Cannot process payment: Event has no participants. Please register participants first.');
+        } else if (errorMessage.includes('already been completed') || errorMessage.includes('already paid')) {
+          alert('Payment for this event has already been completed.');
+          await loadCoachEvents(); // Refresh to show updated status
+        } else if (errorMessage.includes('not authorized') || errorMessage.includes('Access denied')) {
+          alert('You are not authorized to make payment for this event.');
+        } else {
+          alert(errorMessage);
+        }
         return;
       }
 
-      const { orderId, amount, currency, razorpayKeyId, eventName } = data.data || {};
+      const { orderId, amount, currency, razorpayKeyId, eventName, participantCount, amountInRupees } = data.data || {};
+      
       if (!orderId || !razorpayKeyId) {
         console.error('Missing orderId or razorpayKeyId in response', data);
-        alert('Invalid payment response from server.');
+        alert('Invalid payment response from server. Please try again.');
+        return;
+      }
+
+      // Validate amount
+      if (!amount || amount <= 0) {
+        console.error('Invalid amount in response', data);
+        alert('Invalid payment amount. Please contact support.');
         return;
       }
 
@@ -325,28 +371,36 @@ const CoachDashboard = () => {
         await loadRazorpayScript();
       } catch (err) {
         console.error('Razorpay SDK load error:', err);
-        alert('Payment SDK failed to load. Please try again later.');
+        alert('Payment SDK failed to load. Please check your internet connection and try again.');
         return;
       }
 
       if (!window.Razorpay) {
         console.error('window.Razorpay is undefined after loading SDK.');
-        alert('Payment SDK not ready. Please refresh and try again.');
+        alert('Payment SDK not ready. Please refresh the page and try again.');
         return;
       }
 
       // 2️⃣ Razorpay checkout options
       const options = {
         key: razorpayKeyId,
-        amount, // paise from server
-        currency,
+        amount: amount, // paise from server
+        currency: currency || 'INR',
         name: 'STAIRS Event Fee',
-        description: `Payment for ${eventName}`,
-        order_id: orderId, // Razorpay expects order_id (not orderId)
+        description: `Payment for ${eventName}${participantCount ? ` (${participantCount} participants)` : ''}`,
+        order_id: orderId,
         handler: async (response) => {
           // 3️⃣ Verify the payment on backend
+          console.log('Payment response received:', response);
+          
+          if (!response.razorpay_order_id || !response.razorpay_payment_id || !response.razorpay_signature) {
+            console.error('Invalid payment response:', response);
+            alert('Invalid payment response. Please contact support with payment ID: ' + (response.razorpay_payment_id || 'N/A'));
+            return;
+          }
+
           try {
-            const verifyRes = await fetch('/api/verify-payment', {
+            const verifyRes = await fetch('/api/payment/verify-payment', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -361,45 +415,87 @@ const CoachDashboard = () => {
               })
             });
 
-            const verifyData = await verifyRes.json();
+            let verifyData;
+            try {
+              verifyData = await verifyRes.json();
+            } catch (parseError) {
+              console.error('Failed to parse verification response:', parseError);
+              alert('Payment verification failed: Invalid server response. Please contact support with payment ID: ' + response.razorpay_payment_id);
+              return;
+            }
+
             console.log('verify-payment response:', verifyData);
 
+            if (!verifyRes.ok) {
+              console.error('Verification HTTP error', verifyRes.status, verifyData);
+              const errorMsg = verifyData?.message || 'Payment verification failed.';
+              alert(errorMsg + ' Please contact support with payment ID: ' + response.razorpay_payment_id);
+              return;
+            }
+
             if (verifyData.success) {
-              alert('Payment Successful!');
+              if (verifyData.data?.alreadyProcessed) {
+                alert('Payment was already processed. Refreshing event list...');
+              } else {
+                alert('Payment Successful! Your event fee has been paid.');
+              }
               await loadCoachEvents();
             } else {
-              alert('Payment verification failed. Please contact support.');
+              const errorMsg = verifyData?.message || 'Payment verification failed.';
+              alert(errorMsg + ' Please contact support with payment ID: ' + response.razorpay_payment_id);
             }
           } catch (err) {
             console.error('Verification request failed:', err);
-            alert('Payment verification failed due to network error.');
+            if (err.message.includes('Failed to fetch') || err.message.includes('network')) {
+              alert('Network error during verification. Your payment may have been processed. Please refresh the page and check your event status. If payment was deducted, contact support with payment ID: ' + response.razorpay_payment_id);
+            } else {
+              alert('Payment verification failed due to an error. Please contact support with payment ID: ' + response.razorpay_payment_id);
+            }
           }
         },
         prefill: {
           name: dashboardData?.coach?.name || 'Coach',
-          email: dashboardData?.coach?.email || 'coach@example.com',
+          email: dashboardData?.coach?.email || dashboardData?.user?.email || 'coach@example.com',
           contact: dashboardData?.coach?.phone || '9999999999'
         },
-        theme: { color: '#0F9D58' }
+        theme: { color: '#0F9D58' },
+        modal: {
+          ondismiss: function() {
+            console.log('Payment modal closed by user');
+            // Optionally show a message
+          }
+        }
       };
 
       console.log('Opening Razorpay checkout with options:', {
         key: options.key,
         amount: options.amount,
         currency: options.currency,
-        order_id: options.order_id
+        order_id: options.order_id,
+        description: options.description
       });
 
       const rzp = new window.Razorpay(options);
+      
       rzp.on('payment.failed', function (response) {
         console.error('Razorpay payment failed:', response);
-        alert('Payment failed. Please try again or contact support.');
+        const errorMsg = response.error?.description || response.error?.reason || 'Payment failed';
+        alert(`Payment failed: ${errorMsg}. Please try again or contact support.`);
+      });
+
+      rzp.on('payment.authorized', function (response) {
+        console.log('Payment authorized:', response);
+        // This is handled in the handler callback
       });
 
       rzp.open();
     } catch (error) {
       console.error('Payment Error:', error);
-      alert('Something went wrong during payment.');
+      if (error.message && error.message.includes('fetch')) {
+        alert('Network error: Could not connect to server. Please check your internet connection and try again.');
+      } else {
+        alert('An unexpected error occurred. Please try again or contact support.');
+      }
     }
   };
 
