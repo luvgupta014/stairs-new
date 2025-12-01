@@ -2276,7 +2276,7 @@ router.get('/payments', authenticate, requireCoach, async (req, res) => {
     };
 
     const [payments, total] = await Promise.all([
-      prisma.payment.findMany({
+      prisma.Payment.findMany({
         where,
         include: {
           student: {
