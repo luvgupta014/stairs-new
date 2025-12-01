@@ -164,7 +164,7 @@ router.post('/create-order-events', authenticate, async (req, res) => {
     }
     console.log('Creating payment order for event', event);
 
-    const amount = 500 * (event.currentParticipants || 0) * 100; // in paise
+    const amount = 2 * (event.currentParticipants || 0) * 100; // in paise
 
     // Create Razorpay order
     const timestamp = Date.now().toString().slice(-8); // Last 8 digits
