@@ -1463,9 +1463,9 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
           const registrationOrders = await prisma.eventPayment.findMany({
             where: { eventId: event.id },
             select: {
-              totalFeeAmount: true,
-              paymentStatus: true,
-              paymentDate: true
+              amount: true,
+              status: true,
+              createdAt: true
             }
           });
 
