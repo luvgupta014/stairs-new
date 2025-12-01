@@ -25,7 +25,7 @@ router.get('/admin/events/:eventId/payments', authenticate, async (req, res) => 
 
     // 1) Try scalar eventId column on Payment model (if exists)
     try {
-      payments = await prisma.payment.findMany({
+      payments = await prisma.event_payments.findMany({
         where: { eventId: eventId },
         orderBy: { createdAt: 'desc' }
       });
@@ -36,7 +36,7 @@ router.get('/admin/events/:eventId/payments', authenticate, async (req, res) => 
     // 2) If none found, try metadata JSON-path query (Prisma JSON filtering)
     if (!payments || payments.length === 0) {
       try {
-        const jsonFiltered = await prisma.payment.findMany({
+        const jsonFiltered = await prisma.event_payments.findMany({
           where: {
             metadata: {
               path: ['eventId'],
