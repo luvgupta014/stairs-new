@@ -8,8 +8,8 @@ export const paymentPlans = {
       {
         id: 'coordinator',
         name: 'Coordinator Plan',
-        price: 2000,
-        originalPrice: 2000,
+        price: 2,
+        originalPrice: 2,
         duration: 'month',
         popular: true,
         features: [
