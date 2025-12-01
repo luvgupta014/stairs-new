@@ -284,15 +284,25 @@ const CoachDashboard = () => {
   };
 
   const handleEventPayment = async (eventId) => {
+    // Declare token outside try block for error handling
+    let token = null;
+    
     try {
-      const token = localStorage.getItem('token');
+      console.log('=== Starting Event Payment Flow ===');
+      console.log('Event ID:', eventId);
+      
+      // Try multiple token storage keys
+      token = localStorage.getItem('token') || localStorage.getItem('authToken');
       
       if (!token) {
+        console.error('No authentication token found');
         alert('Please login to continue with payment.');
         return;
       }
+      console.log('Token found, length:', token.length);
 
       if (!eventId) {
+        console.error('Invalid event ID');
         alert('Invalid event. Please refresh the page and try again.');
         return;
       }
@@ -336,10 +346,21 @@ const CoachDashboard = () => {
       let data;
       try {
         const text = await res.text();
+        console.log('Raw response text:', text.substring(0, 200)); // Log first 200 chars
+        
+        // Check if response is HTML (error page)
+        if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+          console.error('Server returned HTML instead of JSON - likely an error page');
+          alert('Server error: Received an error page instead of data. Please check if the backend is running correctly.');
+          return;
+        }
+        
         data = JSON.parse(text);
       } catch (parseError) {
         console.error('Failed to parse response:', parseError);
-        alert('Server returned invalid response. Please try again or contact support.');
+        console.error('Response status:', res.status);
+        console.error('Response headers:', Object.fromEntries(res.headers.entries()));
+        alert(`Server returned invalid response (Status: ${res.status}). Please try again or contact support.`);
         return;
       }
 
@@ -490,14 +511,33 @@ const CoachDashboard = () => {
       };
 
       console.log('Opening Razorpay checkout with options:', {
-        key: options.key,
+        key: options.key ? `${options.key.substring(0, 10)}...` : 'MISSING',
         amount: options.amount,
         currency: options.currency,
         order_id: options.order_id,
         description: options.description
       });
 
-      const rzp = new window.Razorpay(options);
+      // Validate Razorpay options before creating instance
+      if (!options.key) {
+        throw new Error('Razorpay key is missing. Please check backend configuration.');
+      }
+      if (!options.order_id) {
+        throw new Error('Razorpay order ID is missing.');
+      }
+      if (!options.amount || options.amount <= 0) {
+        throw new Error('Invalid payment amount.');
+      }
+
+      console.log('Creating Razorpay instance...');
+      let rzp;
+      try {
+        rzp = new window.Razorpay(options);
+        console.log('Razorpay instance created successfully');
+      } catch (rzpError) {
+        console.error('Failed to create Razorpay instance:', rzpError);
+        throw new Error(`Failed to initialize payment gateway: ${rzpError.message}`);
+      }
       
       rzp.on('payment.failed', function (response) {
         console.error('Razorpay payment failed:', response);
@@ -510,24 +550,43 @@ const CoachDashboard = () => {
         // This is handled in the handler callback
       });
 
-      rzp.open();
+      console.log('Opening Razorpay modal...');
+      try {
+        rzp.open();
+        console.log('Razorpay modal opened successfully');
+      } catch (openError) {
+        console.error('Failed to open Razorpay modal:', openError);
+        throw new Error(`Failed to open payment window: ${openError.message}`);
+      }
     } catch (error) {
-      console.error('Payment Error:', error);
+      console.error('=== Payment Error Caught ===');
+      console.error('Error:', error);
       console.error('Error details:', {
         message: error.message,
         stack: error.stack,
         name: error.name,
-        backendUrl: import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000',
-        eventId: eventId
+        backendUrl: import.meta.env.VITE_BACKEND_URL || window.location.origin,
+        eventId: eventId,
+        tokenExists: !!token
       });
       
-      if (error.message && (error.message.includes('fetch') || error.message.includes('network'))) {
-        alert('Network error: Could not connect to server. Please check your internet connection and try again.');
-      } else if (error.message && error.message.includes('Failed to fetch')) {
-        alert('Cannot reach server. Please check if the backend is running and try again.');
-      } else {
-        alert(`An unexpected error occurred: ${error.message || 'Unknown error'}. Please try again or contact support.`);
+      // More specific error messages
+      let errorMessage = 'An unexpected error occurred.';
+      
+      if (error.message) {
+        if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('Failed to fetch')) {
+          errorMessage = 'Network error: Could not connect to server. Please check your internet connection and try again.';
+        } else if (error.message.includes('Razorpay') || error.message.includes('payment gateway')) {
+          errorMessage = `Payment gateway error: ${error.message}`;
+        } else if (error.message.includes('key') || error.message.includes('order_id')) {
+          errorMessage = `Configuration error: ${error.message}. Please contact support.`;
+        } else {
+          errorMessage = `Error: ${error.message}`;
+        }
       }
+      
+      alert(errorMessage);
+      console.error('=== End Payment Error ===');
     }
   };
 
