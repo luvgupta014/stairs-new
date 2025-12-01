@@ -298,9 +298,21 @@ const CoachDashboard = () => {
       }
 
       // 1️⃣ Create Razorpay order on backend
+      // Try to detect backend URL - use VITE_BACKEND_URL or fallback to same origin
+      let backendUrl = import.meta.env.VITE_BACKEND_URL;
+      if (!backendUrl) {
+        // If no backend URL configured, try same origin (for proxy setups)
+        backendUrl = window.location.origin;
+        console.warn('VITE_BACKEND_URL not set, using same origin:', backendUrl);
+      }
+      
+      console.log('Creating payment order for event:', { eventId, backendUrl });
+      
       let res;
       try {
-        res = await fetch('/api/payment/create-order-events', {
+        const url = `${backendUrl}/api/payment/create-order-events`;
+        console.log('Fetching payment order:', url);
+        res = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -308,9 +320,16 @@ const CoachDashboard = () => {
           },
           body: JSON.stringify({ eventId })
         });
+        console.log('Response status:', res.status, res.statusText);
       } catch (networkError) {
         console.error('Network error creating order:', networkError);
-        alert('Network error: Could not connect to server. Please check your internet connection and try again.');
+        console.error('Error details:', {
+          message: networkError.message,
+          name: networkError.name,
+          backendUrl: backendUrl,
+          eventId: eventId
+        });
+        alert(`Network error: Could not connect to server at ${backendUrl}. Please check your internet connection and try again.`);
         return;
       }
 
@@ -400,7 +419,10 @@ const CoachDashboard = () => {
           }
 
           try {
-            const verifyRes = await fetch('/api/payment/verify-payment', {
+            // Use same backend URL as order creation (from outer scope)
+            const verifyBackendUrl = backendUrl || import.meta.env.VITE_BACKEND_URL || window.location.origin;
+            console.log('Verifying payment with backend:', verifyBackendUrl);
+            const verifyRes = await fetch(`${verifyBackendUrl}/api/payment/verify-payment`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -491,10 +513,20 @@ const CoachDashboard = () => {
       rzp.open();
     } catch (error) {
       console.error('Payment Error:', error);
-      if (error.message && error.message.includes('fetch')) {
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        backendUrl: import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000',
+        eventId: eventId
+      });
+      
+      if (error.message && (error.message.includes('fetch') || error.message.includes('network'))) {
         alert('Network error: Could not connect to server. Please check your internet connection and try again.');
+      } else if (error.message && error.message.includes('Failed to fetch')) {
+        alert('Cannot reach server. Please check if the backend is running and try again.');
       } else {
-        alert('An unexpected error occurred. Please try again or contact support.');
+        alert(`An unexpected error occurred: ${error.message || 'Unknown error'}. Please try again or contact support.`);
       }
     }
   };
