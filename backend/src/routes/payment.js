@@ -996,4 +996,118 @@ router.get('/history', authenticate, async (req, res) => {
   }
 });
 
+// Get event payment status (coach-accessible)
+router.get('/event/:eventId/payment-status', authenticate, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    // Fetch event details
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        coach: {
+          select: {
+            id: true,
+            userId: true
+          }
+        }
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    // Verify the user is the coach of this event
+    if (!event.coach || String(event.coach.userId) !== String(req.user.id)) {
+      return res.status(403).json(errorResponse('You are not authorized to view payment status for this event.', 403));
+    }
+
+    // Check for event fee payment (from Payment table)
+    const eventFeePayment = await prisma.payment.findFirst({
+      where: {
+        userId: req.user.id,
+        status: 'SUCCESS',
+        metadata: {
+          contains: eventId
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    // Check for registration order payments
+    const registrationOrder = await prisma.eventRegistrationOrder.findFirst({
+      where: {
+        eventId: event.id,
+        coachId: event.coach.id
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    // Check for EventPayment records
+    const eventPayment = await prisma.eventPayment.findFirst({
+      where: {
+        eventId: event.id,
+        status: 'SUCCESS'
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    // Determine payment status
+    let paymentCompleted = false;
+    let paymentStatus = 'PENDING';
+    let paymentDate = null;
+    let totalAmount = 0;
+
+    if (eventFeePayment) {
+      try {
+        const metadata = eventFeePayment.metadata ? JSON.parse(eventFeePayment.metadata) : {};
+        if (metadata.eventId === eventId) {
+          paymentCompleted = true;
+          paymentStatus = 'SUCCESS';
+          paymentDate = eventFeePayment.updatedAt;
+          totalAmount = eventFeePayment.amount;
+        }
+      } catch (parseError) {
+        // If metadata parsing fails, check if it's a recent payment for this event
+        if (eventFeePayment.description && eventFeePayment.description.includes(event.name)) {
+          paymentCompleted = true;
+          paymentStatus = 'SUCCESS';
+          paymentDate = eventFeePayment.updatedAt;
+          totalAmount = eventFeePayment.amount;
+        }
+      }
+    } else if (eventPayment && eventPayment.status === 'SUCCESS') {
+      paymentCompleted = true;
+      paymentStatus = 'SUCCESS';
+      paymentDate = eventPayment.updatedAt;
+      totalAmount = eventPayment.amount;
+    } else if (registrationOrder && registrationOrder.paymentStatus === 'PAID') {
+      paymentCompleted = true;
+      paymentStatus = 'SUCCESS';
+      paymentDate = registrationOrder.paymentDate;
+      totalAmount = registrationOrder.totalFeeAmount || 0;
+    }
+
+    res.json(successResponse({
+      paymentStatus: paymentStatus,
+      paymentCompleted: paymentCompleted,
+      totalAmount: totalAmount,
+      paymentDate: paymentDate,
+      eventId: event.id,
+      eventName: event.name
+    }, 'Payment status retrieved successfully'));
+
+  } catch (error) {
+    console.error('❌ Error checking event payment status:', error);
+    res.status(500).json(errorResponse('Failed to check payment status', 500));
+  }
+});
+
 module.exports = router;

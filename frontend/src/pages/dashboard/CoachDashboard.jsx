@@ -180,13 +180,20 @@ const CoachDashboard = () => {
               const paymentResponse = await getEventPaymentStatus(event.id);
               return {
                 ...event,
-                paymentStatus: paymentResponse.success ? paymentResponse.data : null
+                paymentStatus: paymentResponse?.success ? paymentResponse.data : {
+                  paymentStatus: 'UNKNOWN',
+                  paymentCompleted: false
+                }
               };
             } catch (err) {
               console.error(`Error loading payment status for event ${event.id}:`, err);
+              // Return default payment status instead of null to prevent UI errors
               return {
                 ...event,
-                paymentStatus: null
+                paymentStatus: {
+                  paymentStatus: 'UNKNOWN',
+                  paymentCompleted: false
+                }
               };
             }
           })

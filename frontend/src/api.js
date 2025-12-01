@@ -1065,11 +1065,36 @@ export const issueWinnerCertificates = async (certificateData) => {
 
 export const getEventPaymentStatus = async (eventId) => {
   try {
-    const response = await api.get(`/api/certificates/event/${eventId}/payment-status`);
+    // Try coach-accessible endpoint first
+    const response = await api.get(`/api/payment/event/${eventId}/payment-status`);
     return response.data;
   } catch (error) {
+    // Fallback to admin endpoint if coach endpoint fails (for backward compatibility)
+    if (error.response?.status === 404 || error.response?.status === 403) {
+      try {
+        const fallbackResponse = await api.get(`/api/certificates/event/${eventId}/payment-status`);
+        return fallbackResponse.data;
+      } catch (fallbackError) {
+        console.error('Get event payment status error (both endpoints failed):', fallbackError);
+        // Return a default response instead of throwing
+        return {
+          success: false,
+          data: {
+            paymentStatus: 'UNKNOWN',
+            paymentCompleted: false
+          }
+        };
+      }
+    }
     console.error('Get event payment status error:', error);
-    throw error.response?.data || error.message;
+    // Return a default response instead of throwing to prevent UI errors
+    return {
+      success: false,
+      data: {
+        paymentStatus: 'UNKNOWN',
+        paymentCompleted: false
+      }
+    };
   }
 };
 
