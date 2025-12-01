@@ -270,230 +270,95 @@ const CoachDashboard = () => {
     }
   };
 
-  // Replace your existing handleEventPayment with this improved version
-  const loadRazorpayScript = () => {
-    return new Promise((resolve, reject) => {
-      if (window.Razorpay) return resolve(true);
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.async = true;
-      script.onload = () => resolve(true);
-      script.onerror = () => reject(new Error('Razorpay SDK failed to load.'));
-      document.body.appendChild(script);
-    });
-  };
-
   const handleEventPayment = async (eventId) => {
-    // Declare token outside try block for error handling
-    let token = null;
-    
     try {
-      console.log('=== Starting Event Payment Flow ===');
-      console.log('Event ID:', eventId);
-      
-      // Try multiple token storage keys
-      token = localStorage.getItem('token') || localStorage.getItem('authToken');
-      
-      if (!token) {
-        console.error('No authentication token found');
+      const authToken = localStorage.getItem('authToken');
+      if (!authToken) {
         alert('Please login to continue with payment.');
         return;
       }
-      console.log('Token found, length:', token.length);
 
       if (!eventId) {
-        console.error('Invalid event ID');
         alert('Invalid event. Please refresh the page and try again.');
         return;
       }
 
-      // 1️⃣ Create Razorpay order on backend
-      // Try to detect backend URL - use VITE_BACKEND_URL or fallback to same origin
-      let backendUrl = import.meta.env.VITE_BACKEND_URL;
-      if (!backendUrl) {
-        // If no backend URL configured, try same origin (for proxy setups)
-        backendUrl = window.location.origin;
-        console.warn('VITE_BACKEND_URL not set, using same origin:', backendUrl);
-      }
-      
-      console.log('Creating payment order for event:', { eventId, backendUrl });
-      
-      let res;
-      try {
-        const url = `${backendUrl}/api/payment/create-order-events`;
-        console.log('Fetching payment order:', url);
-        res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({ eventId })
-        });
-        console.log('Response status:', res.status, res.statusText);
-      } catch (networkError) {
-        console.error('Network error creating order:', networkError);
-        console.error('Error details:', {
-          message: networkError.message,
-          name: networkError.name,
-          backendUrl: backendUrl,
-          eventId: eventId
-        });
-        alert(`Network error: Could not connect to server at ${backendUrl}. Please check your internet connection and try again.`);
-        return;
-      }
-
-      let data;
-      try {
-        const text = await res.text();
-        console.log('Raw response text:', text.substring(0, 200)); // Log first 200 chars
-        
-        // Check if response is HTML (error page)
-        if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
-          console.error('Server returned HTML instead of JSON - likely an error page');
-          alert('Server error: Received an error page instead of data. Please check if the backend is running correctly.');
-          return;
-        }
-        
-        data = JSON.parse(text);
-      } catch (parseError) {
-        console.error('Failed to parse response:', parseError);
-        console.error('Response status:', res.status);
-        console.error('Response headers:', Object.fromEntries(res.headers.entries()));
-        alert(`Server returned invalid response (Status: ${res.status}). Please try again or contact support.`);
-        return;
-      }
-
-      console.log('create-order-events response:', data);
-
-      if (!res.ok) {
-        console.error('Create order HTTP error', res.status, data);
-        const errorMessage = data?.message || `Server error (${res.status}). Please try again.`;
-        alert(errorMessage);
-        return;
-      }
-
-      if (!data?.success) {
-        console.error('Server returned error when creating order:', data);
-        const errorMessage = data?.message || 'Failed to create payment order.';
-        
-        // Handle specific error cases
-        if (errorMessage.includes('no participants') || errorMessage.includes('participants')) {
-          alert('Cannot process payment: Event has no participants. Please register participants first.');
-        } else if (errorMessage.includes('already been completed') || errorMessage.includes('already paid')) {
-          alert('Payment for this event has already been completed.');
-          await loadCoachEvents(); // Refresh to show updated status
-        } else if (errorMessage.includes('not authorized') || errorMessage.includes('Access denied')) {
-          alert('You are not authorized to make payment for this event.');
-        } else {
-          alert(errorMessage);
-        }
-        return;
-      }
-
-      const { orderId, amount, currency, razorpayKeyId, eventName, participantCount, amountInRupees } = data.data || {};
-      
-      if (!orderId || !razorpayKeyId) {
-        console.error('Missing orderId or razorpayKeyId in response', data);
-        alert('Invalid payment response from server. Please try again.');
-        return;
-      }
-
-      // Validate amount
-      if (!amount || amount <= 0) {
-        console.error('Invalid amount in response', data);
-        alert('Invalid payment amount. Please contact support.');
-        return;
-      }
-
-      // 1.5 Make sure the Razorpay SDK is available
-      try {
-        await loadRazorpayScript();
-      } catch (err) {
-        console.error('Razorpay SDK load error:', err);
-        alert('Payment SDK failed to load. Please check your internet connection and try again.');
-        return;
-      }
-
+      // Load Razorpay script if not already loaded
       if (!window.Razorpay) {
-        console.error('window.Razorpay is undefined after loading SDK.');
-        alert('Payment SDK not ready. Please refresh the page and try again.');
-        return;
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.async = true;
+        document.body.appendChild(script);
+        
+        // Wait for script to load
+        await new Promise((resolve, reject) => {
+          script.onload = () => resolve(true);
+          script.onerror = () => reject(new Error('Razorpay SDK failed to load.'));
+          setTimeout(() => reject(new Error('Razorpay SDK load timeout')), 10000);
+        });
       }
 
-      // 2️⃣ Razorpay checkout options
-      const options = {
-        key: razorpayKeyId,
-        amount: amount, // paise from server
-        currency: currency || 'INR',
-        name: 'STAIRS Event Fee',
-        description: `Payment for ${eventName}${participantCount ? ` (${participantCount} participants)` : ''}`,
-        order_id: orderId,
-        handler: async (response) => {
-          // 3️⃣ Verify the payment on backend
-          console.log('Payment response received:', response);
-          
-          if (!response.razorpay_order_id || !response.razorpay_payment_id || !response.razorpay_signature) {
-            console.error('Invalid payment response:', response);
-            alert('Invalid payment response. Please contact support with payment ID: ' + (response.razorpay_payment_id || 'N/A'));
-            return;
-          }
+      // Create payment order on backend
+      const createOrderResponse = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/payment/create-order-events`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ eventId })
+      });
 
+      const orderData = await createOrderResponse.json();
+      
+      if (!createOrderResponse.ok || !orderData.success) {
+        if (createOrderResponse.status === 401) {
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('userRole');
+          throw new Error('Your session has expired. Please login again.');
+        }
+        throw new Error(orderData.message || `Server error: ${createOrderResponse.status}`);
+      }
+
+      const { orderId, amount, currency, eventName, razorpayKeyId } = orderData.data;
+
+      // Configure Razorpay options
+      const options = {
+        key: razorpayKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount: amount,
+        currency: currency,
+        name: 'STAIRS Event Fee',
+        description: `Payment for ${eventName}`,
+        order_id: orderId,
+        handler: async function (response) {
           try {
-            // Use same backend URL as order creation (from outer scope)
-            const verifyBackendUrl = backendUrl || import.meta.env.VITE_BACKEND_URL || window.location.origin;
-            console.log('Verifying payment with backend:', verifyBackendUrl);
-            const verifyRes = await fetch(`${verifyBackendUrl}/api/payment/verify-payment`, {
+            // Verify payment on backend
+            const verifyResponse = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/payment/verify-payment`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
               },
               body: JSON.stringify({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
                 context: 'event_payment',
-                eventId
+                eventId: eventId
               })
             });
 
-            let verifyData;
-            try {
-              verifyData = await verifyRes.json();
-            } catch (parseError) {
-              console.error('Failed to parse verification response:', parseError);
-              alert('Payment verification failed: Invalid server response. Please contact support with payment ID: ' + response.razorpay_payment_id);
-              return;
-            }
-
-            console.log('verify-payment response:', verifyData);
-
-            if (!verifyRes.ok) {
-              console.error('Verification HTTP error', verifyRes.status, verifyData);
-              const errorMsg = verifyData?.message || 'Payment verification failed.';
-              alert(errorMsg + ' Please contact support with payment ID: ' + response.razorpay_payment_id);
-              return;
-            }
-
+            const verifyData = await verifyResponse.json();
+            
             if (verifyData.success) {
-              if (verifyData.data?.alreadyProcessed) {
-                alert('Payment was already processed. Refreshing event list...');
-              } else {
-                alert('Payment Successful! Your event fee has been paid.');
-              }
+              console.log('Payment verified successfully:', verifyData);
+              alert('Payment Successful! Your event fee has been paid.');
               await loadCoachEvents();
             } else {
-              const errorMsg = verifyData?.message || 'Payment verification failed.';
-              alert(errorMsg + ' Please contact support with payment ID: ' + response.razorpay_payment_id);
+              throw new Error(verifyData.message || 'Payment verification failed');
             }
-          } catch (err) {
-            console.error('Verification request failed:', err);
-            if (err.message.includes('Failed to fetch') || err.message.includes('network')) {
-              alert('Network error during verification. Your payment may have been processed. Please refresh the page and check your event status. If payment was deducted, contact support with payment ID: ' + response.razorpay_payment_id);
-            } else {
-              alert('Payment verification failed due to an error. Please contact support with payment ID: ' + response.razorpay_payment_id);
-            }
+          } catch (verifyError) {
+            console.error('Payment verification error:', verifyError);
+            alert('Payment verification failed. Please contact support.');
           }
         },
         prefill: {
@@ -501,92 +366,27 @@ const CoachDashboard = () => {
           email: dashboardData?.coach?.email || dashboardData?.user?.email || 'coach@example.com',
           contact: dashboardData?.coach?.phone || '9999999999'
         },
-        theme: { color: '#0F9D58' },
+        theme: {
+          color: '#059669'
+        },
         modal: {
           ondismiss: function() {
             console.log('Payment modal closed by user');
-            // Optionally show a message
           }
         }
       };
 
-      console.log('Opening Razorpay checkout with options:', {
-        key: options.key ? `${options.key.substring(0, 10)}...` : 'MISSING',
-        amount: options.amount,
-        currency: options.currency,
-        order_id: options.order_id,
-        description: options.description
-      });
-
-      // Validate Razorpay options before creating instance
-      if (!options.key) {
-        throw new Error('Razorpay key is missing. Please check backend configuration.');
-      }
-      if (!options.order_id) {
-        throw new Error('Razorpay order ID is missing.');
-      }
-      if (!options.amount || options.amount <= 0) {
-        throw new Error('Invalid payment amount.');
-      }
-
-      console.log('Creating Razorpay instance...');
-      let rzp;
-      try {
-        rzp = new window.Razorpay(options);
-        console.log('Razorpay instance created successfully');
-      } catch (rzpError) {
-        console.error('Failed to create Razorpay instance:', rzpError);
-        throw new Error(`Failed to initialize payment gateway: ${rzpError.message}`);
-      }
-      
-      rzp.on('payment.failed', function (response) {
-        console.error('Razorpay payment failed:', response);
-        const errorMsg = response.error?.description || response.error?.reason || 'Payment failed';
-        alert(`Payment failed: ${errorMsg}. Please try again or contact support.`);
-      });
-
-      rzp.on('payment.authorized', function (response) {
-        console.log('Payment authorized:', response);
-        // This is handled in the handler callback
-      });
-
-      console.log('Opening Razorpay modal...');
-      try {
+      // Check if Razorpay script is loaded
+      if (window.Razorpay) {
+        const rzp = new window.Razorpay(options);
         rzp.open();
-        console.log('Razorpay modal opened successfully');
-      } catch (openError) {
-        console.error('Failed to open Razorpay modal:', openError);
-        throw new Error(`Failed to open payment window: ${openError.message}`);
+      } else {
+        throw new Error('Razorpay SDK not loaded. Please refresh and try again.');
       }
-    } catch (error) {
-      console.error('=== Payment Error Caught ===');
-      console.error('Error:', error);
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name,
-        backendUrl: import.meta.env.VITE_BACKEND_URL || window.location.origin,
-        eventId: eventId,
-        tokenExists: !!token
-      });
-      
-      // More specific error messages
-      let errorMessage = 'An unexpected error occurred.';
-      
-      if (error.message) {
-        if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('Failed to fetch')) {
-          errorMessage = 'Network error: Could not connect to server. Please check your internet connection and try again.';
-        } else if (error.message.includes('Razorpay') || error.message.includes('payment gateway')) {
-          errorMessage = `Payment gateway error: ${error.message}`;
-        } else if (error.message.includes('key') || error.message.includes('order_id')) {
-          errorMessage = `Configuration error: ${error.message}. Please contact support.`;
-        } else {
-          errorMessage = `Error: ${error.message}`;
-        }
-      }
-      
-      alert(errorMessage);
-      console.error('=== End Payment Error ===');
+
+    } catch (err) {
+      console.error('Payment error:', err);
+      alert(err.message || 'Payment initialization failed. Please try again.');
     }
   };
 
