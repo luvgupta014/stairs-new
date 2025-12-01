@@ -58,7 +58,7 @@ const allowedOrigins = [
   'http://160.187.22.41:3008',  // Local server
   'https://stairs.astroraag.com',      // Production frontend
   'https://www.stairs.astroraag.com',
-  'http://portal.stairs.org.in'  // Production frontend with www
+  'https://portal.stairs.org.in'  // Production frontend with www
 ];
 
 app.use((req, res, next) => {
