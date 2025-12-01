@@ -173,26 +173,33 @@ const CoachDashboard = () => {
 
       if (response.success) {
         const events = response.data.events || [];
-        // Fetch payment status for each event
+        // Fetch payment status for each event (with error handling)
         const eventsWithPaymentStatus = await Promise.all(
           events.map(async (event) => {
             try {
               const paymentResponse = await getEventPaymentStatus(event.id);
+              // Always return a valid payment status object
               return {
                 ...event,
-                paymentStatus: paymentResponse?.success ? paymentResponse.data : {
-                  paymentStatus: 'UNKNOWN',
-                  paymentCompleted: false
-                }
+                paymentStatus: paymentResponse?.success && paymentResponse.data 
+                  ? paymentResponse.data 
+                  : {
+                      paymentStatus: 'PENDING',
+                      paymentCompleted: false,
+                      totalAmount: 0,
+                      paymentDate: null
+                    }
               };
             } catch (err) {
+              // This should rarely happen since getEventPaymentStatus doesn't throw
               console.error(`Error loading payment status for event ${event.id}:`, err);
-              // Return default payment status instead of null to prevent UI errors
               return {
                 ...event,
                 paymentStatus: {
-                  paymentStatus: 'UNKNOWN',
-                  paymentCompleted: false
+                  paymentStatus: 'PENDING',
+                  paymentCompleted: false,
+                  totalAmount: 0,
+                  paymentDate: null
                 }
               };
             }
@@ -315,12 +322,23 @@ const CoachDashboard = () => {
         body: JSON.stringify({ eventId })
       });
 
+      // Check if response is HTML (error page) before parsing JSON
+      const contentType = createOrderResponse.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await createOrderResponse.text();
+        console.error('Server returned non-JSON response:', text.substring(0, 200));
+        if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+          throw new Error('Server returned an error page. Please check if the backend is running correctly.');
+        }
+        throw new Error('Server returned invalid response format. Please try again.');
+      }
+
       let orderData;
       try {
         orderData = await createOrderResponse.json();
       } catch (parseError) {
         console.error('Failed to parse order response:', parseError);
-        throw new Error('Server returned invalid response. Please try again.');
+        throw new Error('Server returned invalid JSON response. Please try again.');
       }
       
       if (!createOrderResponse.ok || !orderData.success) {

@@ -1019,18 +1019,50 @@ router.get('/event/:eventId/payment-status', authenticate, async (req, res) => {
     }
 
     // Verify the user is the coach of this event
-    if (!event.coach || String(event.coach.userId) !== String(req.user.id)) {
+    // Get coach record for the user
+    const coach = await prisma.coach.findUnique({
+      where: { userId: req.user.id },
+      select: { id: true }
+    });
+
+    // Check authorization: user must be a coach and event must belong to that coach
+    if (!coach || req.user.role !== 'COACH') {
+      console.warn(`⚠️ Authorization failed: User is not a coach`, {
+        eventId: event.id,
+        reqUserRole: req.user.role,
+        hasCoach: !!coach
+      });
+      return res.status(403).json(errorResponse('You are not authorized to view payment status for this event.', 403));
+    }
+
+    if (String(event.coachId) !== String(coach.id)) {
+      console.warn(`⚠️ Authorization failed: Event does not belong to coach`, {
+        eventId: event.id,
+        eventCoachId: event.coachId,
+        coachId: coach.id,
+        reqUserId: req.user.id
+      });
       return res.status(403).json(errorResponse('You are not authorized to view payment status for this event.', 403));
     }
 
     // Check for event fee payment (from Payment table)
+    // coach variable is already defined above from authorization check
     const eventFeePayment = await prisma.payment.findFirst({
       where: {
         userId: req.user.id,
         status: 'SUCCESS',
-        metadata: {
-          contains: eventId
-        }
+        OR: [
+          {
+            metadata: {
+              contains: eventId
+            }
+          },
+          {
+            description: {
+              contains: event.name
+            }
+          }
+        ]
       },
       orderBy: {
         createdAt: 'desc'
@@ -1038,15 +1070,15 @@ router.get('/event/:eventId/payment-status', authenticate, async (req, res) => {
     });
 
     // Check for registration order payments
-    const registrationOrder = await prisma.eventRegistrationOrder.findFirst({
+    const registrationOrder = coach ? await prisma.eventRegistrationOrder.findFirst({
       where: {
         eventId: event.id,
-        coachId: event.coach.id
+        coachId: coach.id
       },
       orderBy: {
         createdAt: 'desc'
       }
-    });
+    }) : null;
 
     // Check for EventPayment records
     const eventPayment = await prisma.eventPayment.findFirst({
