@@ -1460,7 +1460,7 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
       events.map(async (event) => {
         try {
           // Get all registration orders for this event
-          const registrationOrders = await prisma.eventRegistrationOrder.findMany({
+          const registrationOrders = await prisma.eventPayment.findMany({
             where: { eventId: event.id },
             select: {
               totalFeeAmount: true,
