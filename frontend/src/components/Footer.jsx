@@ -1,3 +1,4 @@
+import logo from '../assets/logo.png'
 const Footer = () => {
   return (
     <footer className="bg-gray-800 text-white">
@@ -7,9 +8,9 @@ const Footer = () => {
           <div className="col-span-1 md:col-span-2">
             {/* Logo */}
             <div className="flex items-center mb-4">
-              <img 
-                src="/assets/logo.png"
-                alt="STAIRS Talent Hub Logo" 
+              <img
+                src={logo}
+                alt="STAIRS Talent Hub Logo"
                 className="w-12 h-12 mr-3 object-contain"
               />
               <h3 className="text-lg font-semibold">STAIRS Talent Hub</h3>
@@ -38,7 +39,7 @@ const Footer = () => {
               </a>
             </div>
           </div>
-          
+
           {/* Quick Links */}
           <div>
             <h3 className="text-lg font-semibold mb-4">Quick Links</h3>
