@@ -30,6 +30,7 @@ model User {
   notifications   Notification[]
   otpRecords      OTPRecord[]
   payments        Payment[]
+  eventAssignments EventAssignment[]
 
   @@map("users")
 }
