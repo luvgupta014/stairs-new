@@ -11,7 +11,7 @@ export const getAllUsers = async (params = {}) => {
 // Global payment settings
 export const getGlobalPaymentSettings = async () => {
   try {
-    const response = await api.get('/admin/settings/global-payments');
+    const response = await api.get('/api/admin/settings/global-payments');
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;
@@ -20,7 +20,7 @@ export const getGlobalPaymentSettings = async () => {
 
 export const updateGlobalPaymentSettings = async (payload) => {
   try {
-    const response = await api.put('/admin/settings/global-payments', payload);
+    const response = await api.put('/api/admin/settings/global-payments', payload);
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;
