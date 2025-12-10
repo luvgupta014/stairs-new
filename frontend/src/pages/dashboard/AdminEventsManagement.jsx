@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings } from '../../api';
+import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, updateEventPermissions } from '../../api';
 import ParticipantsModal from '../../components/ParticipantsModal';
 import AdminCertificateIssuance from '../../components/AdminCertificateIssuance';
 
@@ -40,6 +40,19 @@ const AdminEventsManagement = () => {
   const [savingGlobal, setSavingGlobal] = useState(false);
   const [globalMessage, setGlobalMessage] = useState('');
   const [globalError, setGlobalError] = useState('');
+  const [assignmentForm, setAssignmentForm] = useState({ eventId: '', userId: '', role: 'INCHARGE' });
+  const [assignmentMsg, setAssignmentMsg] = useState('');
+  const [assignmentErr, setAssignmentErr] = useState('');
+  const [permissionForm, setPermissionForm] = useState({
+    eventId: '',
+    role: 'INCHARGE',
+    resultUpload: false,
+    studentManagement: false,
+    certificateManagement: false,
+    feeManagement: false
+  });
+  const [permissionMsg, setPermissionMsg] = useState('');
+  const [permissionErr, setPermissionErr] = useState('');
 
   // Load analytics when results tab is opened
   useEffect(() => {
@@ -169,6 +182,55 @@ const AdminEventsManagement = () => {
       setGlobalError(err?.message || 'Failed to save global payment settings.');
     } finally {
       setSavingGlobal(false);
+    }
+  };
+
+  const handleAssignSubmit = async (e) => {
+    e.preventDefault();
+    setAssignmentMsg('');
+    setAssignmentErr('');
+    if (!assignmentForm.eventId || !assignmentForm.userId) {
+      setAssignmentErr('Event ID and User ID are required.');
+      return;
+    }
+    try {
+      const res = await updateEventAssignments(assignmentForm.eventId, [
+        { userId: assignmentForm.userId, role: assignmentForm.role }
+      ]);
+      if (res?.success) {
+        setAssignmentMsg('Assignment saved.');
+      } else {
+        setAssignmentErr(res?.message || 'Failed to save assignment.');
+      }
+    } catch (err) {
+      setAssignmentErr(err?.message || 'Failed to save assignment.');
+    }
+  };
+
+  const handlePermissionSubmit = async (e) => {
+    e.preventDefault();
+    setPermissionMsg('');
+    setPermissionErr('');
+    if (!permissionForm.eventId) {
+      setPermissionErr('Event ID is required.');
+      return;
+    }
+    try {
+      const payload = [{
+        role: permissionForm.role,
+        resultUpload: !!permissionForm.resultUpload,
+        studentManagement: !!permissionForm.studentManagement,
+        certificateManagement: !!permissionForm.certificateManagement,
+        feeManagement: !!permissionForm.feeManagement
+      }];
+      const res = await updateEventPermissions(permissionForm.eventId, payload);
+      if (res?.success) {
+        setPermissionMsg('Permissions saved.');
+      } else {
+        setPermissionErr(res?.message || 'Failed to save permissions.');
+      }
+    } catch (err) {
+      setPermissionErr(err?.message || 'Failed to save permissions.');
     }
   };
 
@@ -1214,6 +1276,136 @@ const AdminEventsManagement = () => {
               {globalError && <span className="text-red-600 text-sm">{globalError}</span>}
             </div>
           </form>
+        </div>
+
+        {/* Assignment and Permissions */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Assignment */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Assign Event to User</h3>
+              <form onSubmit={handleAssignSubmit} className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Event ID</label>
+                  <input
+                    type="text"
+                    value={assignmentForm.eventId}
+                    onChange={(e) => setAssignmentForm(prev => ({ ...prev, eventId: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">User ID</label>
+                  <input
+                    type="text"
+                    value={assignmentForm.userId}
+                    onChange={(e) => setAssignmentForm(prev => ({ ...prev, userId: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                  <select
+                    value={assignmentForm.role}
+                    onChange={(e) => setAssignmentForm(prev => ({ ...prev, role: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="INCHARGE">INCHARGE</option>
+                    <option value="COORDINATOR">COORDINATOR</option>
+                    <option value="TEAM">TEAM</option>
+                  </select>
+                </div>
+                <div className="flex items-center space-x-3 pt-1">
+                  <button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-60"
+                  >
+                    Save Assignment
+                  </button>
+                  {assignmentMsg && <span className="text-green-600 text-sm">{assignmentMsg}</span>}
+                  {assignmentErr && <span className="text-red-600 text-sm">{assignmentErr}</span>}
+                </div>
+              </form>
+            </div>
+
+            {/* Permissions */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Set Permissions</h3>
+              <form onSubmit={handlePermissionSubmit} className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Event ID</label>
+                  <input
+                    type="text"
+                    value={permissionForm.eventId}
+                    onChange={(e) => setPermissionForm(prev => ({ ...prev, eventId: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                  <select
+                    value={permissionForm.role}
+                    onChange={(e) => setPermissionForm(prev => ({ ...prev, role: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="INCHARGE">INCHARGE</option>
+                    <option value="COORDINATOR">COORDINATOR</option>
+                    <option value="TEAM">TEAM</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="inline-flex items-center space-x-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={permissionForm.resultUpload}
+                      onChange={(e) => setPermissionForm(prev => ({ ...prev, resultUpload: e.target.checked }))}
+                      className="h-4 w-4 text-indigo-600"
+                    />
+                    <span>Result Upload</span>
+                  </label>
+                  <label className="inline-flex items-center space-x-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={permissionForm.studentManagement}
+                      onChange={(e) => setPermissionForm(prev => ({ ...prev, studentManagement: e.target.checked }))}
+                      className="h-4 w-4 text-indigo-600"
+                    />
+                    <span>Student Management</span>
+                  </label>
+                  <label className="inline-flex items-center space-x-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={permissionForm.certificateManagement}
+                      onChange={(e) => setPermissionForm(prev => ({ ...prev, certificateManagement: e.target.checked }))}
+                      className="h-4 w-4 text-indigo-600"
+                    />
+                    <span>Certificate Management</span>
+                  </label>
+                  <label className="inline-flex items-center space-x-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={permissionForm.feeManagement}
+                      onChange={(e) => setPermissionForm(prev => ({ ...prev, feeManagement: e.target.checked }))}
+                      className="h-4 w-4 text-indigo-600"
+                    />
+                    <span>Fee Management</span>
+                  </label>
+                </div>
+
+                <div className="flex items-center space-x-3 pt-1">
+                  <button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-60"
+                  >
+                    Save Permissions
+                  </button>
+                  {permissionMsg && <span className="text-green-600 text-sm">{permissionMsg}</span>}
+                  {permissionErr && <span className="text-red-600 text-sm">{permissionErr}</span>}
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
 
         {/* Filters */}

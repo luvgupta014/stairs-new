@@ -27,6 +27,26 @@ export const updateGlobalPaymentSettings = async (payload) => {
   }
 };
 
+// Event assignments (Admin)
+export const updateEventAssignments = async (eventId, assignments) => {
+  try {
+    const response = await api.put(`/api/admin/events/${eventId}/assignments`, { assignments });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Event permissions (Admin)
+export const updateEventPermissions = async (eventId, permissions) => {
+  try {
+    const response = await api.put(`/api/admin/events/${eventId}/permissions`, { permissions });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 // Admin: Get single user details by uniqueId
 export const getUserByUniqueId = async (uniqueId) => {
   try {

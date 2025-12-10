@@ -4903,6 +4903,25 @@ router.put('/events/:eventId/assignments', authenticate, requireAdmin, async (re
       });
     }
 
+    // Send notification/email to assigned users
+    const frontendUrl = process.env.FRONTEND_URL || 'https://portal.stairs.org.in';
+    const eventLink = `${frontendUrl}/events/${eventId}`;
+    for (const a of assignments) {
+      try {
+        const assignedUser = await prisma.user.findUnique({ where: { id: a.userId } });
+        if (assignedUser?.email) {
+          await sendNotificationEmail({
+            to: assignedUser.email,
+            subject: 'You have been assigned to an event',
+            text: `You have been assigned as ${a.role} for event ${event.name}. Visit: ${eventLink}`,
+            html: `<p>You have been assigned as <strong>${a.role}</strong> for event <strong>${event.name}</strong>.</p><p><a href="${eventLink}">Open Event</a></p>`
+          });
+        }
+      } catch (err) {
+        console.error('⚠️ Failed to send assignment email:', err?.message || err);
+      }
+    }
+
     res.json(successResponse({ eventId, assignmentsCount: assignments.length }, 'Assignments updated.'));
   } catch (error) {
     console.error('❌ Update event assignments error:', error);

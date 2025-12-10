@@ -41,6 +41,33 @@ const createTransporter = () => {
 // Create transporter instance
 const transporter = createTransporter();
 
+// Generic email sender
+const sendEmail = async ({ to, subject, text, html }) => {
+  if (!transporter) {
+    console.warn('⚠️ Email service not available - email not sent');
+    return { success: false, error: 'Email service not configured' };
+  }
+  const mailOptions = {
+    from: `"STAIRS Talent Hub" <${process.env.EMAIL_USER}>`,
+    to,
+    subject,
+    text,
+    html
+  };
+  const info = await transporter.sendMail(mailOptions);
+  return { success: true, messageId: info.messageId };
+};
+
+const sendAssignmentEmail = async ({ to, role, eventName, eventLink }) => {
+  const subject = `You have been assigned to event: ${eventName}`;
+  const text = `You have been assigned as ${role} for event ${eventName}. Open: ${eventLink}`;
+  const html = `
+    <p>You have been assigned as <strong>${role}</strong> for event <strong>${eventName}</strong>.</p>
+    <p><a href="${eventLink}">Open Event</a></p>
+  `;
+  return sendEmail({ to, subject, text, html });
+};
+
 /**
  * Send OTP email for registration
  * @param {string} email - Recipient email
@@ -1154,5 +1181,7 @@ module.exports = {
   sendEventModerationEmail,
   sendOrderStatusEmail,
   sendPaymentReceiptEmail,
-  sendEventCompletionEmail
+  sendEventCompletionEmail,
+  sendAssignmentEmail,
+  sendEmail
 };
