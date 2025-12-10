@@ -59,6 +59,10 @@ export const AuthProvider = ({ children }) => {
           case 'ADMIN':
             profileResponse = await api.get('/api/admin/profile');
             break;
+          case 'EVENT_INCHARGE':
+            // No dedicated profile endpoint; trust stored user data
+            profileResponse = { data: { success: true, data: userData.profile || {} } };
+            break;
           default:
             throw new Error('Invalid user role');
         }

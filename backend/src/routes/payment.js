@@ -195,10 +195,27 @@ router.post('/create-order-events', authenticate, async (req, res) => {
     console.log('Creating payment order for event', event.name);
 
     const participantCount = event.currentParticipants || 0;
-    let amountInRupees = 2 * participantCount; // default fallback
 
-    if (event.feeMode === 'EVENT') {
-      amountInRupees = event.eventFee || 0;
+    // Load global settings (single row)
+    const globalSettings = await prisma.globalSettings.findFirst();
+    const perStudentBaseCharge = globalSettings?.perStudentBaseCharge || 0;
+    const defaultEventFee = globalSettings?.defaultEventFee || 0;
+
+    // Automatic fee calculation
+    // GLOBAL: per-student base charge; if no participants, fallback to defaultEventFee
+    // EVENT: use event.eventFee (admin-set) and add coordinatorFee if provided
+    let amountInRupees = 0;
+    if (event.feeMode === 'GLOBAL') {
+      if (participantCount > 0 && perStudentBaseCharge > 0) {
+        amountInRupees = perStudentBaseCharge * participantCount;
+      } else {
+        amountInRupees = defaultEventFee;
+      }
+    } else if (event.feeMode === 'EVENT') {
+      amountInRupees = (event.eventFee || 0) + (event.coordinatorFee || 0);
+    } else {
+      // fallback
+      amountInRupees = 2 * participantCount;
     }
 
     const amount = Math.round(amountInRupees * 100); // in paise

@@ -5013,4 +5013,48 @@ router.put('/events/:eventId/level', authenticate, requireAdmin, async (req, res
   }
 });
 
+/**
+ * Admin: Update global payment settings (single row)
+ */
+router.put('/settings/global-payments', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { perStudentBaseCharge = 0, defaultEventFee = 0 } = req.body;
+
+    const payload = {
+      perStudentBaseCharge: Number(perStudentBaseCharge) || 0,
+      defaultEventFee: Number(defaultEventFee) || 0
+    };
+
+    // Upsert single settings row (first row wins)
+    const existing = await prisma.globalSettings.findFirst();
+    let settings;
+    if (existing) {
+      settings = await prisma.globalSettings.update({
+        where: { id: existing.id },
+        data: payload
+      });
+    } else {
+      settings = await prisma.globalSettings.create({ data: payload });
+    }
+
+    res.json(successResponse(settings, 'Global payment settings updated.'));
+  } catch (error) {
+    console.error('❌ Update global payment settings error:', error);
+    res.status(500).json(errorResponse('Failed to update global payment settings.', 500));
+  }
+});
+
+/**
+ * Admin: Get global payment settings
+ */
+router.get('/settings/global-payments', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const settings = await prisma.globalSettings.findFirst();
+    res.json(successResponse(settings || {}, 'Global payment settings retrieved.'));
+  } catch (error) {
+    console.error('❌ Get global payment settings error:', error);
+    res.status(500).json(errorResponse('Failed to get global payment settings.', 500));
+  }
+});
+
 module.exports = router;

@@ -254,6 +254,8 @@ model Event {
   maxParticipants     Int                 @default(50)
   currentParticipants Int                 @default(0)
   eventFee            Float               @default(0)
+  coordinatorFee      Float               @default(0)
+  eventCategory       String?             // optional custom category for fee calc
   feeMode             EventFeeMode        @default(GLOBAL)
   level               EventLevel          @default(DISTRICT)
   status              EventStatus         @default(PENDING)
@@ -274,6 +276,17 @@ model Event {
   coach               Coach               @relation(fields: [coachId], references: [id], onDelete: Cascade)
 
   @@map("events")
+}
+
+// Global payment settings (single-row table; use the first record)
+model GlobalSettings {
+  id                     String   @id @default(cuid())
+  perStudentBaseCharge   Float    @default(0)   // global per-student base charge
+  defaultEventFee        Float    @default(0)   // default fee when feeMode=GLOBAL and event fee not set
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@map("global_settings")
 }
 
 model EventAssignment {

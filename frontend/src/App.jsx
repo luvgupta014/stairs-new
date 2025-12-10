@@ -26,6 +26,7 @@ import CoachLogin from "./pages/auth/CoachLogin";
 import ClubLogin from "./pages/auth/ClubLogin";
 import InstituteLogin from "./pages/auth/InstituteLogin";
 import AdminLogin from "./pages/auth/AdminLogin";
+import EventInchargeLogin from "./pages/auth/EventInchargeLogin";
 
 // Forgot / Reset Password Pages
 import ForgotPassword from "./pages/auth/ForgotPassword";
@@ -61,6 +62,8 @@ import IssueCertificates from "./pages/IssueCertificates";
 import AdminOrders from "./components/AdminOrders";
 import AdminRevenue from "./pages/AdminRevenue";
 import BrowseCoaches from "./pages/student/BrowseCoaches";
+import EventInchargeDashboard from "./pages/dashboard/EventInchargeDashboard";
+import AdminGlobalPayments from "./pages/dashboard/AdminGlobalPayments";
 
 function App() {
   return (
@@ -76,6 +79,7 @@ function App() {
             <Route path="/login/club" element={<ClubLogin />} />
             <Route path="/login/institute" element={<InstituteLogin />} />
             <Route path="/login/admin" element={<AdminLogin />} />
+            <Route path="/login/incharge" element={<EventInchargeLogin />} />
             
             {/* Registration Routes (no header/footer) */}
             <Route path="/register/student" element={<StudentRegister />} />
@@ -174,6 +178,34 @@ function App() {
                   <main className="flex-grow">
                     <ProtectedRoute role="ADMIN">
                       <AdminDashboard />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/admin/settings/global-payments"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute role="ADMIN">
+                      <AdminGlobalPayments />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/dashboard/event_incharge"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute role="EVENT_INCHARGE">
+                      <EventInchargeDashboard />
                     </ProtectedRoute>
                   </main>
                   <Footer />

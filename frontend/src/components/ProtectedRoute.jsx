@@ -3,7 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Spinner from './Spinner';
 
-const ProtectedRoute = ({ children, role }) => {
+const ProtectedRoute = ({ children, role, allowedRoles }) => {
   const { user, loading, isAuthenticated } = useAuth();
   const location = useLocation();
 
@@ -33,8 +33,10 @@ const ProtectedRoute = ({ children, role }) => {
     return <Navigate to={loginPath} state={{ from: location }} replace />;
   }
 
+  const rolesToCheck = allowedRoles || (role ? [role] : null);
+
   // Check role-based access
-  if (role && user.role !== role) {
+  if (rolesToCheck && !rolesToCheck.includes(user.role)) {
     // Redirect to appropriate dashboard
     const userDashboard = `/dashboard/${user.role.toLowerCase()}`;
     return <Navigate to={userDashboard} replace />;

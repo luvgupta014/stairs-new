@@ -53,6 +53,17 @@ const Landing = () => {
       loginPath: '/login/club',
       registerPath: '/register/club-premium',
       features: ['Member Management', 'Event Organization', 'Community Building', 'Tournament Hosting']
+    },
+    {
+      id: 'incharge',
+      title: 'Event Incharge',
+      description: 'Access and manage events assigned by the Admin',
+      icon: '🛠️',
+      color: 'bg-indigo-500',
+      hoverColor: 'hover:bg-indigo-600',
+      loginPath: '/login/incharge',
+      registerPath: '/login/admin',
+      features: ['Assigned Events', 'Result Upload (if permitted)', 'Certificates (if permitted)', 'Fee Management (if permitted)']
     }
   ];
 

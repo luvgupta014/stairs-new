@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments } from '../../api';
+import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings } from '../../api';
 import ParticipantsModal from '../../components/ParticipantsModal';
 import AdminCertificateIssuance from '../../components/AdminCertificateIssuance';
 
@@ -36,6 +36,10 @@ const AdminEventsManagement = () => {
   const [modalTab, setModalTab] = useState('details'); // 'details', 'certificates'
   const [analytics, setAnalytics] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [globalPaymentSettings, setGlobalPaymentSettings] = useState({ perStudentBaseCharge: '', defaultEventFee: '' });
+  const [savingGlobal, setSavingGlobal] = useState(false);
+  const [globalMessage, setGlobalMessage] = useState('');
+  const [globalError, setGlobalError] = useState('');
 
   // Load analytics when results tab is opened
   useEffect(() => {
@@ -62,6 +66,7 @@ const AdminEventsManagement = () => {
 
   useEffect(() => {
     fetchAllEvents();
+    fetchGlobalSettings();
   }, []);
 
   useEffect(() => {
@@ -95,6 +100,22 @@ const AdminEventsManagement = () => {
     }
   };
 
+  const fetchGlobalSettings = async () => {
+    try {
+      const res = await getGlobalPaymentSettings();
+      if (res?.success) {
+        const data = res.data || {};
+        setGlobalPaymentSettings({
+          perStudentBaseCharge: data.perStudentBaseCharge ?? '',
+          defaultEventFee: data.defaultEventFee ?? ''
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching global payment settings:', err);
+      setGlobalError(err?.message || 'Failed to load global payment settings');
+    }
+  };
+
   const applyFilters = () => {
     let result = [...events];
 
@@ -125,6 +146,30 @@ const AdminEventsManagement = () => {
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleGlobalSettingsSave = async (e) => {
+    e.preventDefault();
+    try {
+      setSavingGlobal(true);
+      setGlobalMessage('');
+      setGlobalError('');
+      const payload = {
+        perStudentBaseCharge: Number(globalPaymentSettings.perStudentBaseCharge) || 0,
+        defaultEventFee: Number(globalPaymentSettings.defaultEventFee) || 0
+      };
+      const res = await updateGlobalPaymentSettings(payload);
+      if (res?.success) {
+        setGlobalMessage('Global payment settings saved.');
+      } else {
+        setGlobalError(res?.message || 'Failed to save global payment settings.');
+      }
+    } catch (err) {
+      console.error('Error saving global payment settings:', err);
+      setGlobalError(err?.message || 'Failed to save global payment settings.');
+    } finally {
+      setSavingGlobal(false);
+    }
   };
 
   const handleModerateEvent = async (eventId, action) => {
@@ -1115,6 +1160,60 @@ const AdminEventsManagement = () => {
               ← Back to Dashboard
             </Link>
           </div>
+        </div>
+
+        {/* Global payment settings quick edit */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Global Payment Settings (Quick)</h3>
+          <form onSubmit={handleGlobalSettingsSave} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Per-Student Base Charge (₹)
+              </label>
+              <input
+                type="number"
+                value={globalPaymentSettings.perStudentBaseCharge}
+                onChange={(e) =>
+                  setGlobalPaymentSettings((prev) => ({
+                    ...prev,
+                    perStudentBaseCharge: e.target.value
+                  }))
+                }
+                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Default Event Fee (₹)
+              </label>
+              <input
+                type="number"
+                value={globalPaymentSettings.defaultEventFee}
+                onChange={(e) =>
+                  setGlobalPaymentSettings((prev) => ({
+                    ...prev,
+                    defaultEventFee: e.target.value
+                  }))
+                }
+                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            <div className="flex items-center space-x-3">
+              <button
+                type="submit"
+                disabled={savingGlobal}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-60"
+              >
+                {savingGlobal ? 'Saving...' : 'Save'}
+              </button>
+              {globalMessage && <span className="text-green-600 text-sm">{globalMessage}</span>}
+              {globalError && <span className="text-red-600 text-sm">{globalError}</span>}
+            </div>
+          </form>
         </div>
 
         {/* Filters */}
