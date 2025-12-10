@@ -1428,30 +1428,158 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
       ];
     }
 
-    const [events, total] = await Promise.all([
-      prisma.event.findMany({
-        where,
-        include: {
-          coach: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  uniqueId: true,
-                  email: true,
-                  phone: true,
-                  role: true
+    // Use select to avoid querying columns that might not exist yet
+    // Try to fetch events - handle missing columns gracefully using raw SQL
+    let events, total;
+    try {
+      [events, total] = await Promise.all([
+        prisma.event.findMany({
+          where,
+          include: {
+            coach: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    uniqueId: true,
+                    email: true,
+                    phone: true,
+                    role: true
+                  }
                 }
               }
             }
+          },
+          skip,
+          take,
+          orderBy: { createdAt: 'desc' }
+        }),
+        prisma.event.count({ where })
+      ]);
+    } catch (dbError) {
+      // If error is about missing columns (P2022), use raw SQL to query only existing columns
+      if (dbError.code === 'P2022' || (dbError.message && dbError.message.includes('does not exist'))) {
+        console.log('⚠️  Missing columns detected, using raw SQL fallback query...');
+        
+        // Build WHERE clause for raw SQL
+        let whereClause = '1=1';
+        const params = [];
+        let paramIndex = 1;
+        
+        if (where.status) {
+          whereClause += ` AND e.status = $${paramIndex}`;
+          params.push(where.status);
+          paramIndex++;
+        }
+        if (where.sport) {
+          whereClause += ` AND e.sport ILIKE $${paramIndex}`;
+          params.push(`%${where.sport}%`);
+          paramIndex++;
+        }
+        if (where.OR && Array.isArray(where.OR) && where.OR.length > 0) {
+          const orConditions = [];
+          where.OR.forEach(condition => {
+            if (condition.name?.contains) {
+              orConditions.push(`e.name ILIKE $${paramIndex}`);
+              params.push(`%${condition.name.contains}%`);
+              paramIndex++;
+            }
+            if (condition.description?.contains) {
+              orConditions.push(`e.description ILIKE $${paramIndex}`);
+              params.push(`%${condition.description.contains}%`);
+              paramIndex++;
+            }
+            if (condition.venue?.contains) {
+              orConditions.push(`e.venue ILIKE $${paramIndex}`);
+              params.push(`%${condition.venue.contains}%`);
+              paramIndex++;
+            }
+            if (condition.city?.contains) {
+              orConditions.push(`e.city ILIKE $${paramIndex}`);
+              params.push(`%${condition.city.contains}%`);
+              paramIndex++;
+            }
+          });
+          if (orConditions.length > 0) {
+            whereClause += ` AND (${orConditions.join(' OR ')})`;
           }
-        },
-        skip,
-        take,
-        orderBy: { createdAt: 'desc' }
-      }),
-      prisma.event.count({ where })
-    ]);
+        }
+        
+        const eventsQuery = `
+          SELECT 
+            e.id, e."uniqueId", e.name, e.description, e.sport, e.venue, e.address,
+            e.city, e.state, e.latitude, e.longitude, e."startDate", e."endDate",
+            e."maxParticipants", e."currentParticipants", e."eventFee", e.status,
+            e."adminNotes", e."createdAt", e."updatedAt", e."coachId",
+            c.id as "coach_id", c.name as "coach_name", c."primarySport" as "coach_primarySport", c.city as "coach_city",
+            u.id as "user_id", u."uniqueId" as "user_uniqueId", u.email as "user_email", u.phone as "user_phone", u.role as "user_role"
+          FROM events e
+          LEFT JOIN coaches c ON e."coachId" = c.id
+          LEFT JOIN users u ON c."userId" = u.id
+          WHERE ${whereClause}
+          ORDER BY e."createdAt" DESC
+          LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+        `;
+        params.push(take, skip);
+        
+        const countQuery = `
+          SELECT COUNT(*) as count
+          FROM events e
+          WHERE ${whereClause}
+        `;
+        
+        const [eventsRaw, totalRaw] = await Promise.all([
+          prisma.$queryRawUnsafe(eventsQuery, ...params),
+          prisma.$queryRawUnsafe(countQuery, ...params.slice(0, -2))
+        ]);
+        
+        total = parseInt(totalRaw[0]?.count || 0);
+        
+        // Transform raw results to match expected format
+        events = eventsRaw.map(row => ({
+          id: row.id,
+          uniqueId: row.uniqueId,
+          name: row.name,
+          description: row.description,
+          sport: row.sport,
+          venue: row.venue,
+          address: row.address,
+          city: row.city,
+          state: row.state,
+          latitude: row.latitude ? parseFloat(row.latitude) : null,
+          longitude: row.longitude ? parseFloat(row.longitude) : null,
+          startDate: row.startDate,
+          endDate: row.endDate,
+          maxParticipants: row.maxParticipants,
+          currentParticipants: row.currentParticipants,
+          eventFee: row.eventFee ? parseFloat(row.eventFee) : 0,
+          status: row.status,
+          adminNotes: row.adminNotes,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          coachId: row.coachId,
+          coordinatorFee: 0, // Default value for missing column
+          eventCategory: null,
+          feeMode: 'GLOBAL',
+          level: 'DISTRICT',
+          coach: row.coach_id ? {
+            id: row.coach_id,
+            name: row.coach_name,
+            primarySport: row.coach_primarySport,
+            city: row.coach_city,
+            user: row.user_id ? {
+              id: row.user_id,
+              uniqueId: row.user_uniqueId,
+              email: row.user_email,
+              phone: row.user_phone,
+              role: row.user_role
+            } : null
+          } : null
+        }));
+      } else {
+        throw dbError;
+      }
+    }
 
     const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
 
@@ -1532,6 +1660,10 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
       currentParticipants: event.currentParticipants,
       registrationFee: event.eventFee,                              // FIXED: Map eventFee to registrationFee for frontend
       eventFee: event.eventFee,
+      coordinatorFee: event.coordinatorFee || 0,
+      feeMode: event.feeMode || 'GLOBAL',
+      level: event.level || 'DISTRICT',
+      eventCategory: event.eventCategory || null,
       status: event.status,
       adminNotes: event.adminNotes,
       createdAt: event.createdAt,
