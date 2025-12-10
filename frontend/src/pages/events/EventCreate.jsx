@@ -205,7 +205,8 @@ const EventCreate = ({ adminMode = false }) => {
     longitude: '',
     startDate: '',
     endDate: '',
-    maxParticipants: ''
+    maxParticipants: '',
+    level: 'DISTRICT'
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -271,7 +272,8 @@ const EventCreate = ({ adminMode = false }) => {
         sport: formData.sports.join(', '),
         startDate: formData.startDate ? formData.startDate + ':00' : '',
         endDate: formData.endDate ? formData.endDate + ':00' : null,
-        maxParticipants: formData.maxParticipants ? parseInt(formData.maxParticipants) : null
+        maxParticipants: formData.maxParticipants ? parseInt(formData.maxParticipants) : null,
+        level: formData.level || 'DISTRICT'
       };
       
       // Remove the sports array since we're sending sport string
@@ -472,6 +474,28 @@ const EventCreate = ({ adminMode = false }) => {
               )}
             </div>
           </div>
+
+        {/* Event Level */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label htmlFor="level" className="block text-sm font-medium text-gray-700 mb-2">
+              Event Level *
+            </label>
+            <select
+              id="level"
+              name="level"
+              value={formData.level}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              required
+            >
+              <option value="DISTRICT">District</option>
+              <option value="STATE">State</option>
+              <option value="NATIONAL">National</option>
+              <option value="SCHOOL">School</option>
+            </select>
+          </div>
+        </div>
 
           <div>
             <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">

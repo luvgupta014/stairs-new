@@ -1248,6 +1248,9 @@ const CoachDashboard = () => {
                               <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-lg text-xs font-medium">
                                 {event.sport}
                               </span>
+                              <span className="px-2 py-1 bg-green-100 text-green-800 rounded-lg text-xs font-medium">
+                                {event.level || 'DISTRICT'}
+                              </span>
                             </div>
 
                             {/* Event ID Display */}

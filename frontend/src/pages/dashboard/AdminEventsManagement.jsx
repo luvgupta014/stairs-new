@@ -57,6 +57,7 @@ const AdminEventsManagement = () => {
   const [userSearch, setUserSearch] = useState('');
   const [userListLimit, setUserListLimit] = useState(200);
   const [assigningEventId, setAssigningEventId] = useState('');
+  const assignmentRef = useRef(null);
 
   // Load analytics when results tab is opened
   useEffect(() => {
@@ -227,6 +228,18 @@ const AdminEventsManagement = () => {
       setAssignmentErr(err?.message || 'Failed to save assignment.');
     } finally {
       setAssigningEventId('');
+    }
+  };
+
+  const handleAssignClick = (eventId) => {
+    setAssignmentForm(prev => ({ ...prev, eventId }));
+    // Scroll to assignment form and focus the event dropdown
+    if (assignmentRef.current) {
+      assignmentRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const selectEl = assignmentRef.current.querySelector('select[name="eventId"]');
+      if (selectEl) {
+        setTimeout(() => selectEl.focus(), 200);
+      }
     }
   };
 
@@ -1230,7 +1243,7 @@ const AdminEventsManagement = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div id="assignment-section" className="bg-white rounded-xl shadow-lg p-6 mb-6">
+        <div id="assignment-section" ref={assignmentRef} className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">All Events Management</h1>
@@ -1324,6 +1337,7 @@ const AdminEventsManagement = () => {
                     value={assignmentForm.eventId}
                     onChange={(e) => setAssignmentForm(prev => ({ ...prev, eventId: e.target.value }))}
                     className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    name="eventId"
                   >
                     <option value="">Select event</option>
                     {events.map(ev => (
@@ -1563,6 +1577,7 @@ const AdminEventsManagement = () => {
                   <tr className="border-b border-gray-200">
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Event</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Sport</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-900">Level</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Coach</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Date</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Location</th>
@@ -1603,6 +1618,11 @@ const AdminEventsManagement = () => {
                       <td className="py-3 px-4">
                         <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
                           {event.sport}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+                          {event.level || 'DISTRICT'}
                         </span>
                       </td>
                       <td className="py-3 px-4">
@@ -1692,10 +1712,7 @@ const AdminEventsManagement = () => {
                             {/* Quick Assign button */}
                             <button
                               type="button"
-                              onClick={() => {
-                                setAssignmentForm(prev => ({ ...prev, eventId: event.id }));
-                                document.getElementById('assignment-section')?.scrollIntoView({ behavior: 'smooth' });
-                              }}
+                              onClick={() => handleAssignClick(event.id)}
                               className="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-indigo-700 transition-colors"
                             >
                               Assign
