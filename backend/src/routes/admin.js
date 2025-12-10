@@ -1411,20 +1411,29 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
 
     console.log('🔍 Fetching events for admin approval...');
 
-    const { skip, take } = getPaginationParams(page, limit);
+    // Validate and sanitize inputs
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10)); // Max 100 per page
+    
+    const { skip, take } = getPaginationParams(pageNum, limitNum);
 
     const where = {};
     
-    // Add filters if provided
-    if (status) where.status = status.toUpperCase();
-    if (sport) where.sport = { contains: sport, mode: 'insensitive' };
+    // Add filters if provided (with validation)
+    if (status && typeof status === 'string') {
+      where.status = status.toUpperCase();
+    }
+    if (sport && typeof sport === 'string') {
+      where.sport = { contains: sport.trim(), mode: 'insensitive' };
+    }
     
-    if (search) {
+    if (search && typeof search === 'string' && search.trim().length > 0) {
+      const searchTerm = search.trim();
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },        // FIXED: name instead of title
-        { description: { contains: search, mode: 'insensitive' } },
-        { venue: { contains: search, mode: 'insensitive' } },       // FIXED: venue instead of location
-        { city: { contains: search, mode: 'insensitive' } }
+        { name: { contains: searchTerm, mode: 'insensitive' } },
+        { description: { contains: searchTerm, mode: 'insensitive' } },
+        { venue: { contains: searchTerm, mode: 'insensitive' } },
+        { city: { contains: searchTerm, mode: 'insensitive' } }
       ];
     }
 
@@ -1528,58 +1537,85 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
           WHERE ${whereClause}
         `;
         
-        const [eventsRaw, totalRaw] = await Promise.all([
-          prisma.$queryRawUnsafe(eventsQuery, ...params),
-          prisma.$queryRawUnsafe(countQuery, ...params.slice(0, -2))
-        ]);
-        
-        total = parseInt(totalRaw[0]?.count || 0);
+        let eventsRaw = [];
+        try {
+          const [eventsRawResult, totalRaw] = await Promise.all([
+            prisma.$queryRawUnsafe(eventsQuery, ...params),
+            prisma.$queryRawUnsafe(countQuery, ...params.slice(0, -2))
+          ]);
+          
+          eventsRaw = eventsRawResult || [];
+          total = parseInt(totalRaw[0]?.count || 0);
+          console.log(`✅ Raw SQL query returned ${eventsRaw.length} events, total: ${total}`);
+        } catch (sqlError) {
+          console.error('❌ Raw SQL query error:', sqlError);
+          // Fallback: return empty array
+          eventsRaw = [];
+          total = 0;
+        }
         
         // Transform raw results to match expected format
-        events = eventsRaw.map(row => ({
-          id: row.id,
-          uniqueId: row.uniqueId,
-          name: row.name,
-          description: row.description,
-          sport: row.sport,
-          venue: row.venue,
-          address: row.address,
-          city: row.city,
-          state: row.state,
-          latitude: row.latitude ? parseFloat(row.latitude) : null,
-          longitude: row.longitude ? parseFloat(row.longitude) : null,
-          startDate: row.startDate,
-          endDate: row.endDate,
-          maxParticipants: row.maxParticipants,
-          currentParticipants: row.currentParticipants,
-          eventFee: row.eventFee ? parseFloat(row.eventFee) : 0,
-          status: row.status,
-          adminNotes: row.adminNotes,
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
-          coachId: row.coachId,
-          coordinatorFee: 0, // Default value for missing column
-          eventCategory: null,
-          feeMode: 'GLOBAL',
-          level: 'DISTRICT',
-          coach: row.coach_id ? {
-            id: row.coach_id,
-            name: row.coach_name,
-            primarySport: row.coach_primarySport,
-            city: row.coach_city,
-            user: row.user_id ? {
-              id: row.user_id,
-              uniqueId: row.user_uniqueId,
-              email: row.user_email,
-              phone: row.user_phone,
-              role: row.user_role
+        if (!eventsRaw || eventsRaw.length === 0) {
+          console.log('⚠️  No events found in raw SQL query');
+          events = [];
+        } else {
+          events = eventsRaw.map(row => ({
+            id: row.id,
+            uniqueId: row.uniqueId,
+            name: row.name,
+            description: row.description,
+            sport: row.sport,
+            venue: row.venue,
+            address: row.address,
+            city: row.city,
+            state: row.state,
+            latitude: row.latitude ? parseFloat(row.latitude) : null,
+            longitude: row.longitude ? parseFloat(row.longitude) : null,
+            startDate: row.startDate,
+            endDate: row.endDate,
+            maxParticipants: row.maxParticipants,
+            currentParticipants: row.currentParticipants,
+            eventFee: row.eventFee ? parseFloat(row.eventFee) : 0,
+            status: row.status,
+            adminNotes: row.adminNotes,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+            coachId: row.coachId,
+            coordinatorFee: 0, // Default value for missing column
+            eventCategory: null,
+            feeMode: 'GLOBAL',
+            level: 'DISTRICT',
+            coach: row.coach_id ? {
+              id: row.coach_id,
+              name: row.coach_name,
+              primarySport: row.coach_primarySport,
+              city: row.coach_city,
+              user: row.user_id ? {
+                id: row.user_id,
+                uniqueId: row.user_uniqueId,
+                email: row.user_email,
+                phone: row.user_phone,
+                role: row.user_role
+              } : null
             } : null
-          } : null
-        }));
+          }));
+        }
       } else {
         throw dbError;
       }
     }
+
+    // Ensure events is always an array and total is a number
+    if (!events || !Array.isArray(events)) {
+      console.log('⚠️  Events is not an array, setting to empty array');
+      events = [];
+    }
+    if (typeof total !== 'number' || isNaN(total)) {
+      console.log('⚠️  Total is not a valid number, setting to 0');
+      total = 0;
+    }
+    
+    console.log(`✅ Final events count: ${events.length}, total: ${total}`);
 
     const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
 
@@ -1587,21 +1623,22 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
     const eventsWithPaymentStatus = await Promise.all(
       events.map(async (event) => {
         try {
-          // Get all registration orders for this event
-          const registrationOrders = await prisma.eventPayment.findMany({
+          // Get all registration orders for this event (EventRegistrationOrder model)
+          const registrationOrders = await prisma.eventRegistrationOrder.findMany({
             where: { eventId: event.id },
             select: {
-              amount: true,
-              status: true,
+              totalFeeAmount: true,
+              paymentStatus: true,
+              totalStudents: true,
               createdAt: true
             }
-          });
+          }).catch(() => []); // Fallback to empty array on error
 
           // Calculate payment summary
-          const totalAmount = registrationOrders.reduce((sum, order) => sum + (order.totalFeeAmount || 0), 0);
+          const totalAmount = registrationOrders.reduce((sum, order) => sum + (parseFloat(order.totalFeeAmount) || 0), 0);
           const paidAmount = registrationOrders
             .filter(order => order.paymentStatus === 'PAID' || order.paymentStatus === 'SUCCESS')
-            .reduce((sum, order) => sum + (order.totalFeeAmount || 0), 0);
+            .reduce((sum, order) => sum + (parseFloat(order.totalFeeAmount) || 0), 0);
           
           let paymentStatus = 'NO_PAYMENTS';
           if (totalAmount > 0) {
@@ -1642,7 +1679,14 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
     );
 
     // Format events for admin view with correct field names, including payment summary
-    const formattedEvents = eventsWithPaymentStatus.map(event => ({
+    // Ensure all events have required fields with safe defaults
+    const formattedEvents = eventsWithPaymentStatus.map(event => {
+      // Validate event has required fields
+      if (!event || !event.id) {
+        console.warn('⚠️  Invalid event object found, skipping:', event);
+        return null;
+      }
+      return {
       id: event.id,
       uniqueId: event.uniqueId, // Custom event UID
       title: event.name,                                            // FIXED: Map name to title for frontend
@@ -1685,18 +1729,59 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
         name: event.coach?.name,
         primarySport: event.coach?.primarySport,
         city: event.coach?.city,
-        user: event.coach?.user // Include user object with uniqueId, email, phone
+        user: event.coach?.user || null // Include user object with uniqueId, email, phone
       }
-    }));
+    };
+    }).filter(event => event !== null); // Remove any null entries
 
-    res.json(successResponse({
-      events: formattedEvents,
-      pagination
-    }, 'Events retrieved successfully.'));
+    // Ensure response is always valid
+    const responseData = {
+      events: Array.isArray(formattedEvents) ? formattedEvents : [],
+      pagination: pagination || {
+        page: pageNum,
+        limit: limitNum,
+        total: 0,
+        totalPages: 0,
+        hasNext: false,
+        hasPrev: false
+      }
+    };
+
+    res.json(successResponse(responseData, 'Events retrieved successfully.'));
 
   } catch (error) {
     console.error('❌ Get events error:', error);
-    res.status(500).json(errorResponse('Failed to retrieve events.', 500));
+    console.error('Error details:', {
+      code: error.code,
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+    
+    // Always return a valid response, even on error
+    const errorResponseData = {
+      events: [],
+      pagination: {
+        page: parseInt(page) || 1,
+        limit: parseInt(limit) || 10,
+        total: 0,
+        totalPages: 0,
+        hasNext: false,
+        hasPrev: false
+      }
+    };
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve events. Please try again or contact support.',
+      data: errorResponseData,
+      statusCode: 500,
+      ...(process.env.NODE_ENV === 'development' && {
+        error: {
+          message: error.message,
+          code: error.code
+        }
+      })
+    });
   }
 });
 
