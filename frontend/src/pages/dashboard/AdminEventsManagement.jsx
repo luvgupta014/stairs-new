@@ -10,6 +10,7 @@ const AdminEventsManagement = () => {
   const [events, setEvents] = useState([]);
   const [filteredEvents, setFilteredEvents] = useState([]);
   const [moderatingEventId, setModeratingEventId] = useState(null);
+  const [error, setError] = useState(null);
   
   // Initialize filters from URL query parameters
   const getInitialFilters = () => {
@@ -106,14 +107,20 @@ const AdminEventsManagement = () => {
   const fetchAllEvents = async () => {
     try {
       setLoading(true);
+      setError(null);
       const response = await getAdminEvents();
-      if (response.success) {
+      if (response && response.success) {
         // If backend already includes payment summary on events, use it.
         // Otherwise we'll lazy-load payments in the modal.
-        setEvents(response.data.events || []);
+        setEvents(response.data?.events || response.data || []);
+      } else {
+        throw new Error(response?.message || 'Failed to fetch events');
       }
     } catch (error) {
       console.error('Error fetching events:', error);
+      const errorMessage = error?.message || error?.response?.data?.message || 'Failed to load events. Please try again.';
+      setError(errorMessage);
+      setEvents([]); // Clear events on error
     } finally {
       setLoading(false);
     }
@@ -1565,7 +1572,21 @@ const AdminEventsManagement = () => {
 
         {/* Events Table */}
         <div className="bg-white rounded-xl shadow-lg p-6">
-          {loading ? (
+          {error ? (
+            <div className="text-center py-12">
+              <div className="bg-red-50 border-2 border-red-300 rounded-lg p-6 max-w-md mx-auto">
+                <div className="text-red-600 text-4xl mb-4">⚠️</div>
+                <h3 className="text-lg font-semibold text-red-900 mb-2">Error Loading Events</h3>
+                <p className="text-red-700 mb-4">{error}</p>
+                <button
+                  onClick={fetchAllEvents}
+                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Try Again
+                </button>
+              </div>
+            </div>
+          ) : loading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
               <p className="mt-4 text-gray-600">Loading events...</p>
