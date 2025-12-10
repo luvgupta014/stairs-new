@@ -4,7 +4,7 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const { getPlansForUserType, getUserTypeDisplayName } = require('../config/paymentPlans');
 const { successResponse, errorResponse } = require('../utils/helpers');
-const { authenticate, requireCoach, requireInstitute, requireClub, requireStudent } = require('../utils/authMiddleware');
+const { authenticate, requireCoach, requireInstitute, requireClub, requireStudent, checkEventPermission } = require('../utils/authMiddleware');
 const { createSubscriptionInvoice } = require('../services/invoiceService');
 
 const router = express.Router();
@@ -177,24 +177,30 @@ router.post('/create-order-events', authenticate, async (req, res) => {
       return res.status(404).json(errorResponse('Event not found.', 404));
     }
 
-    // Verify the user is the coach of this event
-    // event.coachId is the Coach table ID, not User ID
-    // We need to check if the coach's userId matches req.user.id
-    if (!event.coach || String(event.coach.userId) !== String(req.user.id)) {
-      console.warn(`⚠️ Authorization check failed:`, {
-        eventId: event.id,
-        eventCoachId: event.coachId,
-        coachUserId: event.coach?.userId,
-        reqUserId: req.user.id,
-        userRole: req.user.role
-      });
-      return res.status(403).json(errorResponse('You are not authorized to create payment for this event.', 403));
+    // Permission check (admin, coach owner, or assigned with feeManagement)
+    const hasPermission = await checkEventPermission({
+      user: req.user,
+      eventId: event.id,
+      permissionKey: 'feeManagement'
+    });
+    if (!hasPermission) {
+      return res.status(403).json(errorResponse('Access denied. Fee management not permitted for this event.', 403));
+    }
+
+    // Fee mode guard
+    if (event.feeMode === 'DISABLED') {
+      return res.status(400).json(errorResponse('Payments are disabled for this event.', 400));
     }
 
     console.log('Creating payment order for event', event.name);
 
     const participantCount = event.currentParticipants || 0;
-    const amountInRupees = 2 * participantCount;
+    let amountInRupees = 2 * participantCount; // default fallback
+
+    if (event.feeMode === 'EVENT') {
+      amountInRupees = event.eventFee || 0;
+    }
+
     const amount = Math.round(amountInRupees * 100); // in paise
 
     // Edge case: Zero amount payment

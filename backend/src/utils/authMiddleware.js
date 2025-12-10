@@ -162,6 +162,18 @@ const requireCoach = async (req, res, next) => {
   }
 };
 
+// Event Incharge-specific middleware (role-only, no separate profile)
+const requireEventIncharge = (req, res, next) => {
+  try {
+    if (!req.user || req.user.role !== 'EVENT_INCHARGE') {
+      return res.status(403).json(errorResponse('Access denied. Event Incharge role required.', 403));
+    }
+    next();
+  } catch (error) {
+    return res.status(500).json(errorResponse('Authorization error.', 500));
+  }
+};
+
 // Institute-specific middleware
 const requireInstitute = async (req, res, next) => {
   try {
@@ -325,6 +337,55 @@ const requireRole = (allowedRoles) => {
 };
 
 /**
+ * Check per-event permission for assigned roles.
+ * Grants access if:
+ *  - Admin
+ *  - Coach who owns the event
+ *  - Assigned user (INCHARGE/COORDINATOR/TEAM) with permission flag
+ */
+const checkEventPermission = async ({ user, eventId, permissionKey }) => {
+  if (!user || !eventId) {
+    throw new Error('Missing user or eventId for permission check');
+  }
+
+  // Admin bypass
+  if (user.role === 'ADMIN') return true;
+
+  // Coach owning the event bypass
+  if (user.role === 'COACH') {
+    const owns = await prisma.event.findFirst({
+      where: { id: eventId, coachId: user.coachProfile?.id },
+      select: { id: true }
+    });
+    if (owns) return true;
+  }
+
+  // Assigned roles check
+  const assignments = await prisma.eventAssignment.findMany({
+    where: { eventId, userId: user.id },
+    select: { role: true }
+  });
+
+  if (!assignments || assignments.length === 0) return false;
+
+  const roles = assignments.map(a => a.role);
+  const perms = await prisma.eventPermission.findMany({
+    where: { eventId, role: { in: roles } },
+    select: {
+      role: true,
+      resultUpload: true,
+      studentManagement: true,
+      certificateManagement: true,
+      feeManagement: true
+    }
+  });
+
+  if (!perms || perms.length === 0) return false;
+
+  return perms.some(p => !!p[permissionKey]);
+};
+
+/**
  * Verify JWT Token
  * @param {string} token - JWT token to verify
  * @returns {Object} Decoded token payload
@@ -342,6 +403,7 @@ module.exports = {
   authorize,
   requireStudent,
   requireCoach,
+  requireEventIncharge,
   requireInstitute,
   requireClub,
   requireAdmin,
@@ -350,5 +412,6 @@ module.exports = {
   optionalAuth,
   authenticateToken,
   generateToken,
-  verifyToken
+  verifyToken,
+  checkEventPermission
 };

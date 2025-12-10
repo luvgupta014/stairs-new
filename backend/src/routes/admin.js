@@ -4866,4 +4866,151 @@ router.put('/orders/:orderId/price', authenticate, requireAdmin, async (req, res
   }
 });
 
+/**
+ * Admin: Assign event to incharge / coordinator / team
+ */
+router.put('/events/:eventId/assignments', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { assignments = [] } = req.body; // [{ userId, role }]
+
+    if (!Array.isArray(assignments)) {
+      return res.status(400).json(errorResponse('assignments must be an array', 400));
+    }
+
+    const validRoles = ['INCHARGE', 'COORDINATOR', 'TEAM'];
+
+    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    for (const a of assignments) {
+      if (!a.userId || !a.role || !validRoles.includes(a.role)) {
+        return res.status(400).json(errorResponse('Each assignment needs userId and valid role.', 400));
+      }
+    }
+
+    await prisma.eventAssignment.deleteMany({ where: { eventId } });
+    if (assignments.length > 0) {
+      await prisma.eventAssignment.createMany({
+        data: assignments.map(a => ({
+          eventId,
+          userId: a.userId,
+          role: a.role
+        })),
+        skipDuplicates: true
+      });
+    }
+
+    res.json(successResponse({ eventId, assignmentsCount: assignments.length }, 'Assignments updated.'));
+  } catch (error) {
+    console.error('❌ Update event assignments error:', error);
+    res.status(500).json(errorResponse('Failed to update assignments.', 500));
+  }
+});
+
+/**
+ * Admin: Set per-event permissions by role
+ */
+router.put('/events/:eventId/permissions', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { permissions = [] } = req.body; // [{ role, resultUpload, studentManagement, certificateManagement, feeManagement }]
+
+    if (!Array.isArray(permissions)) {
+      return res.status(400).json(errorResponse('permissions must be an array', 400));
+    }
+
+    const validRoles = ['INCHARGE', 'COORDINATOR', 'TEAM'];
+
+    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    for (const p of permissions) {
+      if (!p.role || !validRoles.includes(p.role)) {
+        return res.status(400).json(errorResponse('Each permission entry needs a valid role.', 400));
+      }
+    }
+
+    await prisma.eventPermission.deleteMany({ where: { eventId } });
+    if (permissions.length > 0) {
+      await prisma.eventPermission.createMany({
+        data: permissions.map(p => ({
+          eventId,
+          role: p.role,
+          resultUpload: !!p.resultUpload,
+          studentManagement: !!p.studentManagement,
+          certificateManagement: !!p.certificateManagement,
+          feeManagement: !!p.feeManagement
+        }))
+      });
+    }
+
+    res.json(successResponse({ eventId, permissionsCount: permissions.length }, 'Permissions updated.'));
+  } catch (error) {
+    console.error('❌ Update event permissions error:', error);
+    res.status(500).json(errorResponse('Failed to update permissions.', 500));
+  }
+});
+
+/**
+ * Admin: Set fee mode and event fee
+ */
+router.put('/events/:eventId/fees', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { feeMode, eventFee } = req.body;
+    const validModes = ['GLOBAL', 'EVENT', 'DISABLED'];
+
+    if (!feeMode || !validModes.includes(feeMode)) {
+      return res.status(400).json(errorResponse('feeMode must be one of GLOBAL, EVENT, DISABLED.', 400));
+    }
+
+    if (feeMode === 'EVENT' && (eventFee === undefined || eventFee === null || Number.isNaN(Number(eventFee)))) {
+      return res.status(400).json(errorResponse('eventFee is required when feeMode is EVENT.', 400));
+    }
+
+    const updated = await prisma.event.update({
+      where: { id: eventId },
+      data: {
+        feeMode,
+        eventFee: feeMode === 'EVENT' ? Number(eventFee) : 0
+      }
+    });
+
+    res.json(successResponse(updated, 'Event fee mode updated.'));
+  } catch (error) {
+    console.error('❌ Update event fees error:', error);
+    res.status(500).json(errorResponse('Failed to update event fees.', 500));
+  }
+});
+
+/**
+ * Admin: Set event level (District/State/National/School)
+ */
+router.put('/events/:eventId/level', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { level } = req.body;
+    const validLevels = ['DISTRICT', 'STATE', 'NATIONAL', 'SCHOOL'];
+
+    if (!level || !validLevels.includes(level)) {
+      return res.status(400).json(errorResponse('level must be one of DISTRICT, STATE, NATIONAL, SCHOOL.', 400));
+    }
+
+    const updated = await prisma.event.update({
+      where: { id: eventId },
+      data: { level }
+    });
+
+    res.json(successResponse(updated, 'Event level updated.'));
+  } catch (error) {
+    console.error('❌ Update event level error:', error);
+    res.status(500).json(errorResponse('Failed to update event level.', 500));
+  }
+});
+
 module.exports = router;

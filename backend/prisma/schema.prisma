@@ -253,6 +253,8 @@ model Event {
   maxParticipants     Int                 @default(50)
   currentParticipants Int                 @default(0)
   eventFee            Float               @default(0)
+  feeMode             EventFeeMode        @default(GLOBAL)
+  level               EventLevel          @default(DISTRICT)
   status              EventStatus         @default(PENDING)
   adminNotes          String?
   createdAt           DateTime            @default(now())
@@ -266,9 +268,40 @@ model Event {
   resultFiles         EventResultFile[]
   registrationOrders  EventRegistrationOrder[]
   registrationItems   EventRegistrationOrderItem[]
+  assignments         EventAssignment[]
+  permissions         EventPermission[]
   coach               Coach               @relation(fields: [coachId], references: [id], onDelete: Cascade)
 
   @@map("events")
+}
+
+model EventAssignment {
+  id        String                @id @default(cuid())
+  eventId   String
+  userId    String
+  role      EventAssignmentRole
+  createdAt DateTime              @default(now())
+  event     Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId, role])
+  @@map("event_assignments")
+}
+
+model EventPermission {
+  id                   String                @id @default(cuid())
+  eventId              String
+  role                 EventAssignmentRole
+  resultUpload         Boolean               @default(false)
+  studentManagement    Boolean               @default(false)
+  certificateManagement Boolean              @default(false)
+  feeManagement        Boolean               @default(false)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  event                Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, role])
+  @@map("event_permissions")
 }
 
 model EventRegistration {
@@ -460,6 +493,7 @@ enum UserRole {
   INSTITUTE
   CLUB
   ADMIN
+  EVENT_INCHARGE
 }
 
 enum OTPType {
@@ -517,6 +551,19 @@ enum EventStatus {
   READY_FOR_NEXT_REGISTRATION
 }
 
+enum EventLevel {
+  DISTRICT
+  STATE
+  NATIONAL
+  SCHOOL
+}
+
+enum EventFeeMode {
+  GLOBAL
+  EVENT
+  DISABLED
+}
+
 enum RegistrationStatus {
   PENDING
   REGISTERED
@@ -559,4 +606,10 @@ enum NotificationType {
   PAYMENT_RECEIVED
   PAYMENT_FAILED
   GENERAL
+}
+
+enum EventAssignmentRole {
+  INCHARGE
+  COORDINATOR
+  TEAM
 }
