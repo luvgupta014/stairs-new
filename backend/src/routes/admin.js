@@ -9,7 +9,7 @@ const {
   getPaginationMeta,
   hashPassword
 } = require('../utils/helpers');
-const { sendEventModerationEmail, sendOrderStatusEmail, sendEventCompletionEmail } = require('../utils/emailService');
+const { sendEventModerationEmail, sendOrderStatusEmail, sendEventCompletionEmail, sendAssignmentEmail } = require('../utils/emailService');
 const EventService = require('../services/eventService');
 const { generateEventUID } = require('../utils/uidGenerator');
 
@@ -4910,11 +4910,11 @@ router.put('/events/:eventId/assignments', authenticate, requireAdmin, async (re
       try {
         const assignedUser = await prisma.user.findUnique({ where: { id: a.userId } });
         if (assignedUser?.email) {
-          await sendNotificationEmail({
+          await sendAssignmentEmail({
             to: assignedUser.email,
-            subject: 'You have been assigned to an event',
-            text: `You have been assigned as ${a.role} for event ${event.name}. Visit: ${eventLink}`,
-            html: `<p>You have been assigned as <strong>${a.role}</strong> for event <strong>${event.name}</strong>.</p><p><a href="${eventLink}">Open Event</a></p>`
+            role: a.role,
+            eventName: event.name,
+            eventLink
           });
         }
       } catch (err) {

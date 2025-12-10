@@ -235,7 +235,7 @@ const Header = () => {
           {/* Auth Actions */}
           <div className="flex items-center space-x-4">
             {isLoginPage ? (
-              <div className="flex space-x-2">
+              <div className="flex space-x-2 flex-wrap">
                 <Link
                   to="/login/student"
                   className={`px-3 py-2 rounded-md text-sm font-medium ${
@@ -275,6 +275,26 @@ const Header = () => {
                   }`}
                 >
                   Institute
+                </Link>
+                <Link
+                  to="/login/admin"
+                  className={`px-3 py-2 rounded-md text-sm font-medium ${
+                    location.pathname === '/login/admin'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Admin
+                </Link>
+                <Link
+                  to="/login/incharge"
+                  className={`px-3 py-2 rounded-md text-sm font-medium ${
+                    location.pathname === '/login/incharge'
+                      ? 'bg-indigo-100 text-indigo-700'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Incharge
                 </Link>
               </div>
             ) : isRegisterPage ? (
@@ -468,6 +488,21 @@ const Header = () => {
                   className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md text-sm font-medium"
                 >
                   Register
+                </Link>
+              </div>
+            ) : (
+              <div className="flex space-x-2">
+                <Link
+                  to="/login/admin"
+                  className="px-3 py-2 rounded-md text-sm font-medium text-blue-600 border border-blue-600 hover:bg-blue-50"
+                >
+                  Admin Login
+                </Link>
+                <Link
+                  to="/login/incharge"
+                  className="px-3 py-2 rounded-md text-sm font-medium text-indigo-600 border border-indigo-600 hover:bg-indigo-50"
+                >
+                  Incharge Login
                 </Link>
               </div>
             )}

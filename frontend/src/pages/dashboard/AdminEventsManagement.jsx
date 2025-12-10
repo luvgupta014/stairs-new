@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, updateEventPermissions } from '../../api';
+import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, updateEventPermissions, getAllUsers } from '../../api';
 import ParticipantsModal from '../../components/ParticipantsModal';
 import AdminCertificateIssuance from '../../components/AdminCertificateIssuance';
 
@@ -53,6 +53,10 @@ const AdminEventsManagement = () => {
   });
   const [permissionMsg, setPermissionMsg] = useState('');
   const [permissionErr, setPermissionErr] = useState('');
+  const [allUsers, setAllUsers] = useState([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [userListLimit, setUserListLimit] = useState(200);
+  const [assigningEventId, setAssigningEventId] = useState('');
 
   // Load analytics when results tab is opened
   useEffect(() => {
@@ -80,6 +84,7 @@ const AdminEventsManagement = () => {
   useEffect(() => {
     fetchAllEvents();
     fetchGlobalSettings();
+    fetchAllUsers();
   }, []);
 
   useEffect(() => {
@@ -126,6 +131,21 @@ const AdminEventsManagement = () => {
     } catch (err) {
       console.error('Error fetching global payment settings:', err);
       setGlobalError(err?.message || 'Failed to load global payment settings');
+    }
+  };
+
+  const fetchAllUsers = async () => {
+    try {
+      const res = await getAllUsers({ page: 1, limit: userListLimit });
+      if (res?.success) {
+        setAllUsers(res.data.users || []);
+      }
+    } catch (err) {
+      console.error('Error fetching users for assignment:', err);
+  useEffect(() => {
+    fetchAllUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userListLimit]);
     }
   };
 
@@ -194,6 +214,7 @@ const AdminEventsManagement = () => {
       return;
     }
     try {
+      setAssigningEventId(assignmentForm.eventId);
       const res = await updateEventAssignments(assignmentForm.eventId, [
         { userId: assignmentForm.userId, role: assignmentForm.role }
       ]);
@@ -204,6 +225,8 @@ const AdminEventsManagement = () => {
       }
     } catch (err) {
       setAssignmentErr(err?.message || 'Failed to save assignment.');
+    } finally {
+      setAssigningEventId('');
     }
   };
 
@@ -1207,7 +1230,7 @@ const AdminEventsManagement = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+        <div id="assignment-section" className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">All Events Management</h1>
@@ -1227,7 +1250,7 @@ const AdminEventsManagement = () => {
         {/* Global payment settings quick edit */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Global Payment Settings (Quick)</h3>
-          <form onSubmit={handleGlobalSettingsSave} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <form onSubmit={handleGlobalSettingsSave} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Per-Student Base Charge (₹)
@@ -1244,11 +1267,12 @@ const AdminEventsManagement = () => {
                 className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 min="0"
                 step="0.01"
+                required
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Default Event Fee (₹)
+                Default Event Fee (₹) — fallback
               </label>
               <input
                 type="number"
@@ -1262,6 +1286,7 @@ const AdminEventsManagement = () => {
                 className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 min="0"
                 step="0.01"
+                required
               />
             </div>
             <div className="flex items-center space-x-3">
@@ -1275,6 +1300,14 @@ const AdminEventsManagement = () => {
               {globalMessage && <span className="text-green-600 text-sm">{globalMessage}</span>}
               {globalError && <span className="text-red-600 text-sm">{globalError}</span>}
             </div>
+            <div className="text-right">
+              <Link
+                to="/admin/settings/global-payments"
+                className="inline-flex items-center text-sm text-indigo-700 hover:text-indigo-900 underline"
+              >
+                Full settings
+              </Link>
+            </div>
           </form>
         </div>
 
@@ -1286,22 +1319,62 @@ const AdminEventsManagement = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-3">Assign Event to User</h3>
               <form onSubmit={handleAssignSubmit} className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Event ID</label>
-                  <input
-                    type="text"
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Event</label>
+                  <select
                     value={assignmentForm.eventId}
                     onChange={(e) => setAssignmentForm(prev => ({ ...prev, eventId: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Select event</option>
+                    {events.map(ev => (
+                      <option key={ev.id} value={ev.id}>
+                        {ev.name} ({ev.sport}) — {ev.city}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">User ID</label>
-                  <input
-                    type="text"
-                    value={assignmentForm.userId}
-                    onChange={(e) => setAssignmentForm(prev => ({ ...prev, userId: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">User</label>
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="Search user by name/email/phone"
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                    <select
+                      value={assignmentForm.userId}
+                      onChange={(e) => setAssignmentForm(prev => ({ ...prev, userId: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">Select user</option>
+                      {allUsers
+                        .filter(u => {
+                          if (!userSearch.trim()) return true;
+                          const term = userSearch.toLowerCase();
+                          return (
+                            (u.name || '').toLowerCase().includes(term) ||
+                            (u.email || '').toLowerCase().includes(term) ||
+                            (u.phone || '').toLowerCase().includes(term)
+                          );
+                        })
+                        .map(u => (
+                          <option key={u.id} value={u.id}>
+                            {u.name || u.email || u.phone} ({u.role})
+                          </option>
+                        ))}
+                    </select>
+                    {allUsers.length >= userListLimit && (
+                      <button
+                        type="button"
+                        onClick={() => setUserListLimit(prev => prev + 200)}
+                        className="text-xs text-indigo-600 hover:text-indigo-800"
+                      >
+                        Load more users
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
@@ -1320,7 +1393,7 @@ const AdminEventsManagement = () => {
                     type="submit"
                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-60"
                   >
-                    Save Assignment
+                    {assigningEventId === assignmentForm.eventId ? 'Saving...' : 'Save Assignment'}
                   </button>
                   {assignmentMsg && <span className="text-green-600 text-sm">{assignmentMsg}</span>}
                   {assignmentErr && <span className="text-red-600 text-sm">{assignmentErr}</span>}
@@ -1575,8 +1648,8 @@ const AdminEventsManagement = () => {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex flex-col space-y-2">
-                          {/* Moderation Actions (keeps existing behavior) */}
-                          <div className="flex space-x-1">
+                          {/* Moderation / Assign Actions */}
+                          <div className="flex space-x-1 flex-wrap">
                             {event.status === 'PENDING' && (
                               <>
                                 <button
@@ -1615,6 +1688,18 @@ const AdminEventsManagement = () => {
                                 Restart
                               </button>
                             )}
+
+                            {/* Quick Assign button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAssignmentForm(prev => ({ ...prev, eventId: event.id }));
+                                document.getElementById('assignment-section')?.scrollIntoView({ behavior: 'smooth' });
+                              }}
+                              className="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-indigo-700 transition-colors"
+                            >
+                              Assign
+                            </button>
                           </div>
 
                           {/* Certificate Action - Only show when event has ended */}
