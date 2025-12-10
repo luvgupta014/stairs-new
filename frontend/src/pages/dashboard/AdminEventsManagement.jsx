@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, updateEventPermissions, getAllUsers } from '../../api';
 import ParticipantsModal from '../../components/ParticipantsModal';
@@ -108,16 +108,29 @@ const AdminEventsManagement = () => {
     try {
       setLoading(true);
       setError(null);
+      console.log('🔄 Fetching admin events...');
       const response = await getAdminEvents();
+      console.log('📦 Admin events API response:', response);
+      
       if (response && response.success) {
-        // If backend already includes payment summary on events, use it.
-        // Otherwise we'll lazy-load payments in the modal.
-        setEvents(response.data?.events || response.data || []);
+        // Handle different response formats
+        const eventsData = response.data?.events || response.data || [];
+        console.log(`✅ Received ${eventsData.length} events`);
+        
+        if (Array.isArray(eventsData)) {
+          setEvents(eventsData);
+        } else {
+          console.warn('⚠️  Events data is not an array:', eventsData);
+          setEvents([]);
+          setError('Invalid response format from server');
+        }
       } else {
-        throw new Error(response?.message || 'Failed to fetch events');
+        const errorMsg = response?.message || 'Failed to fetch events';
+        console.error('❌ API returned error:', errorMsg);
+        throw new Error(errorMsg);
       }
     } catch (error) {
-      console.error('Error fetching events:', error);
+      console.error('❌ Error fetching events:', error);
       const errorMessage = error?.message || error?.response?.data?.message || 'Failed to load events. Please try again.';
       setError(errorMessage);
       setEvents([]); // Clear events on error
@@ -150,12 +163,13 @@ const AdminEventsManagement = () => {
       }
     } catch (err) {
       console.error('Error fetching users for assignment:', err);
+    }
+  };
+
   useEffect(() => {
     fetchAllUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userListLimit]);
-    }
-  };
 
   const applyFilters = () => {
     let result = [...events];
