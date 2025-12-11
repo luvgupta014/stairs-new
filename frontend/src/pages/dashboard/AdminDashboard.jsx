@@ -660,15 +660,24 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">Events Management</h3>
-              <p className="text-gray-600">View and manage all events, issue certificates</p>
+              <p className="text-gray-600">View and manage all events, issue certificates, assign events, and set permissions</p>
             </div>
-            <Link
-              to="/admin/events"
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-md flex items-center space-x-2"
-            >
-              <span>📅</span>
-              <span>All Events</span>
-            </Link>
+            <div className="flex items-center space-x-3">
+              <Link
+                to="/admin/events"
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-md flex items-center space-x-2"
+              >
+                <span>📅</span>
+                <span>All Events</span>
+              </Link>
+              <Link
+                to="/admin/settings/global-payments"
+                className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700 transition-colors shadow-md flex items-center space-x-2"
+              >
+                <span>💰</span>
+                <span>Payment Settings</span>
+              </Link>
+            </div>
           </div>
         </div>
 

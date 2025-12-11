@@ -27,10 +27,49 @@ export const updateGlobalPaymentSettings = async (payload) => {
   }
 };
 
-// Event assignments (Admin)
-export const updateEventAssignments = async (eventId, assignments) => {
+// Get all events with fee information
+export const getEventsFeesOverview = async () => {
   try {
-    const response = await api.put(`/api/admin/events/${eventId}/assignments`, { assignments });
+    const response = await api.get('/api/admin/events/fees-overview');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Update individual event fee
+export const updateEventFee = async (eventId, payload) => {
+  try {
+    const response = await api.put(`/api/admin/events/${eventId}/fee`, payload);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Event assignments (Admin)
+export const getEventAssignments = async (eventId) => {
+  try {
+    const response = await api.get(`/api/admin/events/${eventId}/assignments`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const updateEventAssignments = async (eventId, assignments, mode = 'add') => {
+  try {
+    const response = await api.put(`/api/admin/events/${eventId}/assignments`, { assignments, mode });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Get user's assigned events
+export const getMyAssignedEvents = async () => {
+  try {
+    const response = await api.get('/api/admin/users/me/assigned-events');
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;

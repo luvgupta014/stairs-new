@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, updateEventPermissions, getAllUsers } from '../../api';
+import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, getEventAssignments, updateEventPermissions, getAllUsers } from '../../api';
 import ParticipantsModal from '../../components/ParticipantsModal';
 import AdminCertificateIssuance from '../../components/AdminCertificateIssuance';
 
@@ -58,6 +58,13 @@ const AdminEventsManagement = () => {
   const [userSearch, setUserSearch] = useState('');
   const [userListLimit, setUserListLimit] = useState(200);
   const [assigningEventId, setAssigningEventId] = useState('');
+  const [assignmentEventIdSearch, setAssignmentEventIdSearch] = useState('');
+  const [permissionEventIdSearch, setPermissionEventIdSearch] = useState('');
+  const [userUniqueIdSearch, setUserUniqueIdSearch] = useState('');
+  const [userSearchResult, setUserSearchResult] = useState(null);
+  const [searchingUser, setSearchingUser] = useState(false);
+  const [existingAssignments, setExistingAssignments] = useState([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
   const assignmentRef = useRef(null);
 
   // Load analytics when results tab is opened
@@ -227,33 +234,90 @@ const AdminEventsManagement = () => {
     }
   };
 
+  const loadEventAssignments = async (eventId) => {
+    if (!eventId) return;
+    try {
+      setLoadingAssignments(true);
+      const res = await getEventAssignments(eventId);
+      if (res?.success) {
+        setExistingAssignments(res.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading assignments:', err);
+      setExistingAssignments([]);
+    } finally {
+      setLoadingAssignments(false);
+    }
+  };
+
   const handleAssignSubmit = async (e) => {
     e.preventDefault();
     setAssignmentMsg('');
     setAssignmentErr('');
-    if (!assignmentForm.eventId || !assignmentForm.userId) {
-      setAssignmentErr('Event ID and User ID are required.');
+    
+    // Validation
+    if (!assignmentForm.eventId) {
+      setAssignmentErr('Please select an event.');
       return;
     }
+    if (!assignmentForm.userId) {
+      setAssignmentErr('Please select a user.');
+      return;
+    }
+    if (!assignmentForm.role) {
+      setAssignmentErr('Please select a role.');
+      return;
+    }
+
+    // Check if this assignment already exists
+    const existing = existingAssignments.find(
+      a => a.userId === assignmentForm.userId && a.role === assignmentForm.role
+    );
+    if (existing) {
+      setAssignmentErr('This user is already assigned to this event with this role.');
+      return;
+    }
+
     try {
       setAssigningEventId(assignmentForm.eventId);
+      // Use 'add' mode to add assignment without removing existing ones
       const res = await updateEventAssignments(assignmentForm.eventId, [
         { userId: assignmentForm.userId, role: assignmentForm.role }
-      ]);
+      ], 'add');
       if (res?.success) {
-        setAssignmentMsg('Assignment saved.');
+        const selectedUser = allUsers.find(u => u.id === assignmentForm.userId);
+        const selectedEvent = events.find(e => e.id === assignmentForm.eventId);
+        setAssignmentMsg(
+          `✓ Successfully assigned ${selectedUser?.name || selectedUser?.email || 'User'} as ${assignmentForm.role} to "${selectedEvent?.name || 'Event'}". ` +
+          `Don't forget to set permissions for this role!`
+        );
+        // Clear form but keep event selected
+        setAssignmentForm(prev => ({ eventId: prev.eventId, userId: '', role: 'INCHARGE' }));
+        setUserSearch('');
+        setUserUniqueIdSearch('');
+        setUserSearchResult(null);
+        setAssignmentEventIdSearch('');
+        // Reload assignments to show updated list
+        await loadEventAssignments(assignmentForm.eventId);
+        // Clear success message after 5 seconds
+        setTimeout(() => setAssignmentMsg(''), 5000);
       } else {
         setAssignmentErr(res?.message || 'Failed to save assignment.');
       }
     } catch (err) {
-      setAssignmentErr(err?.message || 'Failed to save assignment.');
+      console.error('Assignment error:', err);
+      const errorMsg = err?.response?.data?.message || err?.message || 'Failed to save assignment.';
+      setAssignmentErr(errorMsg);
     } finally {
       setAssigningEventId('');
     }
   };
 
-  const handleAssignClick = (eventId) => {
+  const handleAssignClick = async (eventId) => {
     setAssignmentForm(prev => ({ ...prev, eventId }));
+    setAssignmentEventIdSearch('');
+    // Load existing assignments for this event
+    await loadEventAssignments(eventId);
     // Scroll to assignment form and focus the event dropdown
     if (assignmentRef.current) {
       assignmentRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -264,14 +328,110 @@ const AdminEventsManagement = () => {
     }
   };
 
+  const handleRemoveAssignment = async (eventId, assignmentId) => {
+    if (!confirm('Are you sure you want to remove this assignment?')) {
+      return;
+    }
+    try {
+      // Get current assignments, remove the one to delete, and replace all
+      const currentAssignments = existingAssignments.filter(a => a.id !== assignmentId);
+      const assignmentsToKeep = currentAssignments.map(a => ({
+        userId: a.userId,
+        role: a.role
+      }));
+      
+      const res = await updateEventAssignments(eventId, assignmentsToKeep, 'replace');
+      if (res?.success) {
+        setAssignmentMsg('Assignment removed successfully.');
+        await loadEventAssignments(eventId);
+      } else {
+        setAssignmentErr(res?.message || 'Failed to remove assignment.');
+      }
+    } catch (err) {
+      setAssignmentErr(err?.message || 'Failed to remove assignment.');
+    }
+  };
+
+  const handlePermissionClick = (eventId) => {
+    setPermissionForm(prev => ({ ...prev, eventId }));
+    setPermissionEventIdSearch('');
+  };
+
+  // Auto-select event by uniqueId search
+  const handleEventIdSearch = (searchValue, formType) => {
+    if (formType === 'assignment') {
+      setAssignmentEventIdSearch(searchValue);
+      if (searchValue.trim()) {
+        const foundEvent = events.find(e => 
+          e.uniqueId?.toLowerCase() === searchValue.toLowerCase().trim() ||
+          e.id === searchValue.trim()
+        );
+        if (foundEvent) {
+          setAssignmentForm(prev => ({ ...prev, eventId: foundEvent.id }));
+        }
+      }
+    } else if (formType === 'permission') {
+      setPermissionEventIdSearch(searchValue);
+      if (searchValue.trim()) {
+        const foundEvent = events.find(e => 
+          e.uniqueId?.toLowerCase() === searchValue.toLowerCase().trim() ||
+          e.id === searchValue.trim()
+        );
+        if (foundEvent) {
+          setPermissionForm(prev => ({ ...prev, eventId: foundEvent.id }));
+        }
+      }
+    }
+  };
+
+  // Auto-select user by uniqueId search
+  const handleUserUniqueIdSearch = async (uniqueId) => {
+    setUserUniqueIdSearch(uniqueId);
+    setUserSearchResult(null);
+    
+    if (!uniqueId.trim()) {
+      return;
+    }
+
+    try {
+      setSearchingUser(true);
+      const { getUserByUniqueId } = await import('../../api');
+      const response = await getUserByUniqueId(uniqueId.trim());
+      
+      if (response?.success && response?.data) {
+        setUserSearchResult(response.data);
+        setAssignmentForm(prev => ({ ...prev, userId: response.data.id }));
+      } else {
+        setUserSearchResult({ error: 'User not found' });
+      }
+    } catch (err) {
+      console.error('Error searching user:', err);
+      setUserSearchResult({ error: err?.message || 'Failed to search user' });
+    } finally {
+      setSearchingUser(false);
+    }
+  };
+
   const handlePermissionSubmit = async (e) => {
     e.preventDefault();
     setPermissionMsg('');
     setPermissionErr('');
     if (!permissionForm.eventId) {
-      setPermissionErr('Event ID is required.');
+      setPermissionErr('Please select an event.');
       return;
     }
+    
+    // Check if at least one permission is selected
+    const hasAnyPermission = permissionForm.resultUpload || 
+                            permissionForm.studentManagement || 
+                            permissionForm.certificateManagement || 
+                            permissionForm.feeManagement;
+    
+    if (!hasAnyPermission) {
+      setPermissionErr('Please select at least one permission.');
+      return;
+    }
+
     try {
       const payload = [{
         role: permissionForm.role,
@@ -282,12 +442,26 @@ const AdminEventsManagement = () => {
       }];
       const res = await updateEventPermissions(permissionForm.eventId, payload);
       if (res?.success) {
-        setPermissionMsg('Permissions saved.');
+        const selectedEvent = events.find(e => e.id === permissionForm.eventId);
+        const permissionsList = [];
+        if (permissionForm.resultUpload) permissionsList.push('Result Upload');
+        if (permissionForm.studentManagement) permissionsList.push('Student Management');
+        if (permissionForm.certificateManagement) permissionsList.push('Certificate Management');
+        if (permissionForm.feeManagement) permissionsList.push('Fee Management');
+        
+        setPermissionMsg(
+          `✓ Permissions saved for ${permissionForm.role} role on "${selectedEvent?.name || 'Event'}". ` +
+          `Granted: ${permissionsList.join(', ')}`
+        );
+        // Clear success message after 5 seconds
+        setTimeout(() => setPermissionMsg(''), 5000);
       } else {
         setPermissionErr(res?.message || 'Failed to save permissions.');
       }
     } catch (err) {
-      setPermissionErr(err?.message || 'Failed to save permissions.');
+      console.error('Permission error:', err);
+      const errorMsg = err?.response?.data?.message || err?.message || 'Failed to save permissions.';
+      setPermissionErr(errorMsg);
     }
   };
 
@@ -598,6 +772,16 @@ const AdminEventsManagement = () => {
             >
               🎓 Certificate Issuance
             </button>
+            <button
+              onClick={() => setModalTab('payments')}
+              className={`px-6 py-3 font-medium text-sm transition-colors ${
+                modalTab === 'payments'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              💳 Payments ({payments?.length || 0})
+            </button>
           </div>
 
           {/* Scrollable Content */}
@@ -710,16 +894,19 @@ const AdminEventsManagement = () => {
                   )}
                 </div>
 
-                {/* Payments Section */}
+                {/* Payments Summary in Details Tab */}
                 <div className="px-6 py-5 bg-white border-t border-gray-100">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center">
                       <div className="w-1 h-6 bg-indigo-600 rounded-full mr-3"></div>
-                      <h4 className="text-lg font-bold text-gray-900">Payments</h4>
+                      <h4 className="text-lg font-bold text-gray-900">Payments Summary</h4>
                     </div>
-                    <div className="text-sm text-gray-600">
-                      {paymentsLoading ? 'Loading payments...' : `${payments?.length || 0} payment record${(payments?.length || 0) !== 1 ? 's' : ''}`}
-                    </div>
+                    <button
+                      onClick={() => setModalTab('payments')}
+                      className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                    >
+                      View All Payments →
+                    </button>
                   </div>
 
                   {paymentsLoading ? (
@@ -728,24 +915,37 @@ const AdminEventsManagement = () => {
                       <div>Loading payment records...</div>
                     </div>
                   ) : payments && payments.length > 0 ? (
-                    <div className="space-y-3">
-                      {payments.map((p) => (
-                        <div key={p.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-semibold text-gray-900">{p.type || p.description || 'Payment'}</div>
-                            <div className="text-xs text-gray-500">Order: {p.razorpayOrderId || p.orderId || '—'}</div>
-                            <div className="text-xs text-gray-500">
-                              Amount: ₹{(p.amount || p.value || 0).toLocaleString()}
-                              {p.currency ? ` ${p.currency}` : ''}
-                              {' • '}
-                              {new Date(p.createdAt || p.created_at || Date.now()).toLocaleDateString()}
-                            </div>
-                          </div>
-                          <div className={`px-3 py-1 rounded-full text-xs font-semibold ${p.status === 'COMPLETED' || p.status === 'SUCCESS' ? 'bg-green-100 text-green-800' : p.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>
-                            {p.status || 'UNKNOWN'}
+                    <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg p-4 border border-indigo-200">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                        <div>
+                          <div className="text-xs text-gray-600 mb-1">Total Payments</div>
+                          <div className="text-lg font-bold text-gray-900">{payments.length}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-600 mb-1">Total Amount</div>
+                          <div className="text-lg font-bold text-green-600">
+                            ₹{payments.reduce((sum, p) => sum + (parseFloat(p.amount || p.value || 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
                         </div>
-                      ))}
+                        <div>
+                          <div className="text-xs text-gray-600 mb-1">Completed</div>
+                          <div className="text-lg font-bold text-green-600">
+                            {payments.filter(p => p.status === 'COMPLETED' || p.status === 'SUCCESS' || p.status === 'PAID').length}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-600 mb-1">Pending</div>
+                          <div className="text-lg font-bold text-yellow-600">
+                            {payments.filter(p => p.status === 'PENDING' || p.status === 'CREATED').length}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setModalTab('payments')}
+                        className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                      >
+                        Click to view detailed payment records →
+                      </button>
                     </div>
                   ) : (
                     <div className="text-sm text-gray-600">No payments recorded for this event.</div>
@@ -1076,6 +1276,145 @@ const AdminEventsManagement = () => {
                 <AdminCertificateIssuance event={event} onSuccess={closeEventDetailsModal} />
               </div>
             )}
+
+            {/* Payments Tab */}
+            {modalTab === 'payments' && (
+              <div className="p-6">
+                <div className="mb-6">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Event Payments</h3>
+                  <p className="text-gray-600">
+                    All payment records for this event including registration fees, event fees, and other transactions.
+                  </p>
+                </div>
+
+                {paymentsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-16">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+                    <span className="text-gray-600 font-medium">Loading payments...</span>
+                  </div>
+                ) : payments && payments.length > 0 ? (
+                  <div className="space-y-4">
+                    {/* Payment Summary */}
+                    <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg p-6 border border-indigo-200">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="bg-white rounded-lg p-4 shadow-sm">
+                          <div className="text-sm text-gray-600 mb-1">Total Payments</div>
+                          <div className="text-2xl font-bold text-gray-900">{payments.length}</div>
+                        </div>
+                        <div className="bg-white rounded-lg p-4 shadow-sm">
+                          <div className="text-sm text-gray-600 mb-1">Total Amount</div>
+                          <div className="text-2xl font-bold text-green-600">
+                            ₹{payments.reduce((sum, p) => sum + (parseFloat(p.amount || p.value || 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div className="bg-white rounded-lg p-4 shadow-sm">
+                          <div className="text-sm text-gray-600 mb-1">Completed</div>
+                          <div className="text-2xl font-bold text-green-600">
+                            {payments.filter(p => p.status === 'COMPLETED' || p.status === 'SUCCESS' || p.status === 'PAID').length}
+                          </div>
+                        </div>
+                        <div className="bg-white rounded-lg p-4 shadow-sm">
+                          <div className="text-sm text-gray-600 mb-1">Pending</div>
+                          <div className="text-2xl font-bold text-yellow-600">
+                            {payments.filter(p => p.status === 'PENDING' || p.status === 'CREATED').length}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Payments List */}
+                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Payment Details
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Order ID
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Amount
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Date
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Status
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {payments.map((payment) => (
+                              <tr key={payment.id} className="hover:bg-gray-50">
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {payment.type || payment.description || 'Payment'}
+                                  </div>
+                                  {payment.userId && (
+                                    <div className="text-xs text-gray-500">User ID: {payment.userId}</div>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="text-sm text-gray-900 font-mono">
+                                    {payment.razorpayOrderId || payment.orderId || payment.id || '—'}
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="text-sm font-semibold text-gray-900">
+                                    ₹{(parseFloat(payment.amount || payment.value || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </div>
+                                  {payment.currency && payment.currency !== 'INR' && (
+                                    <div className="text-xs text-gray-500">{payment.currency}</div>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="text-sm text-gray-900">
+                                    {new Date(payment.createdAt || payment.created_at || Date.now()).toLocaleDateString('en-IN', {
+                                      year: 'numeric',
+                                      month: 'short',
+                                      day: 'numeric'
+                                    })}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {new Date(payment.createdAt || payment.created_at || Date.now()).toLocaleTimeString('en-IN', {
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                    payment.status === 'COMPLETED' || payment.status === 'SUCCESS' || payment.status === 'PAID'
+                                      ? 'bg-green-100 text-green-800'
+                                      : payment.status === 'PENDING' || payment.status === 'CREATED'
+                                      ? 'bg-yellow-100 text-yellow-800'
+                                      : payment.status === 'FAILED' || payment.status === 'CANCELLED'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {payment.status || 'UNKNOWN'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-16 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                    <svg className="w-20 h-20 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h4 className="text-xl font-bold text-gray-900 mb-2">No Payments Yet</h4>
+                    <p className="text-gray-600">No payment records found for this event.</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Footer - Fixed */}
@@ -1269,15 +1608,24 @@ const AdminEventsManagement = () => {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">All Events Management</h1>
               <p className="text-gray-600 mt-1">
-                Manage all events, approve/reject submissions, and issue certificates
+                Manage all events, approve/reject submissions, assign events, set permissions, and issue certificates
               </p>
             </div>
-            <Link
-              to="/admin/dashboard"
-              className="bg-gray-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-700 transition-colors"
-            >
-              ← Back to Dashboard
-            </Link>
+            <div className="flex items-center space-x-3">
+              <Link
+                to="/admin/settings/global-payments"
+                className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors text-sm flex items-center space-x-2"
+              >
+                <span>💰</span>
+                <span>Payment Settings</span>
+              </Link>
+              <Link
+                to="/admin/dashboard"
+                className="bg-gray-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-700 transition-colors"
+              >
+                ← Back to Dashboard
+              </Link>
+            </div>
           </div>
         </div>
 
@@ -1349,41 +1697,122 @@ const AdminEventsManagement = () => {
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Assignment */}
-            <div>
+            <div ref={assignmentRef}>
               <h3 className="text-lg font-semibold text-gray-900 mb-3">Assign Event to User</h3>
+              
+              {/* Existing Assignments */}
+              {assignmentForm.eventId && (
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium text-gray-700">Current Assignments</h4>
+                    {loadingAssignments && <span className="text-xs text-gray-500">Loading...</span>}
+                  </div>
+                  {existingAssignments.length > 0 ? (
+                    <div className="space-y-2">
+                      {existingAssignments.map((assignment) => (
+                        <div key={assignment.id} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-gray-900">
+                              {assignment.user?.name || assignment.user?.email || 'Unknown User'}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              Role: {assignment.role} • {assignment.user?.email}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAssignment(assignmentForm.eventId, assignment.id)}
+                            className="ml-2 text-red-600 hover:text-red-800 text-xs font-medium"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">No assignments yet. Add one below.</p>
+                  )}
+                </div>
+              )}
+              
               <form onSubmit={handleAssignSubmit} className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Event</label>
-                  <select
-                    value={assignmentForm.eventId}
-                    onChange={(e) => setAssignmentForm(prev => ({ ...prev, eventId: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    name="eventId"
-                  >
-                    <option value="">Select event</option>
-                    {events.map(ev => (
-                      <option key={ev.id} value={ev.id}>
-                        {ev.name} ({ev.sport}) — {ev.city}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">User</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Event <span className="text-gray-500 text-xs">(or search by Event ID)</span>
+                  </label>
                   <div className="space-y-2">
                     <input
                       type="text"
-                      placeholder="Search user by name/email/phone"
+                      placeholder="Type Event ID/Unique ID to auto-select"
+                      value={assignmentEventIdSearch}
+                      onChange={(e) => handleEventIdSearch(e.target.value, 'assignment')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                    />
+                    <select
+                      value={assignmentForm.eventId}
+                      onChange={(e) => {
+                        setAssignmentForm(prev => ({ ...prev, eventId: e.target.value }));
+                        setAssignmentEventIdSearch('');
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      name="eventId"
+                    >
+                      <option value="">Select event from dropdown</option>
+                      {events.map(ev => (
+                        <option key={ev.id} value={ev.id}>
+                          {ev.name} ({ev.sport}) — {ev.city} {ev.uniqueId ? `[${ev.uniqueId}]` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {assignmentForm.eventId && (
+                      <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
+                        ✓ Selected: {events.find(e => e.id === assignmentForm.eventId)?.name || 'Event'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    User <span className="text-gray-500 text-xs">(or search by Unique ID)</span>
+                  </label>
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="Type User Unique ID to auto-select"
+                      value={userUniqueIdSearch}
+                      onChange={(e) => handleUserUniqueIdSearch(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                      disabled={searchingUser}
+                    />
+                    {searchingUser && (
+                      <div className="text-xs text-blue-600">Searching...</div>
+                    )}
+                    {userSearchResult && (
+                      <div className={`text-xs p-2 rounded ${
+                        userSearchResult.error 
+                          ? 'text-red-600 bg-red-50' 
+                          : 'text-green-600 bg-green-50'
+                      }`}>
+                        {userSearchResult.error || `✓ Found: ${userSearchResult.name || userSearchResult.email} (${userSearchResult.role})`}
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      placeholder="Or search user by name/email/phone"
                       value={userSearch}
                       onChange={(e) => setUserSearch(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     />
                     <select
                       value={assignmentForm.userId}
-                      onChange={(e) => setAssignmentForm(prev => ({ ...prev, userId: e.target.value }))}
-                      className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      onChange={(e) => {
+                        setAssignmentForm(prev => ({ ...prev, userId: e.target.value }));
+                        setUserUniqueIdSearch('');
+                        setUserSearchResult(null);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
-                      <option value="">Select user</option>
+                      <option value="">Select user from dropdown</option>
                       {allUsers
                         .filter(u => {
                           if (!userSearch.trim()) return true;
@@ -1391,15 +1820,21 @@ const AdminEventsManagement = () => {
                           return (
                             (u.name || '').toLowerCase().includes(term) ||
                             (u.email || '').toLowerCase().includes(term) ||
-                            (u.phone || '').toLowerCase().includes(term)
+                            (u.phone || '').toLowerCase().includes(term) ||
+                            (u.uniqueId || '').toLowerCase().includes(term)
                           );
                         })
                         .map(u => (
                           <option key={u.id} value={u.id}>
-                            {u.name || u.email || u.phone} ({u.role})
+                            {u.name || u.email || u.phone} ({u.role}) {u.uniqueId ? `[${u.uniqueId}]` : ''}
                           </option>
                         ))}
                     </select>
+                    {assignmentForm.userId && (
+                      <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
+                        ✓ Selected: {allUsers.find(u => u.id === assignmentForm.userId)?.name || 'User'}
+                      </div>
+                    )}
                     {allUsers.length >= userListLimit && (
                       <button
                         type="button"
@@ -1430,10 +1865,26 @@ const AdminEventsManagement = () => {
                   >
                     {assigningEventId === assignmentForm.eventId ? 'Saving...' : 'Save Assignment'}
                   </button>
-                  {assignmentMsg && <span className="text-green-600 text-sm">{assignmentMsg}</span>}
-                  {assignmentErr && <span className="text-red-600 text-sm">{assignmentErr}</span>}
+                  {assignmentMsg && (
+                    <div className="text-green-600 text-sm bg-green-50 p-2 rounded">
+                      {assignmentMsg}
+                    </div>
+                  )}
+                  {assignmentErr && (
+                    <div className="text-red-600 text-sm bg-red-50 p-2 rounded">
+                      {assignmentErr}
+                    </div>
+                  )}
                 </div>
               </form>
+              
+              {/* Info Note */}
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs text-blue-800">
+                  <strong>Note:</strong> After assigning a user, make sure to set permissions for their role using the "Set Permissions" form below. 
+                  Users need both assignment and permissions to access event features.
+                </p>
+              </div>
             </div>
 
             {/* Permissions */}
@@ -1441,13 +1892,38 @@ const AdminEventsManagement = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-3">Set Permissions</h3>
               <form onSubmit={handlePermissionSubmit} className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Event ID</label>
-                  <input
-                    type="text"
-                    value={permissionForm.eventId}
-                    onChange={(e) => setPermissionForm(prev => ({ ...prev, eventId: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Event <span className="text-gray-500 text-xs">(or search by Event ID)</span>
+                  </label>
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="Type Event ID/Unique ID to auto-select"
+                      value={permissionEventIdSearch}
+                      onChange={(e) => handleEventIdSearch(e.target.value, 'permission')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                    />
+                    <select
+                      value={permissionForm.eventId}
+                      onChange={(e) => {
+                        setPermissionForm(prev => ({ ...prev, eventId: e.target.value }));
+                        setPermissionEventIdSearch('');
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">Select event from dropdown</option>
+                      {events.map(ev => (
+                        <option key={ev.id} value={ev.id}>
+                          {ev.name} ({ev.sport}) — {ev.city} {ev.uniqueId ? `[${ev.uniqueId}]` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {permissionForm.eventId && (
+                      <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
+                        ✓ Selected: {events.find(e => e.id === permissionForm.eventId)?.name || 'Event'}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
@@ -1508,8 +1984,25 @@ const AdminEventsManagement = () => {
                   >
                     Save Permissions
                   </button>
-                  {permissionMsg && <span className="text-green-600 text-sm">{permissionMsg}</span>}
-                  {permissionErr && <span className="text-red-600 text-sm">{permissionErr}</span>}
+                  {permissionMsg && (
+                    <div className="text-green-600 text-sm bg-green-50 p-2 rounded flex-1">
+                      {permissionMsg}
+                    </div>
+                  )}
+                  {permissionErr && (
+                    <div className="text-red-600 text-sm bg-red-50 p-2 rounded flex-1">
+                      {permissionErr}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Info Note */}
+                <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-xs text-amber-800">
+                    <strong>Important:</strong> Permissions are set per role (INCHARGE, COORDINATOR, TEAM). 
+                    Users assigned to an event with a specific role will inherit the permissions set for that role. 
+                    Make sure to assign users to events first, then set permissions for their roles.
+                  </p>
                 </div>
               </form>
             </div>
@@ -1751,6 +2244,14 @@ const AdminEventsManagement = () => {
                               className="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-indigo-700 transition-colors"
                             >
                               Assign
+                            </button>
+                            {/* Quick Set Permissions button */}
+                            <button
+                              type="button"
+                              onClick={() => handlePermissionClick(event.id)}
+                              className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-purple-700 transition-colors"
+                            >
+                              Permissions
                             </button>
                           </div>
 

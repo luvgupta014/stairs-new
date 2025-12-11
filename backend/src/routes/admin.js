@@ -5084,12 +5084,155 @@ router.put('/orders/:orderId/price', authenticate, requireAdmin, async (req, res
 });
 
 /**
+ * Admin: Get event assignments
+ */
+router.get('/events/:eventId/assignments', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    
+    const assignments = await prisma.eventAssignment.findMany({
+      where: { eventId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            uniqueId: true,
+            role: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    res.json(successResponse(assignments, 'Event assignments retrieved.'));
+  } catch (error) {
+    console.error('❌ Get event assignments error:', error);
+    res.status(500).json(errorResponse('Failed to get event assignments.', 500));
+  }
+});
+
+/**
+ * Get user's assigned events (for any authenticated user)
+ */
+router.get('/users/me/assigned-events', authenticate, async (req, res) => {
+  try {
+    const assignments = await prisma.eventAssignment.findMany({
+      where: { userId: req.user.id },
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            sport: true,
+            startDate: true,
+            endDate: true,
+            venue: true,
+            city: true,
+            status: true,
+            uniqueId: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    // Get permissions for each assignment
+    const assignmentsWithPermissions = await Promise.all(
+      assignments.map(async (assignment) => {
+        const permissions = await prisma.eventPermission.findMany({
+          where: {
+            eventId: assignment.eventId,
+            role: assignment.role
+          }
+        });
+        return {
+          ...assignment,
+          permissions: permissions[0] || null,
+          hasPermissions: permissions.length > 0 && permissions[0] && (
+            permissions[0].resultUpload || 
+            permissions[0].studentManagement || 
+            permissions[0].certificateManagement || 
+            permissions[0].feeManagement
+          )
+        };
+      })
+    );
+
+    res.json(successResponse(assignmentsWithPermissions, 'User assigned events retrieved.'));
+  } catch (error) {
+    console.error('❌ Get user assigned events error:', error);
+    res.status(500).json(errorResponse('Failed to get assigned events.', 500));
+  }
+});
+
+/**
+ * Verify user has permission for a specific event and permission type
+ */
+router.get('/events/:eventId/verify-permission/:permissionKey', authenticate, async (req, res) => {
+  try {
+    const { eventId, permissionKey } = req.params;
+    const { checkEventPermission } = require('../utils/authMiddleware');
+    
+    const validPermissionKeys = ['resultUpload', 'studentManagement', 'certificateManagement', 'feeManagement'];
+    if (!validPermissionKeys.includes(permissionKey)) {
+      return res.status(400).json(errorResponse(`Invalid permission key. Must be one of: ${validPermissionKeys.join(', ')}`, 400));
+    }
+    
+    const hasPermission = await checkEventPermission({
+      user: req.user,
+      eventId,
+      permissionKey
+    });
+
+    // Get assignment details for debugging
+    const assignments = await prisma.eventAssignment.findMany({
+      where: { eventId, userId: req.user.id },
+      include: {
+        event: {
+          select: { id: true, name: true }
+        }
+      }
+    });
+
+    const permissions = await prisma.eventPermission.findMany({
+      where: { 
+        eventId,
+        role: { in: assignments.map(a => a.role) }
+      }
+    });
+
+    res.json(successResponse({ 
+      hasPermission, 
+      eventId, 
+      permissionKey,
+      userId: req.user.id,
+      userRole: req.user.role,
+      assignments: assignments.map(a => ({ role: a.role, eventName: a.event.name })),
+      permissions: permissions.map(p => ({
+        role: p.role,
+        [permissionKey]: p[permissionKey]
+      }))
+    }, hasPermission ? 'User has permission.' : 'User does not have permission.'));
+  } catch (error) {
+    console.error('❌ Verify permission error:', error);
+    res.status(500).json(errorResponse('Failed to verify permission.', 500));
+  }
+});
+
+/**
  * Admin: Assign event to incharge / coordinator / team
+ * Supports both add (mode: 'add') and replace (mode: 'replace', default) operations
  */
 router.put('/events/:eventId/assignments', authenticate, requireAdmin, async (req, res) => {
   try {
     const { eventId } = req.params;
-    const { assignments = [] } = req.body; // [{ userId, role }]
+    const { assignments = [], mode = 'replace' } = req.body; // [{ userId, role }], mode: 'add' | 'replace'
 
     if (!Array.isArray(assignments)) {
       return res.status(400).json(errorResponse('assignments must be an array', 400));
@@ -5108,16 +5251,44 @@ router.put('/events/:eventId/assignments', authenticate, requireAdmin, async (re
       }
     }
 
-    await prisma.eventAssignment.deleteMany({ where: { eventId } });
+    // If mode is 'replace', delete all existing assignments first
+    if (mode === 'replace') {
+      await prisma.eventAssignment.deleteMany({ where: { eventId } });
+    }
+
+    // Create new assignments (skipDuplicates will prevent duplicates in 'add' mode)
+    const createdAssignments = [];
     if (assignments.length > 0) {
-      await prisma.eventAssignment.createMany({
-        data: assignments.map(a => ({
-          eventId,
-          userId: a.userId,
-          role: a.role
-        })),
-        skipDuplicates: true
-      });
+      // Use individual creates to handle duplicates better and get created records
+      for (const a of assignments) {
+        try {
+          const assignment = await prisma.eventAssignment.upsert({
+            where: {
+              eventId_userId_role: {
+                eventId,
+                userId: a.userId,
+                role: a.role
+              }
+            },
+            update: {
+              // Update if exists (though nothing to update)
+            },
+            create: {
+              eventId,
+              userId: a.userId,
+              role: a.role
+            }
+          });
+          createdAssignments.push(assignment);
+        } catch (err) {
+          // Skip if duplicate constraint violation
+          if (err.code === 'P2002') {
+            console.log(`Assignment already exists: ${a.userId} - ${a.role}`);
+            continue;
+          }
+          throw err;
+        }
+      }
     }
 
     // Send notification/email to assigned users
@@ -5139,7 +5310,12 @@ router.put('/events/:eventId/assignments', authenticate, requireAdmin, async (re
       }
     }
 
-    res.json(successResponse({ eventId, assignmentsCount: assignments.length }, 'Assignments updated.'));
+    res.json(successResponse({ 
+      eventId, 
+      assignmentsCount: createdAssignments.length,
+      mode,
+      message: mode === 'add' ? 'Assignment added successfully.' : 'Assignments replaced successfully.'
+    }, 'Assignments updated.'));
   } catch (error) {
     console.error('❌ Update event assignments error:', error);
     res.status(500).json(errorResponse('Failed to update assignments.', 500));
@@ -5290,6 +5466,99 @@ router.get('/settings/global-payments', authenticate, requireAdmin, async (req, 
   } catch (error) {
     console.error('❌ Get global payment settings error:', error);
     res.status(500).json(errorResponse('Failed to get global payment settings.', 500));
+  }
+});
+
+/**
+ * Admin: Get all events with their fee information for global payment settings
+ */
+router.get('/events/fees-overview', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const events = await prisma.event.findMany({
+      select: {
+        id: true,
+        name: true,
+        sport: true,
+        feeMode: true,
+        eventFee: true,
+        coordinatorFee: true,
+        currentParticipants: true,
+        status: true,
+        createdAt: true,
+        coach: {
+          select: {
+            name: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    // Get global settings to calculate fees
+    const globalSettings = await prisma.globalSettings.findFirst();
+    const perStudentBaseCharge = globalSettings?.perStudentBaseCharge || 0;
+    const defaultEventFee = globalSettings?.defaultEventFee || 0;
+
+    // Calculate effective fee for each event
+    const eventsWithFees = events.map(event => {
+      let calculatedFee = 0;
+      if (event.feeMode === 'GLOBAL') {
+        if (event.currentParticipants > 0 && perStudentBaseCharge > 0) {
+          calculatedFee = perStudentBaseCharge * event.currentParticipants;
+        } else {
+          calculatedFee = defaultEventFee;
+        }
+      } else if (event.feeMode === 'EVENT') {
+        calculatedFee = (event.eventFee || 0) + (event.coordinatorFee || 0);
+      }
+
+      return {
+        ...event,
+        calculatedFee,
+        perStudentFee: event.feeMode === 'GLOBAL' ? perStudentBaseCharge : (event.eventFee || 0)
+      };
+    });
+
+    res.json(successResponse({ events: eventsWithFees, globalSettings }, 'Events with fees retrieved.'));
+  } catch (error) {
+    console.error('❌ Get events fees overview error:', error);
+    res.status(500).json(errorResponse('Failed to get events fees overview.', 500));
+  }
+});
+
+/**
+ * Admin: Update individual event fee (real-time)
+ */
+router.put('/events/:eventId/fee', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { eventFee, coordinatorFee, feeMode } = req.body;
+
+    const updateData = {};
+    
+    if (eventFee !== undefined) {
+      updateData.eventFee = Number(eventFee) || 0;
+    }
+    
+    if (coordinatorFee !== undefined) {
+      updateData.coordinatorFee = Number(coordinatorFee) || 0;
+    }
+    
+    if (feeMode && ['GLOBAL', 'EVENT', 'DISABLED'].includes(feeMode)) {
+      updateData.feeMode = feeMode;
+    }
+
+    const updated = await prisma.event.update({
+      where: { id: eventId },
+      data: updateData
+    });
+
+    res.json(successResponse(updated, 'Event fee updated successfully.'));
+  } catch (error) {
+    console.error('❌ Update event fee error:', error);
+    res.status(500).json(errorResponse('Failed to update event fee.', 500));
   }
 });
 
