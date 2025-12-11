@@ -6,7 +6,8 @@ import { FaSave, FaEdit, FaCheck, FaTimes, FaSync } from 'react-icons/fa';
 const AdminGlobalPayments = () => {
   const [form, setForm] = useState({
     perStudentBaseCharge: '',
-    defaultEventFee: ''
+    defaultEventFee: '',
+    coordinatorSubscriptionFee: ''
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -28,7 +29,8 @@ const AdminGlobalPayments = () => {
         const data = res.data || {};
         setForm({
           perStudentBaseCharge: data.perStudentBaseCharge ?? '',
-          defaultEventFee: data.defaultEventFee ?? ''
+          defaultEventFee: data.defaultEventFee ?? '',
+          coordinatorSubscriptionFee: data.coordinatorSubscriptionFee ?? ''
         });
       }
     } catch (err) {
@@ -71,7 +73,8 @@ const AdminGlobalPayments = () => {
       setError('');
       const payload = {
         perStudentBaseCharge: Number(form.perStudentBaseCharge) || 0,
-        defaultEventFee: Number(form.defaultEventFee) || 0
+        defaultEventFee: Number(form.defaultEventFee) || 0,
+        coordinatorSubscriptionFee: Number(form.coordinatorSubscriptionFee) || 0
       };
       const res = await updateGlobalPaymentSettings(payload);
       if (res?.success) {
@@ -146,7 +149,7 @@ const AdminGlobalPayments = () => {
         </p>
 
         <form onSubmit={handleSave} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Per-Student Base Charge (₹)
@@ -161,6 +164,9 @@ const AdminGlobalPayments = () => {
                 step="0.01"
                 placeholder="200"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Event fee per student (Use Case 1)
+              </p>
             </div>
 
             <div>
@@ -179,6 +185,25 @@ const AdminGlobalPayments = () => {
               />
               <p className="text-xs text-gray-500 mt-1">
                 Fallback when participant count is zero
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Coordinator Subscription Fee (₹)
+              </label>
+              <input
+                type="number"
+                name="coordinatorSubscriptionFee"
+                value={form.coordinatorSubscriptionFee}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                min="0"
+                step="0.01"
+                placeholder="0"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                One-time registration fee (Use Case 2)
               </p>
             </div>
           </div>

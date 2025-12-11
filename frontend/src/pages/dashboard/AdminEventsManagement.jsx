@@ -155,7 +155,8 @@ const AdminEventsManagement = () => {
         const data = res.data || {};
         setGlobalPaymentSettings({
           perStudentBaseCharge: data.perStudentBaseCharge ?? '',
-          defaultEventFee: data.defaultEventFee ?? ''
+          defaultEventFee: data.defaultEventFee ?? '',
+          coordinatorSubscriptionFee: data.coordinatorSubscriptionFee ?? ''
         });
       }
     } catch (err) {
@@ -220,7 +221,8 @@ const AdminEventsManagement = () => {
       setGlobalError('');
       const payload = {
         perStudentBaseCharge: Number(globalPaymentSettings.perStudentBaseCharge) || 0,
-        defaultEventFee: Number(globalPaymentSettings.defaultEventFee) || 0
+        defaultEventFee: Number(globalPaymentSettings.defaultEventFee) || 0,
+        coordinatorSubscriptionFee: Number(globalPaymentSettings.coordinatorSubscriptionFee) || 0
       };
       const res = await updateGlobalPaymentSettings(payload);
       if (res?.success) {
@@ -1663,7 +1665,7 @@ const AdminEventsManagement = () => {
         {/* Global payment settings quick edit */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Global Payment Settings (Quick)</h3>
-          <form onSubmit={handleGlobalSettingsSave} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <form onSubmit={handleGlobalSettingsSave} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Per-Student Base Charge (₹)
@@ -1701,6 +1703,26 @@ const AdminEventsManagement = () => {
                 step="0.01"
                 required
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Coordinator Subscription Fee (₹)
+              </label>
+              <input
+                type="number"
+                value={globalPaymentSettings.coordinatorSubscriptionFee}
+                onChange={(e) =>
+                  setGlobalPaymentSettings((prev) => ({
+                    ...prev,
+                    coordinatorSubscriptionFee: e.target.value
+                  }))
+                }
+                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                min="0"
+                step="0.01"
+                placeholder="One-time registration fee"
+              />
+              <p className="text-xs text-gray-500 mt-1">One-time registration fee</p>
             </div>
             <div className="flex items-center space-x-3">
               <button

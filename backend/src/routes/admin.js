@@ -5430,11 +5430,12 @@ router.put('/events/:eventId/level', authenticate, requireAdmin, async (req, res
  */
 router.put('/settings/global-payments', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { perStudentBaseCharge = 0, defaultEventFee = 0 } = req.body;
+    const { perStudentBaseCharge = 0, defaultEventFee = 0, coordinatorSubscriptionFee = 0 } = req.body;
 
     const payload = {
       perStudentBaseCharge: Number(perStudentBaseCharge) || 0,
-      defaultEventFee: Number(defaultEventFee) || 0
+      defaultEventFee: Number(defaultEventFee) || 0,
+      coordinatorSubscriptionFee: Number(coordinatorSubscriptionFee) || 0
     };
 
     // Upsert single settings row (first row wins)

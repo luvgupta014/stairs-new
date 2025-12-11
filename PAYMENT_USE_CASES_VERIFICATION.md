@@ -18,6 +18,7 @@
    - Uses `perStudentBaseCharge` from `GlobalSettings` table
    - Formula: `perStudentBaseCharge × participantCount`
    - Location: `backend/src/routes/payment.js` (lines 197-219)
+   - Admin can set this globally in Admin Dashboard
 
 2. **Payment Flow**:
    - Endpoint: `/api/payment/create-order-events`
@@ -25,24 +26,27 @@
    - Creates Razorpay order
    - Payment verification implemented
 
-3. **Checkout Modal**: 
+3. **Admin Management**:
+   - ✅ Global settings page: `/admin/settings/global-payments`
+   - ✅ Quick edit in Events Management page
+   - ✅ Per-event fee override in Events Fee Management table
+   - ✅ Shows per-event fee breakdown
+
+4. **Checkout Modal**: 
    - ✅ Integrated in `CoachDashboard.jsx`
    - Shows payment breakdown before Razorpay
 
-#### ❌ Missing/Needs Update:
+#### ⚠️ Needs Update:
 1. **Default Amount**: 
    - `perStudentBaseCharge` defaults to 0 in schema
-   - **Action Required**: Should default to 200 or be set by admin
-   - **Location**: `backend/prisma/schema.prisma` line 284
+   - **Action Required**: Admin should set to 200 (or desired amount) via UI
+   - **Location**: Admin can set via Global Payment Settings
 
 2. **Trigger Point**: 
    - Currently triggered from "Pay Event Fee" button in dashboard
    - **Spec Requirement**: Should be triggered on "Click on digital certificate"
    - **Action Required**: Add payment trigger when user clicks to view/download certificate
-
-3. **Admin Display**: 
-   - Need to show per-event fee breakdown: "Event X - Per student fee is Y"
-   - **Action Required**: Add admin dashboard view showing event fees
+   - **Location**: `IssueCertificates.jsx` or certificate download/view component
 
 ---
 
@@ -59,23 +63,40 @@
 #### Current Implementation Status
 
 #### ✅ Implemented:
-1. **Registration Flow**: 
-   - Coordinator registration endpoint exists
-   - Location: `backend/src/routes/auth.js` (lines 613-861)
+1. **Global Setting Added**:
+   - ✅ `coordinatorSubscriptionFee` field added to `GlobalSettings` table
+   - ✅ Admin can set this globally in Global Payment Settings
+   - ✅ Available in both AdminGlobalPayments and AdminEventsManagement pages
 
-2. **Payment Processing**: 
-   - Payment endpoint exists: `/api/auth/coach/payment`
-   - Location: `backend/src/routes/auth.js` (lines 1572-1678)
-   - Updates coach status after payment
+2. **Database Schema**:
+   - ✅ Column added: `coordinatorSubscriptionFee` (Float, default 0)
+   - ✅ Migration script created: `ADD_COORDINATOR_SUBSCRIPTION_FEE.sql`
 
-#### ❌ Missing/Needs Update:
-1. **Automatic Trigger**: 
-   - Payment is NOT automatically triggered after account creation
-   - **Action Required**: Add payment flow after successful registration
-   - Should redirect to payment page or show payment popup
+3. **Backend API**:
+   - ✅ Updated `/api/admin/settings/global-payments` PUT endpoint
+   - ✅ Accepts `coordinatorSubscriptionFee` in request body
+   - ✅ Returns updated settings including coordinator fee
 
-2. **Checkout Modal**: 
-   - **Action Required**: Integrate checkout modal for coordinator registration payment
+4. **Frontend UI**:
+   - ✅ AdminGlobalPayments.jsx - Full settings page with coordinator subscription fee field
+   - ✅ AdminEventsManagement.jsx - Quick edit section includes coordinator subscription fee
+   - ✅ Both pages allow real-time updates
+
+#### ❌ Missing/Needs Implementation:
+1. **Payment Integration**:
+   - **Action Required**: Integrate coordinator subscription fee into registration flow
+   - **Location**: `backend/src/routes/auth.js` - Coach/Coordinator registration endpoint
+   - **Trigger**: After successful account creation, before returning success response
+   - **Flow**: 
+     - Check if coordinator subscription fee > 0
+     - Create Razorpay order for subscription fee
+     - Redirect to payment or return payment order details
+     - Verify payment before completing registration
+
+2. **Payment Verification**:
+   - **Action Required**: Add payment verification endpoint for coordinator subscription
+   - **Location**: `backend/src/routes/payment.js`
+   - **Flow**: Verify payment and mark coordinator account as subscribed
 
 ---
 
@@ -83,39 +104,28 @@
 
 #### Specification
 - **Who is paying**: Student
-- **Calculation**: If event is created by admin then only
+- **Calculation**: Person (one-time registration fee)
 - **Trigger**: Connect to an event in student dashboard
-- **Controlled by**: By event (should charge student)
+- **Condition**: If event is created by admin then only
+- **Controlled by**: Admin
 
 #### Current Implementation Status
 
-#### ✅ Implemented:
-1. **Student Registration**: 
-   - Endpoint: `/api/student/events/:eventId/register`
-   - Location: `backend/src/routes/student.js` (lines 752-859)
-   - Creates event registration record
+#### ✅ Partially Implemented:
+1. **Event Registration**:
+   - Students can register for events
+   - Payment flow exists for event registrations
 
-2. **Bulk Registration with Payment**: 
-   - Coach can register students with payment
-   - Endpoint: `/api/coach/events/:eventId/registrations/bulk`
-   - Location: `backend/src/routes/coach.js` (lines 2948-3139)
-   - Creates `EventRegistrationOrder` with fee calculation
+#### ❌ Missing/Needs Implementation:
+1. **Condition Check**:
+   - **Action Required**: Check if event is created by admin
+   - **Location**: Event registration endpoint
+   - **Logic**: Only charge registration fee if `event.createdBy === 'ADMIN'` or similar flag
 
-#### ❌ Missing/Needs Update:
-1. **Payment Trigger for Student**: 
-   - Student registration currently does NOT require payment
-   - **Action Required**: Add payment requirement when:
-     - Event is created by admin
-     - Student connects to event in dashboard
-   - Should check `event.createdBy` or similar field
-
-2. **Checkout Modal**: 
-   - **Action Required**: Integrate checkout modal for student registration payment
-   - Currently only coach bulk registration has payment flow
-
-3. **Event Creator Check**: 
-   - Need to verify if event was created by admin
-   - **Action Required**: Add logic to check event creator type
+2. **Registration Fee**:
+   - **Action Required**: Add student registration fee to global settings
+   - **Action Required**: Charge student when connecting to admin-created events
+   - **Location**: Student event registration flow
 
 ---
 
@@ -124,11 +134,15 @@
 #### Specification
 - **Who is paying**: Institute
 - **Calculation**: Person (one-time registration fee)
-- **Status**: ⚠️ **Details Incomplete in Spec**
+- **Trigger**: Post successful account creation
+- **Controlled by**: Admin
 
 #### Current Implementation Status
-- Institute registration exists but payment flow unclear
-- **Action Required**: Clarify requirements and implement
+
+#### ❌ Not Implemented:
+1. **Action Required**: Add institute subscription fee to global settings
+2. **Action Required**: Integrate into institute registration flow
+3. **Action Required**: Create payment order after account creation
 
 ---
 
@@ -136,81 +150,99 @@
 
 #### Specification
 - **Who is paying**: Company
-- **Status**: ⚠️ **Details Incomplete in Spec**
+- **Calculation**: Person (one-time registration fee)
+- **Trigger**: Post successful account creation
+- **Controlled by**: Admin
 
 #### Current Implementation Status
-- Company registration not found in codebase
-- **Action Required**: Clarify requirements and implement
+
+#### ❌ Not Implemented:
+1. **Action Required**: Add company subscription fee to global settings
+2. **Action Required**: Integrate into company registration flow
+3. **Action Required**: Create payment order after account creation
 
 ---
 
 ### 2.5 Any Stakeholder Registration Payment
 
 #### Specification
-- **Status**: ⚠️ **Details Incomplete in Spec**
+- **Who is paying**: Any stakeholder
+- **Calculation**: Person (one-time registration fee)
+- **Trigger**: Post successful account creation
+- **Controlled by**: Admin
 
 #### Current Implementation Status
-- Generic stakeholder registration not found
-- **Action Required**: Clarify requirements and implement
+
+#### ❌ Not Implemented:
+1. **Action Required**: Add stakeholder-specific subscription fees
+2. **Action Required**: Generic registration payment flow
+3. **Action Required**: Role-based fee assignment
 
 ---
 
-## Implementation Priority
+## Summary of Changes Made
 
-### High Priority (Critical for Spec Compliance)
+### ✅ Completed:
+1. **Schema Update**: Added `coordinatorSubscriptionFee` to `GlobalSettings` model
+2. **Backend API**: Updated global payment settings endpoint to handle coordinator fee
+3. **Frontend - AdminGlobalPayments**: Added coordinator subscription fee input field
+4. **Frontend - AdminEventsManagement**: Added coordinator subscription fee to quick edit section
+5. **Migration Script**: Created `ADD_COORDINATOR_SUBSCRIPTION_FEE.sql` for database migration
 
-1. **Event Fee Payment - Certificate Click Trigger**
-   - Add payment trigger when clicking digital certificate
-   - Update checkout modal to show per-student breakdown
-
-2. **Set Default perStudentBaseCharge to 200**
-   - Update schema or ensure admin sets it to 200
-
-3. **Student Registration Payment**
-   - Add payment requirement when event created by admin
-   - Integrate checkout modal
-
-4. **Coordinator Registration Payment Auto-trigger**
-   - Add payment flow after successful registration
-
-### Medium Priority
-
-5. **Admin Dashboard - Event Fee Display**
-   - Show "Event X - Per student fee is Y" format
-
-6. **Checkout Modal Integration**
-   - Ensure all payment flows use checkout modal
-
-### Low Priority
-
-7. **Institute/Company/Stakeholder Payments**
-   - Wait for complete specifications
+### ⚠️ Pending Implementation:
+1. **Coordinator Registration Payment Flow**: Integrate subscription fee into registration process
+2. **Payment Verification**: Add verification endpoint for coordinator subscription payments
+3. **Student Registration Fee**: Add to global settings and integrate into event registration
+4. **Other Entity Fees**: Institute, Company, and other stakeholder fees
+5. **Certificate Trigger**: Move event fee payment trigger to certificate click
 
 ---
 
-## Files to Update
+## Next Steps
+
+1. **Run Migration**:
+   ```bash
+   psql $DATABASE_URL -f backend/ADD_COORDINATOR_SUBSCRIPTION_FEE.sql
+   ```
+
+2. **Test Global Settings**:
+   - Navigate to Admin Dashboard → Global Payment Settings
+   - Set Coordinator Subscription Fee
+   - Verify it saves and persists
+
+3. **Implement Registration Payment Flow**:
+   - Update registration endpoints to check for subscription fees
+   - Create Razorpay orders for subscription payments
+   - Add payment verification
+
+4. **Add Certificate Payment Trigger**:
+   - Update certificate view/download component
+   - Trigger payment flow when certificate is accessed
+   - Show payment modal before certificate display
+
+---
+
+## Files Modified
 
 ### Backend:
-1. `backend/prisma/schema.prisma` - Set default perStudentBaseCharge
-2. `backend/src/routes/payment.js` - Ensure 200 default
-3. `backend/src/routes/auth.js` - Add payment trigger after registration
-4. `backend/src/routes/student.js` - Add payment check for admin-created events
+- `backend/prisma/schema.prisma` - Added `coordinatorSubscriptionFee` field
+- `backend/src/routes/admin.js` - Updated global payment settings endpoint
+- `backend/ADD_COORDINATOR_SUBSCRIPTION_FEE.sql` - Migration script
 
 ### Frontend:
-1. Certificate viewing/download components - Add payment trigger
-2. Student dashboard - Add payment flow for event connection
-3. Coordinator registration flow - Add payment redirect
-4. All payment flows - Ensure checkout modal integration
+- `frontend/src/pages/dashboard/AdminGlobalPayments.jsx` - Added coordinator fee field
+- `frontend/src/pages/dashboard/AdminEventsManagement.jsx` - Added coordinator fee to quick edit
 
 ---
 
 ## Testing Checklist
 
-- [ ] Event fee payment triggered from certificate click
-- [ ] Event fee calculation: students × 200
-- [ ] Coordinator registration redirects to payment
-- [ ] Student registration requires payment for admin-created events
-- [ ] Checkout modal shows in all payment flows
-- [ ] Admin can see event fee breakdowns
-- [ ] Payment verification works for all flows
-
+- [ ] Run database migration
+- [ ] Verify coordinator subscription fee field appears in Admin Global Payment Settings
+- [ ] Set coordinator subscription fee value
+- [ ] Verify value persists after page refresh
+- [ ] Test coordinator registration flow (pending implementation)
+- [ ] Test payment order creation for coordinator subscription
+- [ ] Test payment verification for coordinator subscription
+- [ ] Verify event fee calculation uses perStudentBaseCharge
+- [ ] Test certificate payment trigger (pending implementation)
