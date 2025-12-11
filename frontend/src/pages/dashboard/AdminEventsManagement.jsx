@@ -1972,16 +1972,15 @@ const AdminEventsManagement = () => {
                     </div>
                   )}
                 </div>
+                
+                {/* Info Note */}
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-xs text-blue-800">
+                    <strong>Note:</strong> After assigning a user, make sure to set permissions for their role using the "Set Permissions" button. 
+                    Users need both assignment and permissions to access event features.
+                  </p>
+                </div>
               </form>
-              
-                  {/* Info Note */}
-                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-xs text-blue-800">
-                      <strong>Note:</strong> After assigning a user, make sure to set permissions for their role using the "Set Permissions" button. 
-                      Users need both assignment and permissions to access event features.
-                    </p>
-                  </div>
-                </form>
               </div>
               <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-xl flex justify-end flex-shrink-0">
                 <button
