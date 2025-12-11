@@ -65,6 +65,8 @@ const AdminEventsManagement = () => {
   const [searchingUser, setSearchingUser] = useState(false);
   const [existingAssignments, setExistingAssignments] = useState([]);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
   const assignmentRef = useRef(null);
 
   // Load analytics when results tab is opened
@@ -313,6 +315,18 @@ const AdminEventsManagement = () => {
     }
   };
 
+  const handlePermissionSubmitWithClose = async (e) => {
+    await handlePermissionSubmit(e);
+    // Close modal after successful save (with delay to show success message)
+    if (permissionMsg && !permissionErr) {
+      setTimeout(() => {
+        if (permissionMsg && !permissionErr) {
+          setShowPermissionModal(false);
+        }
+      }, 2000);
+    }
+  };
+
   const handleAssignClick = async (eventId) => {
     setAssignmentForm(prev => ({ ...prev, eventId }));
     setAssignmentEventIdSearch('');
@@ -519,29 +533,41 @@ const AdminEventsManagement = () => {
         setEventDetailsModal(prev => ({ ...prev, participants: [], loading: false }));
       }
 
-      // Payments
+      // Payments - Enhanced error handling
       if (paymentsResponse.status === 'fulfilled') {
-        // paymentsResponse.value could be an Error thrown by getEventPayments; handle both shapes
-        const paymentsPayload = paymentsResponse.value?.payments || paymentsResponse.value?.data || paymentsResponse.value;
-        // Normalize: if server returned { success, data }, check data
-        let paymentsList = [];
-        if (paymentsResponse.value?.success && paymentsResponse.value?.data) {
-          // assume data.payments or data
-          paymentsList = paymentsResponse.value.data.payments || paymentsResponse.value.data || [];
-        } else if (Array.isArray(paymentsPayload)) {
-          paymentsList = paymentsPayload;
-        } else if (paymentsPayload && paymentsPayload.payments) {
-          paymentsList = paymentsPayload.payments;
-        }
+        try {
+          const responseValue = paymentsResponse.value;
+          let paymentsList = [];
+          
+          // Handle different response shapes
+          if (responseValue?.success && responseValue?.data) {
+            // Standard API response: { success: true, data: { payments: [...] } }
+            paymentsList = responseValue.data.payments || responseValue.data || [];
+          } else if (Array.isArray(responseValue)) {
+            // Direct array response
+            paymentsList = responseValue;
+          } else if (responseValue?.payments && Array.isArray(responseValue.payments)) {
+            // Wrapped in payments key
+            paymentsList = responseValue.payments;
+          } else if (responseValue?.data?.payments && Array.isArray(responseValue.data.payments)) {
+            // Nested data.payments
+            paymentsList = responseValue.data.payments;
+          }
 
-        console.log('✅ Payments loaded:', paymentsList.length || 0);
-        setEventDetailsModal(prev => ({
-          ...prev,
-          payments: paymentsList,
-          paymentsLoading: false
-        }));
+          console.log('✅ Payments loaded:', paymentsList.length || 0, paymentsList);
+          setEventDetailsModal(prev => ({
+            ...prev,
+            payments: paymentsList,
+            paymentsLoading: false
+          }));
+        } catch (paymentError) {
+          console.error('Error processing payments:', paymentError);
+          setEventDetailsModal(prev => ({ ...prev, payments: [], paymentsLoading: false }));
+        }
       } else {
         console.warn('Payments fetch failed:', paymentsResponse);
+        const errorReason = paymentsResponse.reason?.message || paymentsResponse.reason || 'Unknown error';
+        console.error('Payment fetch error:', errorReason);
         setEventDetailsModal(prev => ({ ...prev, payments: [], paymentsLoading: false }));
       }
 
@@ -1693,49 +1719,119 @@ const AdminEventsManagement = () => {
           </form>
         </div>
 
-        {/* Assignment and Permissions */}
+        {/* Assignment and Permissions - Buttons */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Assignment */}
-            <div ref={assignmentRef}>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">Assign Event to User</h3>
-              
-              {/* Existing Assignments */}
-              {assignmentForm.eventId && (
-                <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-medium text-gray-700">Current Assignments</h4>
-                    {loadingAssignments && <span className="text-xs text-gray-500">Loading...</span>}
-                  </div>
-                  {existingAssignments.length > 0 ? (
-                    <div className="space-y-2">
-                      {existingAssignments.map((assignment) => (
-                        <div key={assignment.id} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <div className="flex-1">
-                            <div className="text-sm font-medium text-gray-900">
-                              {assignment.user?.name || assignment.user?.email || 'Unknown User'}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Event Management</h3>
+              <p className="text-sm text-gray-600 mt-1">Assign events to users and manage permissions</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => {
+                  setAssignmentForm({ eventId: '', userId: '', role: 'INCHARGE' });
+                  setAssignmentEventIdSearch('');
+                  setUserUniqueIdSearch('');
+                  setUserSearch('');
+                  setUserSearchResult(null);
+                  setExistingAssignments([]);
+                  setAssignmentMsg('');
+                  setAssignmentErr('');
+                  setShowAssignmentModal(true);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
+              >
+                <span>👤</span>
+                <span>Assign Event to User</span>
+              </button>
+              <button
+                onClick={() => {
+                  setPermissionForm({
+                    eventId: '',
+                    role: 'INCHARGE',
+                    resultUpload: false,
+                    studentManagement: false,
+                    certificateManagement: false,
+                    feeManagement: false
+                  });
+                  setPermissionEventIdSearch('');
+                  setPermissionMsg('');
+                  setPermissionErr('');
+                  setShowPermissionModal(true);
+                }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
+              >
+                <span>🔐</span>
+                <span>Set Permissions</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Assignment Modal */}
+        {showAssignmentModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col">
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-t-xl flex-shrink-0 flex items-center justify-between">
+                <h3 className="text-xl font-bold">Assign Event to User</h3>
+                <button
+                  onClick={() => {
+                    setShowAssignmentModal(false);
+                    setAssignmentForm({ eventId: '', userId: '', role: 'INCHARGE' });
+                    setAssignmentEventIdSearch('');
+                    setUserUniqueIdSearch('');
+                    setUserSearch('');
+                    setUserSearchResult(null);
+                    setExistingAssignments([]);
+                    setAssignmentMsg('');
+                    setAssignmentErr('');
+                  }}
+                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-all"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                {/* Assignment Form Content */}
+                <div ref={assignmentRef}>
+                  {/* Existing Assignments */}
+                  {assignmentForm.eventId && (
+                    <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-medium text-gray-700">Current Assignments</h4>
+                        {loadingAssignments && <span className="text-xs text-gray-500">Loading...</span>}
+                      </div>
+                      {existingAssignments.length > 0 ? (
+                        <div className="space-y-2">
+                          {existingAssignments.map((assignment) => (
+                            <div key={assignment.id} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {assignment.user?.name || assignment.user?.email || 'Unknown User'}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  Role: {assignment.role} • {assignment.user?.email}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveAssignment(assignmentForm.eventId, assignment.id)}
+                                className="ml-2 text-red-600 hover:text-red-800 text-xs font-medium"
+                              >
+                                Remove
+                              </button>
                             </div>
-                            <div className="text-xs text-gray-500">
-                              Role: {assignment.role} • {assignment.user?.email}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveAssignment(assignmentForm.eventId, assignment.id)}
-                            className="ml-2 text-red-600 hover:text-red-800 text-xs font-medium"
-                          >
-                            Remove
-                          </button>
+                          ))}
                         </div>
-                      ))}
+                      ) : (
+                        <p className="text-sm text-gray-500">No assignments yet. Add one below.</p>
+                      )}
                     </div>
-                  ) : (
-                    <p className="text-sm text-gray-500">No assignments yet. Add one below.</p>
                   )}
-                </div>
-              )}
               
-              <form onSubmit={handleAssignSubmit} className="space-y-3">
+                  <form onSubmit={handleAssignSubmit} className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Event <span className="text-gray-500 text-xs">(or search by Event ID)</span>
@@ -1878,19 +1974,70 @@ const AdminEventsManagement = () => {
                 </div>
               </form>
               
-              {/* Info Note */}
-              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-xs text-blue-800">
-                  <strong>Note:</strong> After assigning a user, make sure to set permissions for their role using the "Set Permissions" form below. 
-                  Users need both assignment and permissions to access event features.
-                </p>
+                  {/* Info Note */}
+                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs text-blue-800">
+                      <strong>Note:</strong> After assigning a user, make sure to set permissions for their role using the "Set Permissions" button. 
+                      Users need both assignment and permissions to access event features.
+                    </p>
+                  </div>
+                </form>
+              </div>
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-xl flex justify-end flex-shrink-0">
+                <button
+                  onClick={() => {
+                    setShowAssignmentModal(false);
+                    setAssignmentForm({ eventId: '', userId: '', role: 'INCHARGE' });
+                    setAssignmentEventIdSearch('');
+                    setUserUniqueIdSearch('');
+                    setUserSearch('');
+                    setUserSearchResult(null);
+                    setExistingAssignments([]);
+                    setAssignmentMsg('');
+                    setAssignmentErr('');
+                  }}
+                  className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-semibold"
+                >
+                  Close
+                </button>
               </div>
             </div>
+          </div>
+        )}
 
-            {/* Permissions */}
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">Set Permissions</h3>
-              <form onSubmit={handlePermissionSubmit} className="space-y-3">
+        {/* Permissions Modal */}
+        {showPermissionModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col">
+              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-4 rounded-t-xl flex-shrink-0 flex items-center justify-between">
+                <h3 className="text-xl font-bold">Set Permissions</h3>
+                <button
+                  onClick={() => {
+                    setShowPermissionModal(false);
+                    setPermissionForm({
+                      eventId: '',
+                      role: 'INCHARGE',
+                      resultUpload: false,
+                      studentManagement: false,
+                      certificateManagement: false,
+                      feeManagement: false
+                    });
+                    setPermissionEventIdSearch('');
+                    setPermissionMsg('');
+                    setPermissionErr('');
+                  }}
+                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-all"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  handlePermissionSubmit(e);
+                }} className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Event <span className="text-gray-500 text-xs">(or search by Event ID)</span>
@@ -1996,18 +2143,40 @@ const AdminEventsManagement = () => {
                   )}
                 </div>
                 
-                {/* Info Note */}
-                <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                  <p className="text-xs text-amber-800">
-                    <strong>Important:</strong> Permissions are set per role (INCHARGE, COORDINATOR, TEAM). 
-                    Users assigned to an event with a specific role will inherit the permissions set for that role. 
-                    Make sure to assign users to events first, then set permissions for their roles.
-                  </p>
-                </div>
-              </form>
+                  {/* Info Note */}
+                  <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-xs text-amber-800">
+                      <strong>Important:</strong> Permissions are set per role (INCHARGE, COORDINATOR, TEAM). 
+                      Users assigned to an event with a specific role will inherit the permissions set for that role. 
+                      Make sure to assign users to events first, then set permissions for their roles.
+                    </p>
+                  </div>
+                </form>
+              </div>
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-xl flex justify-end flex-shrink-0">
+                <button
+                  onClick={() => {
+                    setShowPermissionModal(false);
+                    setPermissionForm({
+                      eventId: '',
+                      role: 'INCHARGE',
+                      resultUpload: false,
+                      studentManagement: false,
+                      certificateManagement: false,
+                      feeManagement: false
+                    });
+                    setPermissionEventIdSearch('');
+                    setPermissionMsg('');
+                    setPermissionErr('');
+                  }}
+                  className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-semibold"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">

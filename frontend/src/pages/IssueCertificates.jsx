@@ -368,25 +368,56 @@ const IssueCertificates = () => {
           </div>
         </div>
 
-        {/* Payment Pending Modal */}
+        {/* Payment Pending Modal - Enhanced with better error handling */}
         {showPaymentModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowPaymentModal(false);
+              }
+            }}
+          >
+            <div className="bg-white rounded-lg shadow-2xl p-6 max-w-md w-full mx-4 animate-in fade-in zoom-in">
               <div className="flex items-center mb-4">
-                <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mr-4">
+                <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mr-4 flex-shrink-0">
                   <svg className="w-6 h-6 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
                 </div>
-                <div>
+                <div className="flex-1">
                   <h3 className="text-lg font-semibold text-gray-900">Payment Pending</h3>
                   <p className="text-sm text-gray-600">Certificate issuance requires payment completion</p>
                 </div>
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="ml-2 text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label="Close"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
-              <p className="text-gray-700 mb-6">
-                The coach must complete payment for this event before certificates can be issued. 
-                Please check the payment status in the event details or contact the coach.
-              </p>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <p className="text-gray-700 text-sm mb-2">
+                  <strong>Why can't I issue certificates?</strong>
+                </p>
+                <p className="text-gray-600 text-sm">
+                  The coach must complete payment for this event before certificates can be issued. 
+                  This ensures all financial obligations are met before certificate generation.
+                </p>
+              </div>
+              <div className="space-y-2 mb-6">
+                <p className="text-sm text-gray-700">
+                  <strong>What to do:</strong>
+                </p>
+                <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                  <li>Check the payment status in the event details</li>
+                  <li>Contact the coach to complete payment if needed</li>
+                  <li>Once payment is confirmed, you can issue certificates</li>
+                </ul>
+              </div>
               <div className="flex justify-end space-x-3">
                 <button
                   onClick={() => setShowPaymentModal(false)}

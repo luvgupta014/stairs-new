@@ -83,7 +83,7 @@ const EventInchargeLogin = () => {
                   <Link to="/contact" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors">
                     Contact
                   </Link>
-                  <Link to="/login/admin" className="text-indigo-600 hover:text-indigo-800 px-3 py-2 rounded-md text-sm font-medium transition-colors border border-indigo-300">
+                  <Link to="/login/admin" className="text-indigo-600 hover:text-indigo-800 px-3 py-2 rounded-md text-sm font-medium transition-colors">
                     Admin Login
                   </Link>
                 </div>
