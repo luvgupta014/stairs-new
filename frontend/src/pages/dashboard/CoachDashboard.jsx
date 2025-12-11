@@ -16,6 +16,7 @@ import StudentCard from '../../components/StudentCard';
 import Spinner from '../../components/Spinner';
 import CoachParticipantsModal from '../../components/CoachParticipantsModal';
 import PaymentPopup from '../../components/PaymentPopup';
+import CheckoutModal from '../../components/CheckoutModal';
 import usePaymentStatus from '../../hooks/usePaymentStatus';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FaExclamationTriangle, FaCreditCard, FaCheckCircle, FaEdit, FaTrash, FaEye, FaUsers, FaCalendar, FaMapMarkerAlt, FaBell } from 'react-icons/fa';
@@ -38,6 +39,9 @@ const CoachDashboard = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [eventToDelete, setEventToDelete] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [selectedEventForPayment, setSelectedEventForPayment] = useState(null);
+  const [razorpayOrderData, setRazorpayOrderData] = useState(null);
 
   // Notification state
   const [notifications, setNotifications] = useState([]);
@@ -297,19 +301,11 @@ const CoachDashboard = () => {
         return;
       }
 
-      // Load Razorpay script if not already loaded
-      if (!window.Razorpay) {
-        const script = document.createElement('script');
-        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-        script.async = true;
-        document.body.appendChild(script);
-        
-        // Wait for script to load
-        await new Promise((resolve, reject) => {
-          script.onload = () => resolve(true);
-          script.onerror = () => reject(new Error('Razorpay SDK failed to load.'));
-          setTimeout(() => reject(new Error('Razorpay SDK load timeout')), 10000);
-        });
+      // Find the event details
+      const event = coachEvents.find(e => e.id === eventId);
+      if (!event) {
+        alert('Event not found. Please refresh the page and try again.');
+        return;
       }
 
       // Create payment order on backend
@@ -361,6 +357,66 @@ const CoachDashboard = () => {
         throw new Error('Invalid payment order data. Please try again.');
       }
 
+      // Store event and payment data for checkout modal
+      setSelectedEventForPayment(event);
+      setRazorpayOrderData({
+        orderId,
+        amount,
+        currency: currency || 'INR',
+        eventName,
+        razorpayKeyId
+      });
+      setShowCheckout(true);
+    } catch (err) {
+      console.error('Payment error:', err);
+      console.error('Error details:', {
+        message: err.message,
+        name: err.name,
+        eventId: eventId,
+        hasAuthToken: !!localStorage.getItem('authToken')
+      });
+      
+      // More user-friendly error messages
+      let errorMessage = err.message || 'Payment initialization failed. Please try again.';
+      
+      if (err.message && err.message.includes('not authorized')) {
+        errorMessage = 'You are not authorized to make payment for this event. Please ensure you are the event creator.';
+      } else if (err.message && err.message.includes('session has expired')) {
+        errorMessage = 'Your session has expired. Please login again.';
+      } else if (err.message && err.message.includes('invalid response')) {
+        errorMessage = 'Server returned invalid response. Please try again or contact support.';
+      } else if (err.message && err.message.includes('Razorpay SDK')) {
+        errorMessage = 'Payment gateway failed to load. Please check your internet connection and try again.';
+      }
+      
+      alert(errorMessage);
+    }
+  };
+
+  const handleConfirmEventPayment = async () => {
+    if (!selectedEventForPayment || !razorpayOrderData) {
+      return;
+    }
+
+    try {
+      const eventId = selectedEventForPayment.id;
+      const { orderId, amount, currency, eventName, razorpayKeyId } = razorpayOrderData;
+
+      // Load Razorpay script if not already loaded
+      if (!window.Razorpay) {
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.async = true;
+        document.body.appendChild(script);
+        
+        // Wait for script to load
+        await new Promise((resolve, reject) => {
+          script.onload = () => resolve(true);
+          script.onerror = () => reject(new Error('Razorpay SDK failed to load.'));
+          setTimeout(() => reject(new Error('Razorpay SDK load timeout')), 10000);
+        });
+      }
+
       // Configure Razorpay options
       const options = {
         key: razorpayKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
@@ -406,6 +462,10 @@ const CoachDashboard = () => {
             console.error('Payment verification error:', verifyError);
             const errorMsg = verifyError.message || 'Payment verification failed';
             alert(`${errorMsg}. Please contact support with payment ID: ${response.razorpay_payment_id || 'N/A'}`);
+          } finally {
+            setShowCheckout(false);
+            setSelectedEventForPayment(null);
+            setRazorpayOrderData(null);
           }
         },
         prefill: {
@@ -419,6 +479,9 @@ const CoachDashboard = () => {
         modal: {
           ondismiss: function() {
             console.log('Payment modal closed by user');
+            setShowCheckout(false);
+            setSelectedEventForPayment(null);
+            setRazorpayOrderData(null);
           }
         }
       };
@@ -427,33 +490,17 @@ const CoachDashboard = () => {
       if (window.Razorpay) {
         const rzp = new window.Razorpay(options);
         rzp.open();
+        setShowCheckout(false);
       } else {
         throw new Error('Razorpay SDK not loaded. Please refresh and try again.');
       }
 
     } catch (err) {
       console.error('Payment error:', err);
-      console.error('Error details:', {
-        message: err.message,
-        name: err.name,
-        eventId: eventId,
-        hasAuthToken: !!localStorage.getItem('authToken')
-      });
-      
-      // More user-friendly error messages
-      let errorMessage = err.message || 'Payment initialization failed. Please try again.';
-      
-      if (err.message && err.message.includes('not authorized')) {
-        errorMessage = 'You are not authorized to make payment for this event. Please ensure you are the event creator.';
-      } else if (err.message && err.message.includes('session has expired')) {
-        errorMessage = 'Your session has expired. Please login again.';
-      } else if (err.message && err.message.includes('invalid response')) {
-        errorMessage = 'Server returned invalid response. Please try again or contact support.';
-      } else if (err.message && err.message.includes('Razorpay SDK')) {
-        errorMessage = 'Payment gateway failed to load. Please check your internet connection and try again.';
-      }
-      
-      alert(errorMessage);
+      alert(err.message || 'Payment initialization failed. Please try again.');
+      setShowCheckout(false);
+      setSelectedEventForPayment(null);
+      setRazorpayOrderData(null);
     }
   };
 
@@ -1670,6 +1717,34 @@ const CoachDashboard = () => {
           userProfile={dashboardData?.coach}
           onPaymentSuccess={onPaymentSuccess}
         />
+
+        {/* Checkout Modal for Event Payment */}
+        {showCheckout && selectedEventForPayment && razorpayOrderData && (
+          <CheckoutModal
+            isOpen={showCheckout}
+            onClose={() => {
+              setShowCheckout(false);
+              setSelectedEventForPayment(null);
+              setRazorpayOrderData(null);
+            }}
+            onConfirm={handleConfirmEventPayment}
+            loading={false}
+            paymentData={{
+              title: 'Review Your Event Payment',
+              description: 'Please review the payment details before proceeding to Razorpay',
+              paymentType: 'event',
+              eventDetails: {
+                name: razorpayOrderData.eventName || selectedEventForPayment.name,
+                participants: selectedEventForPayment.currentParticipants || 0
+              },
+              subtotal: (razorpayOrderData.amount / 100) || 0,
+              tax: 0,
+              discount: 0,
+              total: (razorpayOrderData.amount / 100) || 0,
+              currency: razorpayOrderData.currency || 'INR'
+            }}
+          />
+        )}
       </div>
     </div>
   );

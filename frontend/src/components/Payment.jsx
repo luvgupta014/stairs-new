@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { FaCrown, FaCheck, FaTimes, FaCreditCard, FaUsers, FaBuilding, FaDumbbell } from 'react-icons/fa';
 import { getPaymentPlans } from '../api';
+import CheckoutModal from './CheckoutModal';
 
 const Payment = ({ userType = 'student' }) => {
   const [planConfig, setPlanConfig] = useState(null);
@@ -12,6 +13,9 @@ const Payment = ({ userType = 'student' }) => {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [error, setError] = useState('');
   const [authError, setAuthError] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [selectedPlanForPayment, setSelectedPlanForPayment] = useState(null);
+  const [razorpayOrderData, setRazorpayOrderData] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -185,6 +189,34 @@ const Payment = ({ userType = 'student' }) => {
 
       const { orderId, amount, currency, planName, razorpayKeyId } = orderData.data;
 
+      // Store plan and payment data for checkout modal
+      setSelectedPlanForPayment(plan);
+      setRazorpayOrderData({
+        orderId,
+        amount,
+        currency,
+        planName,
+        razorpayKeyId
+      });
+      setShowCheckout(true);
+      setPaymentLoading(false);
+    } catch (err) {
+      console.error('Payment error:', err);
+      setError(err.message || 'Payment initialization failed. Please try again.');
+      setPaymentLoading(false);
+    }
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!selectedPlanForPayment || !razorpayOrderData) {
+      return;
+    }
+
+    try {
+      setPaymentLoading(true);
+      const plan = selectedPlanForPayment;
+      const { orderId, amount, currency, planName, razorpayKeyId } = razorpayOrderData;
+
       // Configure Razorpay options
       const options = {
         key: razorpayKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
@@ -243,6 +275,9 @@ const Payment = ({ userType = 'student' }) => {
             setError('Payment verification failed. Please contact support.');
           } finally {
             setPaymentLoading(false);
+            setShowCheckout(false);
+            setSelectedPlanForPayment(null);
+            setRazorpayOrderData(null);
           }
         },
         prefill: {
@@ -260,6 +295,9 @@ const Payment = ({ userType = 'student' }) => {
         modal: {
           ondismiss: function() {
             setPaymentLoading(false);
+            setShowCheckout(false);
+            setSelectedPlanForPayment(null);
+            setRazorpayOrderData(null);
           }
         }
       };
@@ -268,6 +306,7 @@ const Payment = ({ userType = 'student' }) => {
       if (window.Razorpay) {
         const rzp = new window.Razorpay(options);
         rzp.open();
+        setShowCheckout(false);
       } else {
         throw new Error('Razorpay SDK not loaded. Please refresh and try again.');
       }
@@ -462,6 +501,37 @@ const Payment = ({ userType = 'student' }) => {
           </div>
         </motion.div>
       </div>
+
+      {/* Checkout Modal */}
+      {showCheckout && selectedPlanForPayment && razorpayOrderData && (
+        <CheckoutModal
+          isOpen={showCheckout}
+          onClose={() => {
+            setShowCheckout(false);
+            setSelectedPlanForPayment(null);
+            setRazorpayOrderData(null);
+          }}
+          onConfirm={handleConfirmPayment}
+          loading={paymentLoading}
+          paymentData={{
+            title: 'Review Your Subscription Payment',
+            description: 'Please review the payment details before proceeding to Razorpay',
+            paymentType: 'subscription',
+            planDetails: {
+              name: selectedPlanForPayment.name,
+              duration: selectedPlanForPayment.duration,
+              features: selectedPlanForPayment.features || []
+            },
+            subtotal: selectedPlanForPayment.price || 0,
+            tax: 0,
+            discount: selectedPlanForPayment.originalPrice > selectedPlanForPayment.price 
+              ? selectedPlanForPayment.originalPrice - selectedPlanForPayment.price 
+              : 0,
+            total: selectedPlanForPayment.price || 0,
+            currency: razorpayOrderData.currency || 'INR'
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -25,6 +25,7 @@ import {
 } from 'react-icons/fa';
 import Spinner from '../../components/Spinner';
 import BackButton from '../../components/BackButton';
+import CheckoutModal from '../../components/CheckoutModal';
 
 const EventOrders = () => {
   const { eventId } = useParams();
@@ -37,6 +38,9 @@ const EventOrders = () => {
   const [editingOrder, setEditingOrder] = useState(null);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [selectedOrderForPayment, setSelectedOrderForPayment] = useState(null);
+  const [razorpayOrderData, setRazorpayOrderData] = useState(null);
   
   // Order form state
   const [orderForm, setOrderForm] = useState({
@@ -170,6 +174,28 @@ const EventOrders = () => {
       }
 
       const paymentData = result.data;
+      
+      // Store order and payment data for checkout modal
+      setSelectedOrderForPayment(order);
+      setRazorpayOrderData(paymentData);
+      setShowCheckout(true);
+      setPaymentLoading(false);
+    } catch (error) {
+      console.error('Payment initiation failed:', error);
+      showMessage('error', error.message || 'Failed to initiate payment');
+      setPaymentLoading(false);
+    }
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!selectedOrderForPayment || !razorpayOrderData) {
+      return;
+    }
+
+    try {
+      setPaymentLoading(true);
+      const order = selectedOrderForPayment;
+      const paymentData = razorpayOrderData;
 
       // Load Razorpay script if not already loaded
       if (!window.Razorpay) {
@@ -220,11 +246,17 @@ const EventOrders = () => {
             showMessage('error', error.message || 'Payment verification failed');
           } finally {
             setPaymentLoading(false);
+            setShowCheckout(false);
+            setSelectedOrderForPayment(null);
+            setRazorpayOrderData(null);
           }
         },
         modal: {
           ondismiss: function() {
             setPaymentLoading(false);
+            setShowCheckout(false);
+            setSelectedOrderForPayment(null);
+            setRazorpayOrderData(null);
             showMessage('info', 'Payment cancelled');
           }
         }
@@ -232,6 +264,7 @@ const EventOrders = () => {
 
       const razorpay = new window.Razorpay(options);
       razorpay.open();
+      setShowCheckout(false);
 
     } catch (error) {
       console.error('Payment initiation failed:', error);
@@ -590,6 +623,53 @@ const EventOrders = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Checkout Modal */}
+      {showCheckout && selectedOrderForPayment && razorpayOrderData && (
+        <CheckoutModal
+          isOpen={showCheckout}
+          onClose={() => {
+            setShowCheckout(false);
+            setSelectedOrderForPayment(null);
+            setRazorpayOrderData(null);
+          }}
+          onConfirm={handleConfirmPayment}
+          loading={paymentLoading}
+          paymentData={{
+            title: 'Review Your Order Payment',
+            description: 'Please review the payment details before proceeding to Razorpay',
+            paymentType: 'order',
+            orderDetails: {
+              orderNumber: razorpayOrderData.orderDetails.orderNumber,
+              certificates: razorpayOrderData.orderDetails.certificates || 0,
+              medals: razorpayOrderData.orderDetails.medals || 0,
+              trophies: razorpayOrderData.orderDetails.trophies || 0
+            },
+            items: [
+              ...(razorpayOrderData.orderDetails.certificates > 0 ? [{
+                name: 'Certificates',
+                quantity: razorpayOrderData.orderDetails.certificates,
+                amount: 0 // Price breakdown would come from backend if available
+              }] : []),
+              ...(razorpayOrderData.orderDetails.medals > 0 ? [{
+                name: 'Medals',
+                quantity: razorpayOrderData.orderDetails.medals,
+                amount: 0
+              }] : []),
+              ...(razorpayOrderData.orderDetails.trophies > 0 ? [{
+                name: 'Trophies',
+                quantity: razorpayOrderData.orderDetails.trophies,
+                amount: 0
+              }] : [])
+            ],
+            subtotal: selectedOrderForPayment.totalAmount || 0,
+            tax: 0,
+            discount: 0,
+            total: selectedOrderForPayment.totalAmount || 0,
+            currency: razorpayOrderData.currency || 'INR'
+          }}
+        />
       )}
     </div>
   );
