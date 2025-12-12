@@ -81,6 +81,26 @@ const StudentDashboard = () => {
     localProfile[field] ??
     fallback;
 
+  // Load Razorpay script
+  const loadRazorpayScript = () => {
+    if (window.Razorpay) {
+      setRazorpayLoaded(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => {
+      setRazorpayLoaded(true);
+      console.log('✅ Razorpay SDK loaded');
+    };
+    script.onerror = () => {
+      console.error('❌ Failed to load Razorpay SDK');
+    };
+    document.body.appendChild(script);
+  };
+
   useEffect(() => {
     // Check if tab is specified in URL query params
     const tabParam = searchParams.get('tab');
