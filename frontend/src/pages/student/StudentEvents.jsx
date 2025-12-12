@@ -79,24 +79,55 @@ const StudentEvents = () => {
         response = await registerForEvent(eventId);
       } catch (apiError) {
         // Axios throws error for non-2xx responses
+        console.log('🔍 Caught API error:', {
+          apiError,
+          response: apiError?.response,
+          responseData: apiError?.response?.data,
+          status: apiError?.response?.status,
+          message: apiError?.message
+        });
+        
         // Extract the error response data
         const errorData = apiError?.response?.data || apiError?.data || { message: apiError?.message || 'Registration failed' };
-        console.log('API error caught:', errorData);
+        console.log('📦 Error data extracted:', errorData);
         
         // Check if this is a payment required error
-        const errorMessage = errorData.message || errorData.error || String(errorData);
-        const isPaymentError = errorMessage && (
+        const errorMessage = errorData.message || errorData.error || apiError?.message || String(errorData);
+        console.log('📝 Error message:', errorMessage);
+        
+        const isPaymentError = errorMessage && typeof errorMessage === 'string' && (
           errorMessage.toLowerCase().includes('payment required') || 
-          errorMessage.toLowerCase().includes('complete payment')
+          errorMessage.toLowerCase().includes('complete payment') ||
+          errorMessage.toLowerCase().includes('payment')
         );
         
-        if (isPaymentError || apiError?.response?.status === 400) {
+        const statusCode = apiError?.response?.status || apiError?.statusCode || apiError?.status || apiError?.status;
+        console.log('💰 Payment check:', {
+          isPaymentError,
+          statusCode,
+          errorMessage,
+          willTriggerPayment: isPaymentError || statusCode === 400
+        });
+        
+        // For any 400 error OR payment-related error message, trigger payment flow
+        // This handles cases where error message format might vary
+        if (isPaymentError || statusCode === 400) {
           // Trigger payment flow
-          await initiatePaymentFlow(eventId, errorMessage);
-          return;
+          console.log('✅ Triggering payment flow for event:', eventId);
+          try {
+            await initiatePaymentFlow(eventId, errorMessage);
+            console.log('✅ Payment flow initiated successfully');
+            return; // Exit successfully if payment flow initiated
+          } catch (paymentFlowError) {
+            // If payment flow fails, show the original error
+            console.error('❌ Payment flow failed:', paymentFlowError);
+            // Don't re-throw - let the outer catch handle it
+            throw paymentFlowError;
+          }
         }
         
         // Re-throw other errors
+        console.log('❌ Re-throwing error (not payment related)');
         throw apiError;
       }
       
@@ -131,22 +162,26 @@ const StudentEvents = () => {
   // Helper function to initiate payment flow
   const initiatePaymentFlow = async (eventId, errorMessage = '') => {
     try {
-      console.log('💰 Payment required. Initiating payment flow...', errorMessage);
+      console.log('💰 Payment required. Initiating payment flow...', { eventId, errorMessage });
       
       // Get event details
+      console.log('📋 Fetching event details...');
       const eventDetails = await getStudentEventDetails(eventId);
       const event = eventDetails.data || eventDetails;
-      console.log('Event details:', event);
+      console.log('✅ Event details fetched:', event);
       
       // Create payment order and show checkout
+      console.log('💳 Creating payment order...');
       const paymentOrderResponse = await createStudentEventPaymentOrder(eventId);
       const orderData = paymentOrderResponse.data || paymentOrderResponse;
-      console.log('Payment order created:', orderData);
+      console.log('✅ Payment order created:', orderData);
       
       if (!orderData.orderId) {
-        throw new Error('Failed to create payment order');
+        console.error('❌ No order ID in response:', orderData);
+        throw new Error('Failed to create payment order - no order ID received');
       }
 
+      console.log('📝 Setting up checkout data...');
       setPendingEventId(eventId);
       setCheckoutData({
         title: 'Event Registration Payment',
@@ -173,12 +208,18 @@ const StudentEvents = () => {
         event: event
       });
       
-      console.log('Showing checkout modal');
+      console.log('✅ Checkout data set. Showing modal...');
       // Show checkout modal instead of alert
       setShowCheckout(true);
       setRegistering(null);
+      console.log('✅ Checkout modal should now be visible');
     } catch (paymentError) {
       console.error('❌ Failed to initiate payment flow:', paymentError);
+      console.error('Payment error details:', {
+        message: paymentError?.message,
+        response: paymentError?.response,
+        data: paymentError?.response?.data
+      });
       const paymentErrMsg = paymentError?.message || paymentError?.response?.data?.message || 'Unknown error';
       alert(`Payment setup failed: ${paymentErrMsg}. Please try again.`);
       setRegistering(null);

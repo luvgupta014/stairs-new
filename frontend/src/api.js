@@ -597,12 +597,23 @@ export const registerForEvent = async (eventId) => {
     return response.data;
   } catch (error) {
     console.error('Register for event error:', error);
-    // Return error object with message for easier handling
+    // Extract error data from response
     const errorData = error.response?.data || { message: error.message || 'Registration failed' };
-    // Throw an error object that preserves the message
-    const registrationError = new Error(errorData.message || 'Registration failed');
+    const errorMessage = errorData.message || error.message || 'Registration failed';
+    const statusCode = error.response?.status || error.statusCode;
+    
+    // Create error object that preserves all error information
+    const registrationError = new Error(errorMessage);
     registrationError.response = error.response;
     registrationError.data = errorData;
+    registrationError.statusCode = statusCode;
+    registrationError.status = statusCode; // Also set status for compatibility
+    registrationError.isAxiosError = true;
+    
+    // Preserve original error for debugging
+    registrationError.originalError = error;
+    
+    // Re-throw so it can be caught by the component
     throw registrationError;
   }
 };
