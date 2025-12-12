@@ -601,6 +601,11 @@ router.get('/events', authenticate, requireStudent, async (req, res) => {
       currentParticipants: event.currentParticipants,
       status: event.status,
       isRegistered: event.isRegistered,
+      createdByAdmin: event.createdByAdmin,
+      studentFeeEnabled: event.studentFeeEnabled,
+      studentFeeAmount: event.studentFeeAmount,
+      studentFeeUnit: event.studentFeeUnit,
+      paymentRequired: !!(event.createdByAdmin && event.studentFeeEnabled),
       organizer: {                          // Use coach as organizer
         id: event.coach?.id,
         firstName: event.coach?.name?.split(' ')[0] || 'Unknown',
@@ -804,49 +809,8 @@ router.post('/events/:eventId/register', authenticate, requireStudent, async (re
       return res.status(404).json(errorResponse('Student profile not found.', 404));
     }
 
-    // Check if already registered
-    const existingRegistration = await prisma.eventRegistration.findUnique({
-      where: {
-        eventId_studentId: {                // FIXED: Use correct unique constraint name
-          studentId: student.id,
-          eventId: eventId
-        }
-      }
-    });
-
-    if (existingRegistration) {
-      return res.status(409).json(errorResponse('Already registered for this event.', 409));
-    }
-
-    // Create registration and update participant count
-    const [registration] = await prisma.$transaction([
-      prisma.eventRegistration.create({
-        data: {
-          studentId: student.id,
-          eventId: eventId,
-          status: 'REGISTERED'             // Changed: Set status to REGISTERED upon successful registration
-        },
-        include: {
-          event: {
-            select: {
-              id: true,
-              name: true,
-              startDate: true,
-              venue: true,
-              eventFee: true
-            }
-          }
-        }
-      }),
-      prisma.event.update({
-        where: { id: eventId },
-        data: {
-          currentParticipants: {
-            increment: 1
-          }
-        }
-      })
-    ]);
+    // Use consolidated service to handle registration + payment triggers
+    const registration = await eventService.registerForEvent(eventId, student.id);
 
     console.log(`✅ Student registered for event successfully`);
 
@@ -892,6 +856,10 @@ router.get('/event-registrations', authenticate, requireStudent, async (req, res
               endDate: true,
               venue: true,
               eventFee: true,
+              studentFeeEnabled: true,
+              studentFeeAmount: true,
+              studentFeeUnit: true,
+              createdByAdmin: true,
               status: true,
               coach: {
                 select: {
@@ -922,32 +890,61 @@ router.get('/event-registrations', authenticate, requireStudent, async (req, res
 
     const pagination = getPaginationMeta(filteredTotal, parseInt(page), parseInt(limit));
 
-    // Format for frontend compatibility
-    const formattedRegistrations = validRegistrations.map(reg => ({
-      id: reg.id,
-      status: reg.status,
-      message: reg.message,
-      createdAt: reg.createdAt,
-      updatedAt: reg.updatedAt,
-      event: {
-        id: reg.event.id,
-        uniqueId: reg.event.uniqueId, // Custom event UID
-        title: reg.event.name,      // Map name to title
-        name: reg.event.name,
-        description: reg.event.description,
-        sport: reg.event.sport,
-        startDate: reg.event.startDate,
-        endDate: reg.event.endDate,
-        location: reg.event.venue,  // Map venue to location
-        venue: reg.event.venue,
-        fees: reg.event.eventFee,   // Map eventFee to fees
-        eventFee: reg.event.eventFee,
-        status: reg.event.status,
-        organizer: {
-          name: reg.event.coach?.name || 'Unknown Coach'
-        }
+    // Build a lookup for payment status by event
+    const studentPayments = await prisma.payment.findMany({
+      where: {
+        userId: req.user.id,
+        type: 'EVENT_STUDENT_FEE'
       }
-    }));
+    });
+
+    const paymentStatusByEvent = {};
+    studentPayments.forEach(payment => {
+      try {
+        const meta = payment.metadata ? JSON.parse(payment.metadata) : {};
+        if (meta.eventId) {
+          paymentStatusByEvent[meta.eventId] = payment.status;
+        }
+      } catch (err) {
+        // ignore parse errors and continue
+      }
+    });
+
+    // Format for frontend compatibility
+    const formattedRegistrations = validRegistrations.map(reg => {
+      const paymentStatus = paymentStatusByEvent[reg.event.id] || 'PENDING';
+      const paymentRequired = !!(reg.event.createdByAdmin && reg.event.studentFeeEnabled);
+
+      return {
+        id: reg.id,
+        status: reg.status,
+        message: reg.message,
+        createdAt: reg.createdAt,
+        updatedAt: reg.updatedAt,
+        paymentRequired,
+        paymentStatus,
+        studentFeeAmount: reg.event.studentFeeAmount,
+        studentFeeUnit: reg.event.studentFeeUnit,
+        event: {
+          id: reg.event.id,
+          uniqueId: reg.event.uniqueId, // Custom event UID
+          title: reg.event.name,      // Map name to title
+          name: reg.event.name,
+          description: reg.event.description,
+          sport: reg.event.sport,
+          startDate: reg.event.startDate,
+          endDate: reg.event.endDate,
+          location: reg.event.venue,  // Map venue to location
+          venue: reg.event.venue,
+          fees: reg.event.eventFee,   // Map eventFee to fees
+          eventFee: reg.event.eventFee,
+          status: reg.event.status,
+          organizer: {
+            name: reg.event.coach?.name || 'Unknown Coach'
+          }
+        }
+      };
+    });
 
     res.json(successResponse({
       registrations: formattedRegistrations,

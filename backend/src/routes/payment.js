@@ -351,6 +351,145 @@ router.post('/create-order-events', authenticate, async (req, res) => {
   }
 });
 
+// Create payment order for student participation fee (admin-created events only)
+router.post('/create-order-student-event', authenticate, requireStudent, async (req, res) => {
+  try {
+    const { eventId } = req.body;
+
+    if (!eventId) {
+      return res.status(400).json(errorResponse('Event ID is required.', 400));
+    }
+
+    // Fetch event with fee controls
+    const event = await prisma.event.findUnique({
+      where: { id: eventId }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    if (!event.createdByAdmin || !event.studentFeeEnabled) {
+      return res.status(400).json(errorResponse('This event does not require a student participation fee.', 400));
+    }
+
+    // Validate student profile and registration
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user.id }
+    });
+
+    if (!student) {
+      return res.status(404).json(errorResponse('Student profile not found.', 404));
+    }
+
+    const registration = await prisma.eventRegistration.findUnique({
+      where: {
+        eventId_studentId: {
+          eventId,
+          studentId: student.id
+        }
+      }
+    });
+
+    if (!registration) {
+      return res.status(400).json(errorResponse('Register for the event before initiating payment.', 400));
+    }
+
+    // Prevent duplicate successful payments
+    const existingSuccess = await prisma.payment.findFirst({
+      where: {
+        userId: req.user.id,
+        status: 'SUCCESS',
+        metadata: {
+          contains: eventId
+        }
+      }
+    });
+
+    if (existingSuccess) {
+      return res.status(400).json(errorResponse('Payment already completed for this event.', 400));
+    }
+
+    const amountInRupees = Number(event.studentFeeAmount) || 0;
+    if (amountInRupees <= 0) {
+      return res.status(400).json(errorResponse('Participation fee amount must be greater than zero.', 400));
+    }
+
+    const amount = Math.round(amountInRupees * 100); // paise
+
+    // Reuse or create pending payment record
+    let paymentRecord = await prisma.payment.findFirst({
+      where: {
+        userId: req.user.id,
+        status: 'PENDING',
+        metadata: {
+          contains: registration.id
+        }
+      }
+    });
+
+    if (!paymentRecord) {
+      paymentRecord = await prisma.payment.create({
+        data: {
+          userId: req.user.id,
+          userType: 'STUDENT',
+          type: 'EVENT_STUDENT_FEE',
+          amount: amountInRupees,
+          currency: 'INR',
+          status: 'PENDING',
+          description: `Participation fee for ${event.name}`,
+          metadata: JSON.stringify({
+            eventId,
+            studentId: student.id,
+            registrationId: registration.id,
+            unit: event.studentFeeUnit || 'PERSON',
+            createdByAdmin: true
+          })
+        }
+      });
+    }
+
+    // Create Razorpay order
+    const timestamp = Date.now().toString().slice(-8);
+    const userIdForReceipt = (req.user?.id || '').toString().slice(-6);
+    const receipt = `SEV_${userIdForReceipt}_${timestamp}`;
+
+    const order = await razorpay.orders.create({
+      amount,
+      currency: 'INR',
+      receipt,
+      notes: {
+        userId: req.user.id,
+        eventId,
+        registrationId: registration.id,
+        context: 'student_event_fee'
+      }
+    });
+
+    // Attach order details to payment
+    await prisma.payment.update({
+      where: { id: paymentRecord.id },
+      data: {
+        razorpayOrderId: order.id,
+        amount: amountInRupees
+      }
+    });
+
+    return res.json(successResponse({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      paymentId: paymentRecord.id,
+      razorpayKeyId: process.env.RAZORPAY_KEY_ID,
+      registrationId: registration.id,
+      eventId
+    }, 'Payment order created successfully for student event participation.'));
+  } catch (error) {
+    console.error('❌ Create student event payment order error:', error);
+    res.status(500).json(errorResponse('Failed to create student event payment order.', 500));
+  }
+});
+
 // Verify payment (unified for all user types and event payments)
 router.post('/verify', authenticate, async (req, res) => {
   try {
@@ -387,6 +526,16 @@ router.post('/verify', authenticate, async (req, res) => {
     // Handle event payment context
     if (context === 'event_payment' && eventId) {
       return handleEventPaymentVerification(req, res, {
+        razorpay_order_id,
+        razorpay_payment_id,
+        eventId,
+        userId: req.user.id
+      });
+    }
+
+    // Handle student participation fee
+    if (context === 'student_event_fee' && eventId) {
+      return handleStudentEventPaymentVerification(req, res, {
         razorpay_order_id,
         razorpay_payment_id,
         eventId,
@@ -1163,5 +1312,77 @@ router.get('/event/:eventId/payment-status', authenticate, async (req, res) => {
     res.status(500).json(errorResponse('Failed to check payment status', 500));
   }
 });
+
+// Helper: handle student participation fee verification
+async function handleStudentEventPaymentVerification(req, res, { razorpay_order_id, razorpay_payment_id, eventId, userId }) {
+  try {
+    console.log(`🎯 Handling student event fee verification for event ${eventId}`);
+
+    const paymentUpdate = await prisma.payment.updateMany({
+      where: {
+        razorpayOrderId: razorpay_order_id,
+        userId,
+        status: { not: 'SUCCESS' }
+      },
+      data: {
+        razorpayPaymentId: razorpay_payment_id,
+        status: 'SUCCESS'
+      }
+    });
+
+    if (paymentUpdate.count === 0) {
+      const existing = await prisma.payment.findFirst({
+        where: { razorpayOrderId: razorpay_order_id, userId }
+      });
+
+      if (existing?.status === 'SUCCESS') {
+        return res.json(successResponse({
+          paymentId: razorpay_payment_id,
+          status: 'SUCCESS',
+          eventId,
+          alreadyProcessed: true
+        }, 'Payment was already verified.'));
+      }
+
+      return res.status(404).json(errorResponse('Payment record not found for verification.', 404));
+    }
+
+    const paymentRecord = await prisma.payment.findFirst({
+      where: { razorpayOrderId: razorpay_order_id, userId }
+    });
+
+    let registrationId = null;
+    let studentId = null;
+    try {
+      const meta = paymentRecord?.metadata ? JSON.parse(paymentRecord.metadata) : {};
+      registrationId = meta.registrationId;
+      studentId = meta.studentId;
+    } catch (err) {
+      console.warn('⚠️ Failed to parse payment metadata for student event fee.');
+    }
+
+    if (registrationId) {
+      await prisma.eventRegistration.update({
+        where: { id: registrationId },
+        data: { status: 'APPROVED' }
+      });
+    } else if (studentId) {
+      await prisma.eventRegistration.updateMany({
+        where: { eventId, studentId },
+        data: { status: 'APPROVED' }
+      });
+    }
+
+    return res.json(successResponse({
+      paymentId: razorpay_payment_id,
+      status: 'SUCCESS',
+      eventId,
+      registrationId
+    }, 'Student event fee verified successfully.'));
+  } catch (error) {
+    console.error('❌ Student event fee verification error:', error);
+    res.status(500).json(errorResponse('Failed to verify student event payment.', 500));
+  }
+}
 
 module.exports = router;

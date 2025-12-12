@@ -7,7 +7,9 @@ const AdminGlobalPayments = () => {
   const [form, setForm] = useState({
     perStudentBaseCharge: '',
     defaultEventFee: '',
-    coordinatorSubscriptionFee: ''
+    coordinatorSubscriptionFee: '',
+    adminStudentFeeEnabled: false,
+    adminStudentFeeAmount: ''
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -30,7 +32,9 @@ const AdminGlobalPayments = () => {
         setForm({
           perStudentBaseCharge: data.perStudentBaseCharge ?? '',
           defaultEventFee: data.defaultEventFee ?? '',
-          coordinatorSubscriptionFee: data.coordinatorSubscriptionFee ?? ''
+          coordinatorSubscriptionFee: data.coordinatorSubscriptionFee ?? '',
+          adminStudentFeeEnabled: data.adminStudentFeeEnabled ?? false,
+          adminStudentFeeAmount: data.adminStudentFeeAmount ?? ''
         });
       }
     } catch (err) {
@@ -61,8 +65,9 @@ const AdminGlobalPayments = () => {
   }, []);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    const { name, value, type, checked } = e.target;
+    const nextValue = type === 'checkbox' ? checked : value;
+    setForm((prev) => ({ ...prev, [name]: nextValue }));
   };
 
   const handleSave = async (e) => {
@@ -74,7 +79,9 @@ const AdminGlobalPayments = () => {
       const payload = {
         perStudentBaseCharge: Number(form.perStudentBaseCharge) || 0,
         defaultEventFee: Number(form.defaultEventFee) || 0,
-        coordinatorSubscriptionFee: Number(form.coordinatorSubscriptionFee) || 0
+        coordinatorSubscriptionFee: Number(form.coordinatorSubscriptionFee) || 0,
+        adminStudentFeeEnabled: !!form.adminStudentFeeEnabled,
+        adminStudentFeeAmount: Number(form.adminStudentFeeAmount) || 0
       };
       const res = await updateGlobalPaymentSettings(payload);
       if (res?.success) {
@@ -204,6 +211,46 @@ const AdminGlobalPayments = () => {
               />
               <p className="text-xs text-gray-500 mt-1">
                 One-time registration fee (Use Case 2)
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-center space-x-3">
+              <input
+                id="adminStudentFeeEnabled"
+                type="checkbox"
+                name="adminStudentFeeEnabled"
+                checked={!!form.adminStudentFeeEnabled}
+                onChange={handleChange}
+                className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+              />
+              <div>
+                <label htmlFor="adminStudentFeeEnabled" className="block text-sm font-medium text-gray-700">
+                  Enable student fee for admin-created events
+                </label>
+                <p className="text-xs text-gray-500">
+                  When enabled, admin-created events will charge students by default.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Default student participation fee (₹)
+              </label>
+              <input
+                type="number"
+                name="adminStudentFeeAmount"
+                value={form.adminStudentFeeAmount}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                min="0"
+                step="0.01"
+                placeholder="0"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Used for admin-created events when no specific student fee is provided.
               </p>
             </div>
           </div>

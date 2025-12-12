@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getStudentEvents, registerForEvent, getStudentEventRegistrations } from '../../api';
+import { getStudentEvents, registerForEvent, getStudentEventRegistrations, createStudentEventPaymentOrder } from '../../api';
 import Spinner from '../../components/Spinner';
 
 const StudentEvents = () => {
@@ -7,6 +7,7 @@ const StudentEvents = () => {
   const [myRegistrations, setMyRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(null);
+  const [payingEventId, setPayingEventId] = useState(null);
   const [activeTab, setActiveTab] = useState('available');
   const [filters, setFilters] = useState({
     search: '',
@@ -62,6 +63,22 @@ const StudentEvents = () => {
       alert(`Registration failed: ${error.message || 'Unknown error'}`);
     } finally {
       setRegistering(null);
+    }
+  };
+
+  const handlePayFee = async (registration) => {
+    try {
+      setPayingEventId(registration.event.id);
+      const response = await createStudentEventPaymentOrder(registration.event.id);
+      const orderId = response?.data?.orderId || response.orderId;
+      alert(`Payment order created. Order ID: ${orderId}. Complete payment to confirm your spot.`);
+      await loadData();
+    } catch (error) {
+      console.error('❌ Failed to create payment order:', error);
+      const message = error?.message || error?.userMessage || 'Failed to create payment order.';
+      alert(message);
+    } finally {
+      setPayingEventId(null);
     }
   };
 
@@ -238,7 +255,12 @@ const StudentEvents = () => {
                           <p className="text-sm text-gray-600">📅 {new Date(registration.event.startDate).toLocaleDateString()}</p>
                           <p className="text-sm text-gray-600">📍 {registration.event.location || registration.event.venue}</p>
                           <p className="text-sm text-gray-600">🏷️ {registration.event.sport}</p>
-                          <p className="text-sm text-gray-600">💰 ₹{registration.event.fees || registration.event.eventFee || 0}</p>
+                      <p className="text-sm text-gray-600">💰 ₹{registration.event.fees || registration.event.eventFee || 0}</p>
+                      {registration.paymentRequired && (
+                        <p className="text-sm text-gray-600">
+                          Payment status: {registration.paymentStatus === 'SUCCESS' ? 'Paid' : 'Pending'}
+                        </p>
+                      )}
                           <p className="text-sm text-gray-600">📝 Registered: {new Date(registration.createdAt).toLocaleDateString()}</p>
                         </div>
 
@@ -246,6 +268,20 @@ const StudentEvents = () => {
                           <button className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
                             View Details
                           </button>
+                      {registration.paymentRequired && registration.paymentStatus !== 'SUCCESS' && (
+                        <button
+                          onClick={() => handlePayFee(registration)}
+                          disabled={payingEventId === registration.event.id}
+                          className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+                        >
+                          {payingEventId === registration.event.id ? 'Creating order...' : 'Pay Fee'}
+                        </button>
+                      )}
+                      {registration.paymentRequired && registration.paymentStatus === 'SUCCESS' && (
+                        <span className="flex-1 text-center text-green-700 font-semibold bg-green-50 px-3 py-2 rounded-lg">
+                          Fee Paid
+                        </span>
+                      )}
                         </div>
                       </div>
                     ))}

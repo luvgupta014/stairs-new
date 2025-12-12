@@ -3923,6 +3923,9 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
       return res.status(400).json(errorResponse('Name, description, sport, venue, and start date are required.', 400));
     }
 
+    // Load global payment defaults
+    const globalSettings = await prisma.globalSettings.findFirst();
+
     // Parse dates for India (IST) only platform
     const parseAsIST = (dateString) => {
       if (!dateString) return null;
@@ -4020,6 +4023,15 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
         endDate: endDateObj || null,
         maxParticipants: maxParticipants ? parseInt(maxParticipants) : 50,
         eventFee: 0,
+        // Student participation fee defaults for admin-created events
+        studentFeeEnabled: req.body?.studentFeeEnabled !== undefined
+          ? !!req.body.studentFeeEnabled
+          : (globalSettings?.adminStudentFeeEnabled ?? false),
+        studentFeeAmount: req.body?.studentFeeAmount !== undefined
+          ? Number(req.body.studentFeeAmount) || 0
+          : (globalSettings?.adminStudentFeeAmount ?? 0),
+        studentFeeUnit: 'PERSON',
+        createdByAdmin: true,
         status: 'APPROVED', // Admin events are auto-approved
         uniqueId: eventUniqueId,
         coachId: systemCoach.id,
@@ -5374,7 +5386,7 @@ router.put('/events/:eventId/permissions', authenticate, requireAdmin, async (re
 router.put('/events/:eventId/fees', authenticate, requireAdmin, async (req, res) => {
   try {
     const { eventId } = req.params;
-    const { feeMode, eventFee } = req.body;
+    const { feeMode, eventFee, studentFeeEnabled, studentFeeAmount, studentFeeUnit } = req.body;
     const validModes = ['GLOBAL', 'EVENT', 'DISABLED'];
 
     if (!feeMode || !validModes.includes(feeMode)) {
@@ -5389,7 +5401,10 @@ router.put('/events/:eventId/fees', authenticate, requireAdmin, async (req, res)
       where: { id: eventId },
       data: {
         feeMode,
-        eventFee: feeMode === 'EVENT' ? Number(eventFee) : 0
+        eventFee: feeMode === 'EVENT' ? Number(eventFee) : 0,
+        ...(studentFeeEnabled !== undefined && { studentFeeEnabled: !!studentFeeEnabled }),
+        ...(studentFeeAmount !== undefined && { studentFeeAmount: Number(studentFeeAmount) || 0 }),
+        ...(studentFeeUnit && { studentFeeUnit })
       }
     });
 
@@ -5430,12 +5445,20 @@ router.put('/events/:eventId/level', authenticate, requireAdmin, async (req, res
  */
 router.put('/settings/global-payments', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { perStudentBaseCharge = 0, defaultEventFee = 0, coordinatorSubscriptionFee = 0 } = req.body;
+    const {
+      perStudentBaseCharge = 0,
+      defaultEventFee = 0,
+      coordinatorSubscriptionFee = 0,
+      adminStudentFeeEnabled = false,
+      adminStudentFeeAmount = 0
+    } = req.body;
 
     const payload = {
       perStudentBaseCharge: Number(perStudentBaseCharge) || 0,
       defaultEventFee: Number(defaultEventFee) || 0,
-      coordinatorSubscriptionFee: Number(coordinatorSubscriptionFee) || 0
+      coordinatorSubscriptionFee: Number(coordinatorSubscriptionFee) || 0,
+      adminStudentFeeEnabled: !!adminStudentFeeEnabled,
+      adminStudentFeeAmount: Number(adminStudentFeeAmount) || 0
     };
 
     // Upsert single settings row (first row wins)
@@ -5535,7 +5558,7 @@ router.get('/events/fees-overview', authenticate, requireAdmin, async (req, res)
 router.put('/events/:eventId/fee', authenticate, requireAdmin, async (req, res) => {
   try {
     const { eventId } = req.params;
-    const { eventFee, coordinatorFee, feeMode } = req.body;
+    const { eventFee, coordinatorFee, feeMode, studentFeeEnabled, studentFeeAmount, studentFeeUnit } = req.body;
 
     const updateData = {};
     
@@ -5549,6 +5572,18 @@ router.put('/events/:eventId/fee', authenticate, requireAdmin, async (req, res) 
     
     if (feeMode && ['GLOBAL', 'EVENT', 'DISABLED'].includes(feeMode)) {
       updateData.feeMode = feeMode;
+    }
+
+    if (studentFeeEnabled !== undefined) {
+      updateData.studentFeeEnabled = !!studentFeeEnabled;
+    }
+
+    if (studentFeeAmount !== undefined) {
+      updateData.studentFeeAmount = Number(studentFeeAmount) || 0;
+    }
+
+    if (studentFeeUnit) {
+      updateData.studentFeeUnit = studentFeeUnit;
     }
 
     const updated = await prisma.event.update({

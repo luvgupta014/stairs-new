@@ -610,6 +610,20 @@ class EventService {
    */
   async registerForEvent(eventId, studentId) {
     try {
+      // Ensure student exists (needed for payment linkage)
+      const student = await prisma.student.findUnique({
+        where: { id: studentId },
+        include: {
+          user: {
+            select: { id: true, email: true }
+          }
+        }
+      });
+
+      if (!student) {
+        throw new Error('Student not found');
+      }
+
       const event = await prisma.event.findUnique({
         where: { id: eventId },
         include: {
@@ -663,12 +677,16 @@ class EventService {
         throw new Error('You are already registered for this event');
       }
 
+      // Decide registration status based on fee requirement
+      const requiresPayment = event.createdByAdmin && event.studentFeeEnabled;
+      const registrationStatus = requiresPayment ? 'PENDING' : 'REGISTERED';
+
       // Create registration
       const registration = await prisma.eventRegistration.create({
         data: {
           studentId,
           eventId,
-          status: 'REGISTERED'
+          status: registrationStatus
         },
         include: {
           event: {
@@ -678,7 +696,11 @@ class EventService {
               startDate: true,
               endDate: true,
               venue: true,
-              eventFee: true
+              eventFee: true,
+              studentFeeAmount: true,
+              studentFeeEnabled: true,
+              studentFeeUnit: true,
+              createdByAdmin: true
             }
           },
           student: {
@@ -703,7 +725,43 @@ class EventService {
         }
       });
 
-      return registration;
+      // Automatically create a payment record for admin-created events with active student fee
+      let paymentRecord = null;
+      if (requiresPayment) {
+        // Prevent zero/negative payments
+        const payableAmount = Math.max(Number(event.studentFeeAmount) || 0, 0);
+        if (payableAmount <= 0) {
+          console.warn('⚠️ Payment required flag is on but amount is zero. Skipping payment creation.', {
+            eventId,
+            studentId
+          });
+        } else {
+          paymentRecord = await prisma.payment.create({
+            data: {
+              userId: student.userId,
+              userType: 'STUDENT',
+              type: 'EVENT_STUDENT_FEE',
+              amount: payableAmount,
+              currency: 'INR',
+              status: 'PENDING',
+              description: `Participation fee for ${event.name}`,
+              metadata: JSON.stringify({
+                eventId,
+                studentId,
+                registrationId: registration.id,
+                unit: event.studentFeeUnit || 'PERSON',
+                createdByAdmin: true
+              })
+            }
+          });
+        }
+      }
+
+      return {
+        ...registration,
+        paymentRequired: requiresPayment,
+        payment: paymentRecord
+      };
     } catch (error) {
       throw error;
     }

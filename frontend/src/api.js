@@ -611,6 +611,17 @@ export const unregisterFromEvent = async (eventId) => {
   }
 };
 
+// Student event fee payment (admin-created events)
+export const createStudentEventPaymentOrder = async (eventId) => {
+  try {
+    const response = await api.post('/api/payments/create-order-student-event', { eventId });
+    return response.data;
+  } catch (error) {
+    console.error('Create student event payment order error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 // Admin APIs
 export const adminLogin = async (credentials) => {
   try {
