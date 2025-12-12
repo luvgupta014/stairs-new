@@ -124,14 +124,59 @@ const StudentEvents = () => {
       } else {
         // No payment required, register directly
         console.log('✅ No payment required. Registering directly...');
-        const response = await registerForEvent(eventId);
-        
-        if (response.success) {
-          console.log('✅ Registration successful');
-          alert('Successfully registered for the event!');
-          await loadData();
-        } else {
-          throw new Error(response.message || 'Registration failed');
+        try {
+          const response = await registerForEvent(eventId);
+          
+          if (response.success) {
+            console.log('✅ Registration successful');
+            alert('Successfully registered for the event!');
+            await loadData();
+          } else {
+            throw new Error(response.message || 'Registration failed');
+          }
+        } catch (regError) {
+          // If registration fails with payment required error, initiate payment flow
+          if (regError.message && regError.message.includes('Payment required')) {
+            console.log('💰 Payment required. Initiating payment flow...');
+            
+            // Create payment order and show checkout
+            const paymentOrderResponse = await createStudentEventPaymentOrder(eventId);
+            const orderData = paymentOrderResponse.data || paymentOrderResponse;
+            
+            if (!orderData.orderId) {
+              throw new Error('Failed to create payment order');
+            }
+
+            setPendingEventId(eventId);
+            setCheckoutData({
+              title: 'Event Registration Payment',
+              description: 'Payment is required to register for this event',
+              paymentType: 'registration',
+              eventDetails: {
+                name: event.name,
+                sport: event.sport,
+                venue: event.venue,
+                startDate: event.startDate
+              },
+              items: [{
+                name: `Participation fee for ${event.name}`,
+                description: `Event: ${event.sport} at ${event.venue}`,
+                amount: orderData.studentFeeAmount || event.studentFeeAmount || 0,
+                quantity: 1
+              }],
+              subtotal: orderData.studentFeeAmount || event.studentFeeAmount || 0,
+              tax: 0,
+              discount: 0,
+              total: orderData.studentFeeAmount || event.studentFeeAmount || 0,
+              currency: orderData.currency || 'INR',
+              orderData: orderData,
+              event: event
+            });
+            
+            setShowCheckout(true);
+          } else {
+            throw regError;
+          }
         }
         setRegistering(null);
       }

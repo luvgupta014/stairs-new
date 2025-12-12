@@ -677,9 +677,45 @@ class EventService {
         throw new Error('You are already registered for this event');
       }
 
-      // Decide registration status based on fee requirement
-      const requiresPayment = event.createdByAdmin && event.studentFeeEnabled;
-      const registrationStatus = requiresPayment ? 'PENDING' : 'REGISTERED';
+      // Check payment requirement for admin-created events
+      const requiresPayment = event.createdByAdmin && event.studentFeeEnabled && (event.studentFeeAmount || 0) > 0;
+      
+      if (requiresPayment) {
+        // Check if student has completed payment for this event
+        const successfulPayments = await prisma.payment.findMany({
+          where: {
+            userId: student.userId,
+            status: 'SUCCESS',
+            type: 'EVENT_STUDENT_FEE',
+            metadata: {
+              contains: eventId
+            }
+          }
+        });
+
+        // Verify at least one payment is actually for this event by checking metadata
+        let paymentFound = false;
+        for (const payment of successfulPayments) {
+          try {
+            const meta = payment.metadata ? JSON.parse(payment.metadata) : {};
+            if (meta.eventId === eventId) {
+              paymentFound = true;
+              break;
+            }
+          } catch (err) {
+            // Metadata parse error, continue checking other payments
+            continue;
+          }
+        }
+
+        if (!paymentFound) {
+          throw new Error('Payment required. Please complete payment before registering for this event.');
+        }
+      }
+
+      // Registration status - if payment was required and completed, status is APPROVED
+      // Otherwise, REGISTERED for non-payment events
+      const registrationStatus = requiresPayment ? 'APPROVED' : 'REGISTERED';
 
       // Create registration
       const registration = await prisma.eventRegistration.create({
@@ -725,36 +761,19 @@ class EventService {
         }
       });
 
-      // Automatically create a payment record for admin-created events with active student fee
+      // Find the successful payment if payment was required
       let paymentRecord = null;
       if (requiresPayment) {
-        // Prevent zero/negative payments
-        const payableAmount = Math.max(Number(event.studentFeeAmount) || 0, 0);
-        if (payableAmount <= 0) {
-          console.warn('⚠️ Payment required flag is on but amount is zero. Skipping payment creation.', {
-            eventId,
-            studentId
-          });
-        } else {
-          paymentRecord = await prisma.payment.create({
-            data: {
-              userId: student.userId,
-              userType: 'STUDENT',
-              type: 'EVENT_STUDENT_FEE',
-              amount: payableAmount,
-              currency: 'INR',
-              status: 'PENDING',
-              description: `Participation fee for ${event.name}`,
-              metadata: JSON.stringify({
-                eventId,
-                studentId,
-                registrationId: registration.id,
-                unit: event.studentFeeUnit || 'PERSON',
-                createdByAdmin: true
-              })
+        paymentRecord = await prisma.payment.findFirst({
+          where: {
+            userId: student.userId,
+            status: 'SUCCESS',
+            type: 'EVENT_STUDENT_FEE',
+            metadata: {
+              contains: eventId
             }
-          });
-        }
+          }
+        });
       }
 
       return {
