@@ -597,7 +597,13 @@ export const registerForEvent = async (eventId) => {
     return response.data;
   } catch (error) {
     console.error('Register for event error:', error);
-    throw error.response?.data || error.message;
+    // Return error object with message for easier handling
+    const errorData = error.response?.data || { message: error.message || 'Registration failed' };
+    // Throw an error object that preserves the message
+    const registrationError = new Error(errorData.message || 'Registration failed');
+    registrationError.response = error.response;
+    registrationError.data = errorData;
+    throw registrationError;
   }
 };
 
