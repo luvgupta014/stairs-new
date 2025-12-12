@@ -70,119 +70,98 @@ const StudentEvents = () => {
   const handleRegister = async (eventId) => {
     try {
       setRegistering(eventId);
-      console.log(`🔄 Checking event ${eventId} for payment requirements...`);
+      console.log(`🔄 Attempting to register for event ${eventId}...`);
       
-      // First, get event details to check if payment is required
-      const eventDetails = await getStudentEventDetails(eventId);
-      const event = eventDetails.data || eventDetails;
+      // Try to register directly first
+      // Backend will return error if payment is required
+      const response = await registerForEvent(eventId);
       
-      // Check if this is an admin-created event with student fee enabled
-      const requiresPayment = event.createdByAdmin && event.studentFeeEnabled && (event.studentFeeAmount || 0) > 0;
-      
-      if (requiresPayment) {
-        console.log('💰 Payment required. Creating payment order...');
-        
-        // Create payment order
-        const paymentOrderResponse = await createStudentEventPaymentOrder(eventId);
-        const orderData = paymentOrderResponse.data || paymentOrderResponse;
-        
-        if (!orderData.orderId) {
-          throw new Error('Failed to create payment order');
-        }
-
-        // Store event and order data for checkout modal
-        setPendingEventId(eventId);
-        setCheckoutData({
-          title: 'Event Registration Payment',
-          description: 'Please review your payment details before proceeding',
-          paymentType: 'registration',
-          eventDetails: {
-            name: event.name,
-            sport: event.sport,
-            venue: event.venue,
-            startDate: event.startDate
-          },
-          items: [{
-            name: `Participation fee for ${event.name}`,
-            description: `Event: ${event.sport} at ${event.venue}`,
-            amount: orderData.studentFeeAmount || event.studentFeeAmount || 0,
-            quantity: 1
-          }],
-          subtotal: orderData.studentFeeAmount || event.studentFeeAmount || 0,
-          tax: 0,
-          discount: 0,
-          total: orderData.studentFeeAmount || event.studentFeeAmount || 0,
-          currency: orderData.currency || 'INR',
-          orderData: orderData,
-          event: event
-        });
-        
-        // Show checkout modal
-        setShowCheckout(true);
+      if (response.success) {
+        console.log('✅ Registration successful');
+        alert('Successfully registered for the event!');
+        await loadData();
         setRegistering(null);
-        
+        return;
       } else {
-        // No payment required, register directly
-        console.log('✅ No payment required. Registering directly...');
-        try {
-          const response = await registerForEvent(eventId);
-          
-          if (response.success) {
-            console.log('✅ Registration successful');
-            alert('Successfully registered for the event!');
-            await loadData();
-          } else {
-            throw new Error(response.message || 'Registration failed');
-          }
-        } catch (regError) {
-          // If registration fails with payment required error, initiate payment flow
-          if (regError.message && regError.message.includes('Payment required')) {
-            console.log('💰 Payment required. Initiating payment flow...');
-            
-            // Create payment order and show checkout
-            const paymentOrderResponse = await createStudentEventPaymentOrder(eventId);
-            const orderData = paymentOrderResponse.data || paymentOrderResponse;
-            
-            if (!orderData.orderId) {
-              throw new Error('Failed to create payment order');
-            }
-
-            setPendingEventId(eventId);
-            setCheckoutData({
-              title: 'Event Registration Payment',
-              description: 'Payment is required to register for this event',
-              paymentType: 'registration',
-              eventDetails: {
-                name: event.name,
-                sport: event.sport,
-                venue: event.venue,
-                startDate: event.startDate
-              },
-              items: [{
-                name: `Participation fee for ${event.name}`,
-                description: `Event: ${event.sport} at ${event.venue}`,
-                amount: orderData.studentFeeAmount || event.studentFeeAmount || 0,
-                quantity: 1
-              }],
-              subtotal: orderData.studentFeeAmount || event.studentFeeAmount || 0,
-              tax: 0,
-              discount: 0,
-              total: orderData.studentFeeAmount || event.studentFeeAmount || 0,
-              currency: orderData.currency || 'INR',
-              orderData: orderData,
-              event: event
-            });
-            
-            setShowCheckout(true);
-          } else {
-            throw regError;
-          }
-        }
-        setRegistering(null);
+        throw new Error(response.message || 'Registration failed');
       }
     } catch (error) {
       console.error('❌ Registration failed:', error);
-      alert(`Registration failed: ${error.message || 'Unknown error'}`);
+      
+      // Extract error message from different error formats
+      let errorMessage = '';
+      if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error?.response?.data) {
+        errorMessage = typeof error.response.data === 'string' 
+          ? error.response.data 
+          : error.response.data.message || JSON.stringify(error.response.data);
+      }
+      
+      // Check if error is about payment requirement
+      const isPaymentRequired = errorMessage.toLowerCase().includes('payment required') || 
+                                errorMessage.toLowerCase().includes('complete payment');
+      
+      if (isPaymentRequired) {
+        console.log('💰 Payment required. Initiating payment flow...');
+        
+        try {
+          // Get event details
+          const eventDetails = await getStudentEventDetails(eventId);
+          const event = eventDetails.data || eventDetails;
+          
+          // Create payment order and show checkout
+          const paymentOrderResponse = await createStudentEventPaymentOrder(eventId);
+          const orderData = paymentOrderResponse.data || paymentOrderResponse;
+          
+          if (!orderData.orderId) {
+            throw new Error('Failed to create payment order');
+          }
+
+          setPendingEventId(eventId);
+          setCheckoutData({
+            title: 'Event Registration Payment',
+            description: 'Payment is required to register for this event',
+            paymentType: 'registration',
+            eventDetails: {
+              name: event.name,
+              sport: event.sport,
+              venue: event.venue,
+              startDate: event.startDate
+            },
+            items: [{
+              name: `Participation fee for ${event.name}`,
+              description: `Event: ${event.sport} at ${event.venue}`,
+              amount: orderData.studentFeeAmount || event.studentFeeAmount || 0,
+              quantity: 1
+            }],
+            subtotal: orderData.studentFeeAmount || event.studentFeeAmount || 0,
+            tax: 0,
+            discount: 0,
+            total: orderData.studentFeeAmount || event.studentFeeAmount || 0,
+            currency: orderData.currency || 'INR',
+            orderData: orderData,
+            event: event
+          });
+          
+          // Show checkout modal instead of alert
+          setShowCheckout(true);
+          setRegistering(null);
+          return; // Exit early, don't show error alert
+        } catch (paymentError) {
+          console.error('❌ Failed to initiate payment flow:', paymentError);
+          const paymentErrMsg = paymentError?.message || paymentError?.response?.data?.message || 'Unknown error';
+          alert(`Payment setup failed: ${paymentErrMsg}. Please try again.`);
+        }
+      } else {
+        // Other errors - show alert
+        alert(`Registration failed: ${errorMessage || 'Unknown error'}`);
+      }
+      
       setRegistering(null);
     }
   };
