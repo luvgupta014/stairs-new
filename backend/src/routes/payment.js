@@ -1323,8 +1323,9 @@ router.get('/event/:eventId/payment-status', authenticate, async (req, res) => {
 // Helper: handle student participation fee verification
 async function handleStudentEventPaymentVerification(req, res, { razorpay_order_id, razorpay_payment_id, eventId, userId }) {
   try {
-    console.log(`🎯 Handling student event fee verification for event ${eventId}`);
+    console.log(`🎯 Handling student event fee verification for event ${eventId}, user ${userId}`);
 
+    // STEP 1: Update payment status
     const paymentUpdate = await prisma.payment.updateMany({
       where: {
         razorpayOrderId: razorpay_order_id,
@@ -1337,12 +1338,14 @@ async function handleStudentEventPaymentVerification(req, res, { razorpay_order_
       }
     });
 
+    // Check if payment was already processed
     if (paymentUpdate.count === 0) {
       const existing = await prisma.payment.findFirst({
         where: { razorpayOrderId: razorpay_order_id, userId }
       });
 
       if (existing?.status === 'SUCCESS') {
+        console.log('✅ Payment already verified');
         return res.json(successResponse({
           paymentId: razorpay_payment_id,
           status: 'SUCCESS',
@@ -1354,6 +1357,7 @@ async function handleStudentEventPaymentVerification(req, res, { razorpay_order_
       return res.status(404).json(errorResponse('Payment record not found for verification.', 404));
     }
 
+    // STEP 2: Get payment record
     const paymentRecord = await prisma.payment.findFirst({
       where: { razorpayOrderId: razorpay_order_id, userId }
     });
@@ -1362,96 +1366,107 @@ async function handleStudentEventPaymentVerification(req, res, { razorpay_order_
       return res.status(404).json(errorResponse('Payment record not found.', 404));
     }
 
+    // STEP 3: Get student ID (from metadata or by userId lookup)
     let registrationId = null;
     let studentId = null;
     let pendingRegistration = false;
+    
     try {
       const meta = paymentRecord?.metadata ? JSON.parse(paymentRecord.metadata) : {};
       registrationId = meta.registrationId;
       studentId = meta.studentId;
       pendingRegistration = meta.pendingRegistration === true;
     } catch (err) {
-      console.warn('⚠️ Failed to parse payment metadata for student event fee.');
+      console.warn('⚠️ Failed to parse payment metadata:', err);
     }
 
-    // If registration doesn't exist and payment was made before registration, create it now
-    if (pendingRegistration && studentId && !registrationId) {
+    // If studentId not in metadata, fetch from Student table
+    if (!studentId) {
+      const student = await prisma.student.findUnique({
+        where: { userId }
+      });
+      if (student) {
+        studentId = student.id;
+        console.log(`✅ Found student ID from lookup: ${studentId}`);
+      }
+    }
+
+    if (!studentId) {
+      console.error('❌ Student ID not found for user:', userId);
+      return res.status(404).json(errorResponse('Student profile not found.', 404));
+    }
+
+    // STEP 4: Handle registration creation/update
+    let finalRegistrationId = registrationId;
+
+    // Check if registration already exists
+    const existingReg = await prisma.eventRegistration.findUnique({
+      where: {
+        eventId_studentId: {
+          eventId,
+          studentId
+        }
+      }
+    });
+
+    if (existingReg) {
+      // Registration exists - update to APPROVED
+      finalRegistrationId = existingReg.id;
+      await prisma.eventRegistration.update({
+        where: { id: finalRegistrationId },
+        data: { status: 'APPROVED' }
+      });
+      console.log(`✅ Updated existing registration ${finalRegistrationId} to APPROVED`);
+    } else {
+      // Registration doesn't exist - create new one
+      const newRegistration = await prisma.eventRegistration.create({
+        data: {
+          studentId,
+          eventId,
+          status: 'APPROVED'
+        }
+      });
+      finalRegistrationId = newRegistration.id;
+      console.log(`✅ Created new registration ${finalRegistrationId} with APPROVED status`);
+
+      // Update event participant count
+      await prisma.event.update({
+        where: { id: eventId },
+        data: {
+          currentParticipants: {
+            increment: 1
+          }
+        }
+      });
+      console.log(`✅ Updated event ${eventId} participant count`);
+
+      // Update payment metadata with registration ID
       try {
-        // Check if registration already exists
-        const existingReg = await prisma.eventRegistration.findUnique({
-          where: {
-            eventId_studentId: {
-              eventId,
-              studentId
-            }
+        const currentMeta = paymentRecord.metadata ? JSON.parse(paymentRecord.metadata) : {};
+        await prisma.payment.update({
+          where: { id: paymentRecord.id },
+          data: {
+            metadata: JSON.stringify({
+              ...currentMeta,
+              registrationId: finalRegistrationId,
+              studentId: studentId,
+              pendingRegistration: false
+            })
           }
         });
-
-        if (existingReg) {
-          registrationId = existingReg.id;
-          // Update existing registration to APPROVED
-          await prisma.eventRegistration.update({
-            where: { id: registrationId },
-            data: { status: 'APPROVED' }
-          });
-        } else {
-          // Create new registration with APPROVED status
-          const newRegistration = await prisma.eventRegistration.create({
-            data: {
-              studentId,
-              eventId,
-              status: 'APPROVED'
-            }
-          });
-          registrationId = newRegistration.id;
-
-          // Update event participant count
-          await prisma.event.update({
-            where: { id: eventId },
-            data: {
-              currentParticipants: {
-                increment: 1
-              }
-            }
-          });
-
-          // Update payment metadata with new registration ID
-          await prisma.payment.update({
-            where: { id: paymentRecord.id },
-            data: {
-              metadata: JSON.stringify({
-                ...JSON.parse(paymentRecord.metadata),
-                registrationId: registrationId,
-                pendingRegistration: false
-              })
-            }
-          });
-        }
-      } catch (regError) {
-        console.error('❌ Failed to create registration after payment:', regError);
-        // Don't fail payment verification if registration creation fails
-        // Payment is still successful
+      } catch (metaError) {
+        console.warn('⚠️ Failed to update payment metadata:', metaError);
       }
-    } else if (registrationId) {
-      // Update existing registration to APPROVED
-      await prisma.eventRegistration.update({
-        where: { id: registrationId },
-        data: { status: 'APPROVED' }
-      });
-    } else if (studentId) {
-      // Fallback: update by eventId and studentId
-      await prisma.eventRegistration.updateMany({
-        where: { eventId, studentId },
-        data: { status: 'APPROVED' }
-      });
     }
+
+    console.log(`✅ Student event fee verification completed successfully. Registration ID: ${finalRegistrationId}`);
 
     return res.json(successResponse({
       paymentId: razorpay_payment_id,
       status: 'SUCCESS',
       eventId,
-      registrationId
-    }, 'Student event fee verified successfully.'));
+      registrationId: finalRegistrationId
+    }, 'Student event fee verified successfully. Registration completed.'));
   } catch (error) {
     console.error('❌ Student event fee verification error:', error);
     res.status(500).json(errorResponse('Failed to verify student event payment.', 500));
