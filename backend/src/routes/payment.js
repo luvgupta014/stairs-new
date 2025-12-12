@@ -373,7 +373,7 @@ router.post('/create-order-student-event', authenticate, requireStudent, async (
       return res.status(400).json(errorResponse('This event does not require a student participation fee.', 400));
     }
 
-    // Validate student profile and registration
+    // Validate student profile
     const student = await prisma.student.findUnique({
       where: { userId: req.user.id }
     });
@@ -382,7 +382,8 @@ router.post('/create-order-student-event', authenticate, requireStudent, async (
       return res.status(404).json(errorResponse('Student profile not found.', 404));
     }
 
-    const registration = await prisma.eventRegistration.findUnique({
+    // Check if already registered
+    const existingRegistration = await prisma.eventRegistration.findUnique({
       where: {
         eventId_studentId: {
           eventId,
@@ -391,8 +392,8 @@ router.post('/create-order-student-event', authenticate, requireStudent, async (
       }
     });
 
-    if (!registration) {
-      return res.status(400).json(errorResponse('Register for the event before initiating payment.', 400));
+    if (existingRegistration && existingRegistration.status === 'APPROVED') {
+      return res.status(400).json(errorResponse('You are already registered for this event.', 400));
     }
 
     // Prevent duplicate successful payments
@@ -418,12 +419,16 @@ router.post('/create-order-student-event', authenticate, requireStudent, async (
     const amount = Math.round(amountInRupees * 100); // paise
 
     // Reuse or create pending payment record
+    // Use registrationId if exists, otherwise null (will be created after payment)
+    const registrationId = existingRegistration?.id || null;
+    
     let paymentRecord = await prisma.payment.findFirst({
       where: {
         userId: req.user.id,
         status: 'PENDING',
+        type: 'EVENT_STUDENT_FEE',
         metadata: {
-          contains: registration.id
+          contains: eventId
         }
       }
     });
@@ -441,9 +446,10 @@ router.post('/create-order-student-event', authenticate, requireStudent, async (
           metadata: JSON.stringify({
             eventId,
             studentId: student.id,
-            registrationId: registration.id,
+            registrationId: registrationId,
             unit: event.studentFeeUnit || 'PERSON',
-            createdByAdmin: true
+            createdByAdmin: true,
+            pendingRegistration: !existingRegistration // Flag to create registration after payment
           })
         }
       });
@@ -461,7 +467,7 @@ router.post('/create-order-student-event', authenticate, requireStudent, async (
       notes: {
         userId: req.user.id,
         eventId,
-        registrationId: registration.id,
+        registrationId: registrationId,
         context: 'student_event_fee'
       }
     });
@@ -481,8 +487,9 @@ router.post('/create-order-student-event', authenticate, requireStudent, async (
       currency: order.currency,
       paymentId: paymentRecord.id,
       razorpayKeyId: process.env.RAZORPAY_KEY_ID,
-      registrationId: registration.id,
-      eventId
+      registrationId: registrationId,
+      eventId,
+      studentFeeAmount: amountInRupees
     }, 'Payment order created successfully for student event participation.'));
   } catch (error) {
     console.error('❌ Create student event payment order error:', error);
@@ -1351,22 +1358,88 @@ async function handleStudentEventPaymentVerification(req, res, { razorpay_order_
       where: { razorpayOrderId: razorpay_order_id, userId }
     });
 
+    if (!paymentRecord) {
+      return res.status(404).json(errorResponse('Payment record not found.', 404));
+    }
+
     let registrationId = null;
     let studentId = null;
+    let pendingRegistration = false;
     try {
       const meta = paymentRecord?.metadata ? JSON.parse(paymentRecord.metadata) : {};
       registrationId = meta.registrationId;
       studentId = meta.studentId;
+      pendingRegistration = meta.pendingRegistration === true;
     } catch (err) {
       console.warn('⚠️ Failed to parse payment metadata for student event fee.');
     }
 
-    if (registrationId) {
+    // If registration doesn't exist and payment was made before registration, create it now
+    if (pendingRegistration && studentId && !registrationId) {
+      try {
+        // Check if registration already exists
+        const existingReg = await prisma.eventRegistration.findUnique({
+          where: {
+            eventId_studentId: {
+              eventId,
+              studentId
+            }
+          }
+        });
+
+        if (existingReg) {
+          registrationId = existingReg.id;
+          // Update existing registration to APPROVED
+          await prisma.eventRegistration.update({
+            where: { id: registrationId },
+            data: { status: 'APPROVED' }
+          });
+        } else {
+          // Create new registration with APPROVED status
+          const newRegistration = await prisma.eventRegistration.create({
+            data: {
+              studentId,
+              eventId,
+              status: 'APPROVED'
+            }
+          });
+          registrationId = newRegistration.id;
+
+          // Update event participant count
+          await prisma.event.update({
+            where: { id: eventId },
+            data: {
+              currentParticipants: {
+                increment: 1
+              }
+            }
+          });
+
+          // Update payment metadata with new registration ID
+          await prisma.payment.update({
+            where: { id: paymentRecord.id },
+            data: {
+              metadata: JSON.stringify({
+                ...JSON.parse(paymentRecord.metadata),
+                registrationId: registrationId,
+                pendingRegistration: false
+              })
+            }
+          });
+        }
+      } catch (regError) {
+        console.error('❌ Failed to create registration after payment:', regError);
+        // Don't fail payment verification if registration creation fails
+        // Payment is still successful
+      }
+    } else if (registrationId) {
+      // Update existing registration to APPROVED
       await prisma.eventRegistration.update({
         where: { id: registrationId },
         data: { status: 'APPROVED' }
       });
     } else if (studentId) {
+      // Fallback: update by eventId and studentId
       await prisma.eventRegistration.updateMany({
         where: { eventId, studentId },
         data: { status: 'APPROVED' }

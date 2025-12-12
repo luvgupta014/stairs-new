@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { getStudentEvents, registerForEvent, getStudentEventRegistrations, createStudentEventPaymentOrder } from '../../api';
+import { getStudentEvents, registerForEvent, getStudentEventRegistrations, createStudentEventPaymentOrder, getStudentEventDetails } from '../../api';
 import Spinner from '../../components/Spinner';
+import CheckoutModal from '../../components/CheckoutModal';
 
 const StudentEvents = () => {
   const [availableEvents, setAvailableEvents] = useState([]);
@@ -9,6 +10,10 @@ const StudentEvents = () => {
   const [registering, setRegistering] = useState(null);
   const [payingEventId, setPayingEventId] = useState(null);
   const [activeTab, setActiveTab] = useState('available');
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [checkoutData, setCheckoutData] = useState(null);
+  const [pendingEventId, setPendingEventId] = useState(null);
   const [filters, setFilters] = useState({
     search: '',
     sport: '',
@@ -18,7 +23,27 @@ const StudentEvents = () => {
 
   useEffect(() => {
     loadData();
+    loadRazorpayScript();
   }, []);
+
+  const loadRazorpayScript = () => {
+    if (window.Razorpay) {
+      setRazorpayLoaded(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => {
+      setRazorpayLoaded(true);
+      console.log('✅ Razorpay SDK loaded');
+    };
+    script.onerror = () => {
+      console.error('❌ Failed to load Razorpay SDK');
+    };
+    document.body.appendChild(script);
+  };
 
   const loadData = async () => {
     try {
@@ -45,25 +70,194 @@ const StudentEvents = () => {
   const handleRegister = async (eventId) => {
     try {
       setRegistering(eventId);
-      console.log(`🔄 Registering for event ${eventId}...`);
+      console.log(`🔄 Checking event ${eventId} for payment requirements...`);
       
-      const response = await registerForEvent(eventId);
+      // First, get event details to check if payment is required
+      const eventDetails = await getStudentEventDetails(eventId);
+      const event = eventDetails.data || eventDetails;
       
-      if (response.success) {
-        console.log('✅ Registration successful');
-        alert('Successfully registered for the event!');
+      // Check if this is an admin-created event with student fee enabled
+      const requiresPayment = event.createdByAdmin && event.studentFeeEnabled && (event.studentFeeAmount || 0) > 0;
+      
+      if (requiresPayment) {
+        console.log('💰 Payment required. Creating payment order...');
         
-        // Refresh data
-        await loadData();
+        // Create payment order
+        const paymentOrderResponse = await createStudentEventPaymentOrder(eventId);
+        const orderData = paymentOrderResponse.data || paymentOrderResponse;
+        
+        if (!orderData.orderId) {
+          throw new Error('Failed to create payment order');
+        }
+
+        // Store event and order data for checkout modal
+        setPendingEventId(eventId);
+        setCheckoutData({
+          title: 'Event Registration Payment',
+          description: 'Please review your payment details before proceeding',
+          paymentType: 'registration',
+          eventDetails: {
+            name: event.name,
+            sport: event.sport,
+            venue: event.venue,
+            startDate: event.startDate
+          },
+          items: [{
+            name: `Participation fee for ${event.name}`,
+            description: `Event: ${event.sport} at ${event.venue}`,
+            amount: orderData.studentFeeAmount || event.studentFeeAmount || 0,
+            quantity: 1
+          }],
+          subtotal: orderData.studentFeeAmount || event.studentFeeAmount || 0,
+          tax: 0,
+          discount: 0,
+          total: orderData.studentFeeAmount || event.studentFeeAmount || 0,
+          currency: orderData.currency || 'INR',
+          orderData: orderData,
+          event: event
+        });
+        
+        // Show checkout modal
+        setShowCheckout(true);
+        setRegistering(null);
+        
       } else {
-        throw new Error(response.message || 'Registration failed');
+        // No payment required, register directly
+        console.log('✅ No payment required. Registering directly...');
+        const response = await registerForEvent(eventId);
+        
+        if (response.success) {
+          console.log('✅ Registration successful');
+          alert('Successfully registered for the event!');
+          await loadData();
+        } else {
+          throw new Error(response.message || 'Registration failed');
+        }
+        setRegistering(null);
       }
     } catch (error) {
       console.error('❌ Registration failed:', error);
       alert(`Registration failed: ${error.message || 'Unknown error'}`);
-    } finally {
       setRegistering(null);
     }
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!checkoutData || !pendingEventId) {
+      return;
+    }
+
+    try {
+      setPayingEventId(pendingEventId);
+      setShowCheckout(false);
+
+      // Ensure Razorpay is loaded
+      if (!razorpayLoaded && !window.Razorpay) {
+        await new Promise((resolve) => {
+          const checkRazorpay = setInterval(() => {
+            if (window.Razorpay) {
+              clearInterval(checkRazorpay);
+              setRazorpayLoaded(true);
+              resolve();
+            }
+          }, 100);
+          setTimeout(() => {
+            clearInterval(checkRazorpay);
+            resolve();
+          }, 5000);
+        });
+      }
+
+      if (!window.Razorpay) {
+        throw new Error('Razorpay SDK not loaded. Please refresh and try again.');
+      }
+
+      const { orderData, event } = checkoutData;
+      
+      // Get user profile for prefill
+      const userStr = localStorage.getItem('user');
+      const user = userStr ? JSON.parse(userStr) : {};
+      const profile = user.profile || {};
+
+      // Open Razorpay checkout
+      const options = {
+          key: orderData.razorpayKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
+          amount: orderData.amount,
+          currency: orderData.currency || 'INR',
+          name: 'STAIRS Talent Hub',
+          description: `Participation fee for ${event.name || 'Event'}`,
+          order_id: orderData.orderId,
+          handler: async function (response) {
+            try {
+              console.log('💳 Payment successful, verifying...', response);
+              
+              // Verify payment on backend
+              const verifyResponse = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/payment/verify`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                },
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  context: 'student_event_fee',
+                  eventId: eventId
+                })
+              });
+
+              const verifyData = await verifyResponse.json();
+              
+              if (!verifyResponse.ok || !verifyData.success) {
+                throw new Error(verifyData.message || 'Payment verification failed');
+              }
+
+              console.log('✅ Payment verified. Registration completed automatically.');
+              
+              // Backend automatically creates/updates registration after payment verification
+              alert('Payment successful! You have been registered for the event.');
+              await loadData();
+            } catch (verifyError) {
+              console.error('❌ Payment verification/registration error:', verifyError);
+              alert(`Payment successful but registration failed: ${verifyError.message || 'Unknown error'}. Please contact support.`);
+            } finally {
+              setRegistering(null);
+            }
+          },
+          prefill: {
+            name: profile.name || user.name || 'Student',
+            email: user.email || profile.email || '',
+            contact: user.phone || profile.phone || ''
+          },
+          theme: {
+            color: '#059669'
+          },
+          modal: {
+            ondismiss: function() {
+              console.log('Payment cancelled');
+              setRegistering(null);
+            }
+          }
+        };
+
+        const rzp = new window.Razorpay(options);
+        rzp.open();
+        
+    } catch (error) {
+      console.error('❌ Payment initialization failed:', error);
+      alert(`Payment failed: ${error.message || 'Unknown error'}`);
+      setPayingEventId(null);
+      setCheckoutData(null);
+      setPendingEventId(null);
+    }
+  };
+
+  const handleCancelCheckout = () => {
+    setShowCheckout(false);
+    setCheckoutData(null);
+    setPendingEventId(null);
+    setRegistering(null);
   };
 
   const handlePayFee = async (registration) => {
@@ -304,6 +498,15 @@ const StudentEvents = () => {
           </div>
         </div>
       </div>
+
+      {/* Checkout Modal */}
+      <CheckoutModal
+        isOpen={showCheckout}
+        onClose={handleCancelCheckout}
+        onConfirm={handleConfirmPayment}
+        paymentData={checkoutData}
+        loading={payingEventId !== null}
+      />
     </div>
   );
 };

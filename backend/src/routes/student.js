@@ -720,6 +720,12 @@ router.get('/events/:eventId', authenticate, requireStudent, async (req, res) =>
       createdAt: event.createdAt,
       updatedAt: event.updatedAt,
       
+      // Payment requirement fields
+      createdByAdmin: event.createdByAdmin || false,
+      studentFeeEnabled: event.studentFeeEnabled || false,
+      studentFeeAmount: event.studentFeeAmount || 0,
+      studentFeeUnit: event.studentFeeUnit || 'PERSON',
+      
       // Registration info
       isRegistered: event.registrations.length > 0,
       registrationStatus: event.registrations.length > 0 ? event.registrations[0].status : null,
