@@ -74,134 +74,114 @@ const StudentEvents = () => {
       
       // Try to register directly first
       // Backend will return error if payment is required
-      const response = await registerForEvent(eventId);
+      let response;
+      try {
+        response = await registerForEvent(eventId);
+      } catch (apiError) {
+        // Axios throws error for non-2xx responses
+        // Extract the error response data
+        const errorData = apiError?.response?.data || apiError?.data || { message: apiError?.message || 'Registration failed' };
+        console.log('API error caught:', errorData);
+        
+        // Check if this is a payment required error
+        const errorMessage = errorData.message || errorData.error || String(errorData);
+        const isPaymentError = errorMessage && (
+          errorMessage.toLowerCase().includes('payment required') || 
+          errorMessage.toLowerCase().includes('complete payment')
+        );
+        
+        if (isPaymentError || apiError?.response?.status === 400) {
+          // Trigger payment flow
+          await initiatePaymentFlow(eventId, errorMessage);
+          return;
+        }
+        
+        // Re-throw other errors
+        throw apiError;
+      }
       
-      if (response.success) {
+      // Check response success flag
+      if (response && response.success) {
         console.log('✅ Registration successful');
         alert('Successfully registered for the event!');
         await loadData();
         setRegistering(null);
         return;
-      } else {
-        throw new Error(response.message || 'Registration failed');
+      } else if (response && !response.success) {
+        // Response has success: false
+        const errorMessage = response.message || 'Registration failed';
+        const isPaymentError = errorMessage.toLowerCase().includes('payment required') || 
+                              errorMessage.toLowerCase().includes('complete payment');
+        
+        if (isPaymentError) {
+          await initiatePaymentFlow(eventId, errorMessage);
+          return;
+        }
+        
+        throw new Error(errorMessage);
       }
     } catch (error) {
       console.error('❌ Registration failed:', error);
-      console.log('Error details:', {
-        error,
-        errorType: typeof error,
-        errorMessage: error?.message,
-        errorResponse: error?.response,
-        errorData: error?.response?.data
+      const errorMessage = error?.message || 'Unknown error';
+      alert(`Registration failed: ${errorMessage}`);
+      setRegistering(null);
+    }
+  };
+
+  // Helper function to initiate payment flow
+  const initiatePaymentFlow = async (eventId, errorMessage = '') => {
+    try {
+      console.log('💰 Payment required. Initiating payment flow...', errorMessage);
+      
+      // Get event details
+      const eventDetails = await getStudentEventDetails(eventId);
+      const event = eventDetails.data || eventDetails;
+      console.log('Event details:', event);
+      
+      // Create payment order and show checkout
+      const paymentOrderResponse = await createStudentEventPaymentOrder(eventId);
+      const orderData = paymentOrderResponse.data || paymentOrderResponse;
+      console.log('Payment order created:', orderData);
+      
+      if (!orderData.orderId) {
+        throw new Error('Failed to create payment order');
+      }
+
+      setPendingEventId(eventId);
+      setCheckoutData({
+        title: 'Event Registration Payment',
+        description: 'Payment is required to register for this event',
+        paymentType: 'registration',
+        eventDetails: {
+          name: event.name,
+          sport: event.sport,
+          venue: event.venue,
+          startDate: event.startDate
+        },
+        items: [{
+          name: `Participation fee for ${event.name}`,
+          description: `Event: ${event.sport} at ${event.venue}`,
+          amount: orderData.studentFeeAmount || event.studentFeeAmount || 0,
+          quantity: 1
+        }],
+        subtotal: orderData.studentFeeAmount || event.studentFeeAmount || 0,
+        tax: 0,
+        discount: 0,
+        total: orderData.studentFeeAmount || event.studentFeeAmount || 0,
+        currency: orderData.currency || 'INR',
+        orderData: orderData,
+        event: event
       });
       
-      // Extract error message from different error formats
-      let errorMessage = '';
-      
-      // Try error.message first (most common)
-      if (error?.message) {
-        errorMessage = typeof error.message === 'string' ? error.message : String(error.message);
-      }
-      
-      // Fallback to error.data.message (from our API wrapper)
-      if (!errorMessage && error?.data?.message) {
-        errorMessage = error.data.message;
-      }
-      
-      // Fallback to error.response.data.message (axios error)
-      if (!errorMessage && error?.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      }
-      
-      // Fallback to error.response.data (if it's a string)
-      if (!errorMessage && error?.response?.data) {
-        errorMessage = typeof error.response.data === 'string' 
-          ? error.response.data 
-          : error.response.data.message || '';
-      }
-      
-      // Last resort: string conversion
-      if (!errorMessage) {
-        errorMessage = typeof error === 'string' ? error : String(error);
-      }
-      
-      console.log('Extracted error message:', errorMessage);
-      
-      // Check if error is about payment requirement (case-insensitive)
-      const isPaymentRequired = errorMessage && (
-        errorMessage.toLowerCase().includes('payment required') || 
-        errorMessage.toLowerCase().includes('complete payment')
-      );
-      
-      console.log('Is payment required?', isPaymentRequired, 'Error message:', errorMessage);
-      
-      // Always show payment flow for admin-created events, even if error message doesn't match exactly
-      // This is a fallback to ensure payment flow is triggered
-      const statusCode = error?.response?.status || error?.statusCode || error?.status;
-      const shouldShowPayment = isPaymentRequired || 
-                                (errorMessage && errorMessage.length > 0 && statusCode === 400);
-      
-      if (shouldShowPayment) {
-        console.log('💰 Payment required. Initiating payment flow...');
-        
-        try {
-          // Get event details
-          const eventDetails = await getStudentEventDetails(eventId);
-          const event = eventDetails.data || eventDetails;
-          console.log('Event details:', event);
-          
-          // Create payment order and show checkout
-          const paymentOrderResponse = await createStudentEventPaymentOrder(eventId);
-          const orderData = paymentOrderResponse.data || paymentOrderResponse;
-          console.log('Payment order created:', orderData);
-          
-          if (!orderData.orderId) {
-            throw new Error('Failed to create payment order');
-          }
-
-          setPendingEventId(eventId);
-          setCheckoutData({
-            title: 'Event Registration Payment',
-            description: 'Payment is required to register for this event',
-            paymentType: 'registration',
-            eventDetails: {
-              name: event.name,
-              sport: event.sport,
-              venue: event.venue,
-              startDate: event.startDate
-            },
-            items: [{
-              name: `Participation fee for ${event.name}`,
-              description: `Event: ${event.sport} at ${event.venue}`,
-              amount: orderData.studentFeeAmount || event.studentFeeAmount || 0,
-              quantity: 1
-            }],
-            subtotal: orderData.studentFeeAmount || event.studentFeeAmount || 0,
-            tax: 0,
-            discount: 0,
-            total: orderData.studentFeeAmount || event.studentFeeAmount || 0,
-            currency: orderData.currency || 'INR',
-            orderData: orderData,
-            event: event
-          });
-          
-          console.log('Showing checkout modal');
-          // Show checkout modal instead of alert
-          setShowCheckout(true);
-          setRegistering(null);
-          return; // Exit early, don't show error alert
-        } catch (paymentError) {
-          console.error('❌ Failed to initiate payment flow:', paymentError);
-          const paymentErrMsg = paymentError?.message || paymentError?.response?.data?.message || 'Unknown error';
-          alert(`Payment setup failed: ${paymentErrMsg}. Please try again.`);
-          setRegistering(null);
-        }
-      } else {
-        // Other errors - show alert
-        console.log('Showing error alert:', errorMessage);
-        alert(`Registration failed: ${errorMessage || 'Unknown error'}`);
-        setRegistering(null);
-      }
+      console.log('Showing checkout modal');
+      // Show checkout modal instead of alert
+      setShowCheckout(true);
+      setRegistering(null);
+    } catch (paymentError) {
+      console.error('❌ Failed to initiate payment flow:', paymentError);
+      const paymentErrMsg = paymentError?.message || paymentError?.response?.data?.message || 'Unknown error';
+      alert(`Payment setup failed: ${paymentErrMsg}. Please try again.`);
+      setRegistering(null);
     }
   };
 
@@ -512,7 +492,7 @@ const StudentEvents = () => {
                           <p className="text-sm text-gray-600">📅 {new Date(registration.event.startDate).toLocaleDateString()}</p>
                           <p className="text-sm text-gray-600">📍 {registration.event.location || registration.event.venue}</p>
                           <p className="text-sm text-gray-600">🏷️ {registration.event.sport}</p>
-                      <p className="text-sm text-gray-600">💰 ₹{registration.event.fees || registration.event.eventFee || 0}</p>
+                          <p className="text-sm text-gray-600">💰 ₹{registration.event.fees || registration.event.eventFee || 0}</p>
                       {registration.paymentRequired && (
                         <p className="text-sm text-gray-600">
                           Payment status: {registration.paymentStatus === 'SUCCESS' ? 'Paid' : 'Pending'}
