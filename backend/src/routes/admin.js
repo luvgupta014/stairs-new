@@ -5683,6 +5683,10 @@ router.put('/events/:eventId/assignments', authenticate, requireAdmin, async (re
       return res.status(400).json(errorResponse('assignments must be an array', 400));
     }
 
+    if (!['add', 'replace'].includes(mode)) {
+      return res.status(400).json(errorResponse("mode must be 'add' or 'replace'", 400));
+    }
+
     const validRoles = ['INCHARGE', 'COORDINATOR', 'TEAM'];
 
     const event = await prisma.event.findUnique({ where: { id: eventId } });
@@ -5886,12 +5890,18 @@ router.put('/settings/global-payments', authenticate, requireAdmin, async (req, 
       adminStudentFeeAmount = 0
     } = req.body;
 
+    const toNonNegativeNumber = (v) => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return 0;
+      return Math.max(0, n);
+    };
+
     const payload = {
-      perStudentBaseCharge: Number(perStudentBaseCharge) || 0,
-      defaultEventFee: Number(defaultEventFee) || 0,
-      coordinatorSubscriptionFee: Number(coordinatorSubscriptionFee) || 0,
+      perStudentBaseCharge: toNonNegativeNumber(perStudentBaseCharge),
+      defaultEventFee: toNonNegativeNumber(defaultEventFee),
+      coordinatorSubscriptionFee: toNonNegativeNumber(coordinatorSubscriptionFee),
       adminStudentFeeEnabled: !!adminStudentFeeEnabled,
-      adminStudentFeeAmount: Number(adminStudentFeeAmount) || 0
+      adminStudentFeeAmount: toNonNegativeNumber(adminStudentFeeAmount)
     };
 
     // Upsert single settings row (first row wins)
@@ -5919,7 +5929,14 @@ router.put('/settings/global-payments', authenticate, requireAdmin, async (req, 
 router.get('/settings/global-payments', authenticate, requireAdmin, async (req, res) => {
   try {
     const settings = await prisma.globalSettings.findFirst();
-    res.json(successResponse(settings || {}, 'Global payment settings retrieved.'));
+    const safe = settings || {};
+    res.json(successResponse({
+      perStudentBaseCharge: Number(safe.perStudentBaseCharge) || 0,
+      defaultEventFee: Number(safe.defaultEventFee) || 0,
+      coordinatorSubscriptionFee: Number(safe.coordinatorSubscriptionFee) || 0,
+      adminStudentFeeEnabled: !!safe.adminStudentFeeEnabled,
+      adminStudentFeeAmount: Number(safe.adminStudentFeeAmount) || 0
+    }, 'Global payment settings retrieved.'));
   } catch (error) {
     console.error('❌ Get global payment settings error:', error);
     res.status(500).json(errorResponse('Failed to get global payment settings.', 500));
