@@ -1174,7 +1174,7 @@ router.get('/history', authenticate, async (req, res) => {
   }
 });
 
-// Get event payment status (coach-accessible)
+// Get event payment status (coach-accessible + admin-accessible)
 router.get('/event/:eventId/payment-status', authenticate, async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -1196,55 +1196,69 @@ router.get('/event/:eventId/payment-status', authenticate, async (req, res) => {
       return res.status(404).json(errorResponse('Event not found.', 404));
     }
 
-    // Verify the user is the coach of this event
-    // Get coach record for the user
-    const coach = await prisma.coach.findUnique({
-      where: { userId: req.user.id },
-      select: { id: true }
-    });
-
-    // Check authorization: user must be a coach and event must belong to that coach
-    if (!coach || req.user.role !== 'COACH') {
-      console.warn(`⚠️ Authorization failed: User is not a coach`, {
-        eventId: event.id,
-        reqUserRole: req.user.role,
-        hasCoach: !!coach
+    // Authorization:
+    // - Admin can view any event payment status
+    // - Coach can view only own event payment status (existing behavior)
+    let coach = null;
+    if (req.user.role === 'COACH') {
+      coach = await prisma.coach.findUnique({
+        where: { userId: req.user.id },
+        select: { id: true }
       });
+      if (!coach) {
+        return res.status(403).json(errorResponse('You are not authorized to view payment status for this event.', 403));
+      }
+      if (String(event.coachId) !== String(coach.id)) {
+        return res.status(403).json(errorResponse('You are not authorized to view payment status for this event.', 403));
+      }
+    } else if (req.user.role !== 'ADMIN') {
       return res.status(403).json(errorResponse('You are not authorized to view payment status for this event.', 403));
     }
 
-    if (String(event.coachId) !== String(coach.id)) {
-      console.warn(`⚠️ Authorization failed: Event does not belong to coach`, {
+    // Payment model selection:
+    // - Admin-created student-fee events: payment complete if there is any SUCCESS EVENT_STUDENT_FEE for this event,
+    //   or any APPROVED registration exists (payment verified).
+    const requiresStudentFee = !!(event.createdByAdmin && event.studentFeeEnabled && (event.studentFeeAmount || 0) > 0);
+
+    if (requiresStudentFee) {
+      const paid = await prisma.payment.aggregate({
+        where: {
+          status: 'SUCCESS',
+          type: 'EVENT_STUDENT_FEE',
+          metadata: { contains: event.id }
+        },
+        _sum: { amount: true }
+      }).then(r => r?._sum?.amount || 0).catch(() => 0);
+
+      const approvedCount = await prisma.eventRegistration.count({
+        where: { eventId: event.id, status: 'APPROVED' }
+      }).catch(() => 0);
+
+      const paymentCompleted = paid > 0 || approvedCount > 0;
+      return res.json(successResponse({
+        paymentStatus: paymentCompleted ? 'SUCCESS' : 'PENDING',
+        paymentCompleted,
+        totalAmount: paid,
+        paymentDate: null,
         eventId: event.id,
-        eventCoachId: event.coachId,
-        coachId: coach.id,
-        reqUserId: req.user.id
-      });
-      return res.status(403).json(errorResponse('You are not authorized to view payment status for this event.', 403));
+        eventName: event.name,
+        paymentMode: 'STUDENT_EVENT_FEE'
+      }, 'Payment status retrieved successfully'));
     }
 
-    // Check for event fee payment (from Payment table)
-    // coach variable is already defined above from authorization check
+    // Coordinator/coach payment status (existing behavior, but allow ADMIN to evaluate based on overall event payments)
+    const paymentUserId = req.user.role === 'COACH' ? req.user.id : (event.coach?.userId || req.user.id);
+
     const eventFeePayment = await prisma.payment.findFirst({
       where: {
-        userId: req.user.id,
+        userId: paymentUserId,
         status: 'SUCCESS',
         OR: [
-          {
-            metadata: {
-              contains: eventId
-            }
-          },
-          {
-            description: {
-              contains: event.name
-            }
-          }
+          { metadata: { contains: eventId } },
+          { description: { contains: event.name } }
         ]
       },
-      orderBy: {
-        createdAt: 'desc'
-      }
+      orderBy: { createdAt: 'desc' }
     });
 
     // Check for registration order payments
@@ -1311,7 +1325,8 @@ router.get('/event/:eventId/payment-status', authenticate, async (req, res) => {
       totalAmount: totalAmount,
       paymentDate: paymentDate,
       eventId: event.id,
-      eventName: event.name
+      eventName: event.name,
+      paymentMode: 'COACH_EVENT_FEE'
     }, 'Payment status retrieved successfully'));
 
   } catch (error) {

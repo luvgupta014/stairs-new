@@ -40,19 +40,67 @@ router.post('/issue', authenticate, requireAdmin, async (req, res) => {
       return res.status(404).json(errorResponse('Event not found or you do not have permission'));
     }
 
-    // Check payment status - must have completed payment for certificate issuance
-    const registrationOrder = await prisma.eventRegistrationOrder.findFirst({
-      where: {
-        eventId: event.id,
-        paymentStatus: 'SUCCESS'
-      }
-    });
+    // Payment gating for certificate issuance (supports both admin-created student-fee events and coordinator/coach-paid events)
+    // - Admin-created + student fee: require selected students to have APPROVED registrations (payment verified)
+    // - Otherwise: require coordinator/coach payment completion (order payment OR event payment)
+    let paymentSatisfied = false;
+    let paymentMode = 'COACH_EVENT_FEE';
 
-    if (!registrationOrder) {
-      return res.status(402).json(errorResponse('Payment is pending for this event. Please complete payment before issuing certificates.', 402));
+    const requiresStudentFee = !!(event.createdByAdmin && event.studentFeeEnabled && (event.studentFeeAmount || 0) > 0);
+    if (requiresStudentFee) {
+      paymentMode = 'STUDENT_EVENT_FEE';
+      const regs = await prisma.eventRegistration.findMany({
+        where: {
+          eventId: event.id,
+          studentId: { in: selectedStudents },
+          status: 'APPROVED'
+        },
+        select: { studentId: true }
+      });
+      const approvedSet = new Set(regs.map(r => r.studentId));
+      const notApproved = selectedStudents.filter(sid => !approvedSet.has(sid));
+      if (notApproved.length > 0) {
+        return res.status(402).json(errorResponse('Payment is pending for one or more selected students. Only APPROVED (paid) registrations can receive certificates for this event.', 402));
+      }
+      paymentSatisfied = true;
+    } else {
+      // Coordinator/coach-paid path: accept PAID/SUCCESS registration orders, EventPayment SUCCESS, or Payment SUCCESS tied to eventId
+      const registrationOrder = await prisma.eventRegistrationOrder.findFirst({
+        where: {
+          eventId: event.id,
+          paymentStatus: { in: ['PAID', 'SUCCESS'] }
+        },
+        select: { id: true }
+      }).catch(() => null);
+
+      const eventPayment = await prisma.eventPayment.findFirst({
+        where: { eventId: event.id, status: 'SUCCESS' },
+        select: { id: true }
+      }).catch(() => null);
+
+      const paymentRow = await prisma.payment.findFirst({
+        where: {
+          status: 'SUCCESS',
+          metadata: { contains: event.id }
+        },
+        select: { id: true, metadata: true }
+      }).catch(() => null);
+
+      let paymentRowMatches = false;
+      if (paymentRow?.metadata) {
+        try {
+          const meta = JSON.parse(paymentRow.metadata);
+          paymentRowMatches = meta.eventId === event.id;
+        } catch {}
+      }
+
+      paymentSatisfied = !!(registrationOrder || eventPayment || paymentRowMatches);
+      if (!paymentSatisfied) {
+        return res.status(402).json(errorResponse('Payment is pending for this event. Please complete payment before issuing certificates.', 402));
+      }
     }
 
-    // COMMENTED OUT: Order verification and payment check
+    // COMMENTED OUT: Order verification and per-order quantity check
     // Admin can now issue certificates without order completion constraint
     /*
     // Verify the order and check payment status
@@ -211,20 +259,34 @@ router.post('/issue-winner', authenticate, requireAdmin, async (req, res) => {
       return res.status(404).json(errorResponse('Event not found'));
     }
 
-    // Check payment status
-    const registrationOrder = await prisma.eventRegistrationOrder.findFirst({
-      where: {
-        eventId: event.id,
-        paymentStatus: 'SUCCESS'
-      }
-    });
+    // Payment gating (same logic as /issue)
+    const studentIds = selectedStudentsWithPositions.map(s => s.studentId);
+    const requiresStudentFee = !!(event.createdByAdmin && event.studentFeeEnabled && (event.studentFeeAmount || 0) > 0);
 
-    if (!registrationOrder) {
-      return res.status(402).json(errorResponse('Payment is pending for this event. Please complete payment before issuing winner certificates.', 402));
+    let registrationOrder = null;
+    if (requiresStudentFee) {
+      const regs = await prisma.eventRegistration.findMany({
+        where: { eventId: event.id, studentId: { in: studentIds }, status: 'APPROVED' },
+        select: { studentId: true }
+      });
+      const approvedSet = new Set(regs.map(r => r.studentId));
+      const notApproved = studentIds.filter(sid => !approvedSet.has(sid));
+      if (notApproved.length > 0) {
+        return res.status(402).json(errorResponse('Payment is pending for one or more selected students. Only APPROVED (paid) registrations can receive certificates for this event.', 402));
+      }
+      // No registrationOrder required in student-fee mode
+      registrationOrder = { id: null };
+    } else {
+      registrationOrder = await prisma.eventRegistrationOrder.findFirst({
+        where: { eventId: event.id, paymentStatus: { in: ['PAID', 'SUCCESS'] } }
+      });
+      const eventPayment = await prisma.eventPayment.findFirst({ where: { eventId: event.id, status: 'SUCCESS' } }).catch(() => null);
+      if (!registrationOrder && !eventPayment) {
+        return res.status(402).json(errorResponse('Payment is pending for this event. Please complete payment before issuing winner certificates.', 402));
+      }
     }
 
     // Get student details
-    const studentIds = selectedStudentsWithPositions.map(s => s.studentId);
     const students = await prisma.student.findMany({
       where: { id: { in: studentIds } },
       select: {
@@ -273,7 +335,7 @@ router.post('/issue-winner', authenticate, requireAdmin, async (req, res) => {
         studentUniqueId: student.user.uniqueId,
         eventId: event.id,
         eventUniqueId: event.uniqueId,
-        orderId: registrationOrder.id,
+        orderId: registrationOrder?.id || null,
         position: parseInt(position),
         positionText: positionText || null
       };
@@ -614,10 +676,13 @@ router.get('/event/:eventId/eligible-students', authenticate, requireAdmin, asyn
     */
 
     // Get all students registered for this event
+    // For admin-created student-fee events, only APPROVED registrations are eligible (payment verified).
+    const requiresStudentFee = !!(event.createdByAdmin && event.studentFeeEnabled && (event.studentFeeAmount || 0) > 0);
+    const eligibleStatuses = requiresStudentFee ? ['APPROVED'] : ['REGISTERED', 'APPROVED'];
     const registrations = await prisma.eventRegistration.findMany({
       where: {
         eventId: event.id,
-        status: { in: ['REGISTERED', 'APPROVED'] }
+        status: { in: eligibleStatuses }
       },
       include: {
         student: {

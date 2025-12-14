@@ -172,7 +172,7 @@ const IssueCertificates = () => {
       return;
     }
 
-    // Check payment status
+    // Check payment status (supports both student-fee and coach-fee via backend paymentMode)
     if (!paymentStatus?.paymentCompleted) {
       setShowPaymentModal(true);
       return;
@@ -223,7 +223,7 @@ const IssueCertificates = () => {
       return;
     }
 
-    // Check payment status
+    // Check payment status (supports both student-fee and coach-fee via backend paymentMode)
     if (!paymentStatus?.paymentCompleted) {
       setShowPaymentModal(true);
       return;
@@ -404,8 +404,9 @@ const IssueCertificates = () => {
                   <strong>Why can't I issue certificates?</strong>
                 </p>
                 <p className="text-gray-600 text-sm">
-                  The coach must complete payment for this event before certificates can be issued. 
-                  This ensures all financial obligations are met before certificate generation.
+                  {paymentStatus?.paymentMode === 'STUDENT_EVENT_FEE'
+                    ? 'Students must complete the participation fee payment for this event before certificates can be issued. Only APPROVED (paid) participants are eligible.'
+                    : 'The coach/coordinator must complete payment for this event before certificates can be issued. This ensures all financial obligations are met before certificate generation.'}
                 </p>
               </div>
               <div className="space-y-2 mb-6">
@@ -428,7 +429,7 @@ const IssueCertificates = () => {
                 <button
                   onClick={() => {
                     setShowPaymentModal(false);
-                    navigate(`/dashboard/admin/events/${eventId}`);
+                    navigate(`/admin/events`);
                   }}
                   className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
                 >
