@@ -680,6 +680,7 @@ class EventService {
       // Check payment requirement for admin-created events
       const requiresPayment = event.createdByAdmin && event.studentFeeEnabled && (event.studentFeeAmount || 0) > 0;
       
+      let paymentFound = false;
       if (requiresPayment) {
         // Check if student has completed payment for this event
         const successfulPayments = await prisma.payment.findMany({
@@ -694,7 +695,6 @@ class EventService {
         });
 
         // Verify at least one payment is actually for this event by checking metadata
-        let paymentFound = false;
         for (const payment of successfulPayments) {
           try {
             const meta = payment.metadata ? JSON.parse(payment.metadata) : {};
@@ -708,6 +708,8 @@ class EventService {
           }
         }
 
+        // If payment is required but not found, throw error to trigger payment flow
+        // The frontend should handle this by initiating payment via /create-order-student-event
         if (!paymentFound) {
           throw new Error('Payment required. Please complete payment before registering for this event.');
         }
@@ -715,7 +717,7 @@ class EventService {
 
       // Registration status - if payment was required and completed, status is APPROVED
       // Otherwise, REGISTERED for non-payment events
-      const registrationStatus = requiresPayment ? 'APPROVED' : 'REGISTERED';
+      const registrationStatus = requiresPayment && paymentFound ? 'APPROVED' : 'REGISTERED';
 
       // Create registration
       const registration = await prisma.eventRegistration.create({
