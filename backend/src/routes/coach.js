@@ -172,11 +172,9 @@ router.get('/connection-requests', authenticate, requireCoach, async (req, res) 
           student: {
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
+              name: true,
               sport: true,
               level: true,
-              bio: true,
               user: {
                 select: {
                   email: true,
@@ -223,8 +221,7 @@ router.put('/connection-requests/:connectionId', authenticate, requireCoach, req
       include: {
         student: {
           select: {
-            firstName: true,
-            lastName: true
+            name: true
           }
         }
       }
@@ -252,8 +249,7 @@ router.put('/connection-requests/:connectionId', authenticate, requireCoach, req
       include: {
         student: {
           select: {
-            firstName: true,
-            lastName: true,
+            name: true,
             user: {
               select: {
                 email: true,
@@ -287,8 +283,7 @@ router.get('/students', authenticate, requireCoach, requireApproved, async (req,
       ...(search && {
         student: {
           OR: [
-            { firstName: { contains: search, mode: 'insensitive' } },
-            { lastName: { contains: search, mode: 'insensitive' } },
+            { name: { contains: search, mode: 'insensitive' } },
             { sport: { contains: search, mode: 'insensitive' } }
           ]
         }
@@ -302,12 +297,11 @@ router.get('/students', authenticate, requireCoach, requireApproved, async (req,
           student: {
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
+              name: true,
               sport: true,
               level: true,
-              bio: true,
               achievements: true,
+              profileCompletion: true,
               user: {
                 select: {
                   email: true,
