@@ -492,6 +492,27 @@ export const getCoachProfile = async () => {
   }
 };
 
+// Coach: connection requests (student -> coach connect approvals)
+export const getCoachConnectionRequests = async (status = 'PENDING', params = {}) => {
+  try {
+    const response = await api.get('/api/coach/connection-requests', {
+      params: { status, ...params }
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const respondToCoachConnectionRequest = async (connectionId, action, message = '') => {
+  try {
+    const response = await api.put(`/api/coach/connection-requests/${connectionId}`, { action, message });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 export const updateCoachProfile = async (data) => {
   try {
     console.log('API: Sending PUT request to /api/coach/profile with data:', data);

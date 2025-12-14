@@ -11,7 +11,9 @@ import {
   cancelEventAPI,
   getEventRegistrationOrders,
   getEventPaymentStatus,
-  createEventPaymentOrder
+  createEventPaymentOrder,
+  getCoachConnectionRequests,
+  respondToCoachConnectionRequest
 } from '../../api';
 import StudentCard from '../../components/StudentCard';
 import Spinner from '../../components/Spinner';
@@ -43,6 +45,13 @@ const CoachDashboard = () => {
   const [showCheckout, setShowCheckout] = useState(false);
   const [selectedEventForPayment, setSelectedEventForPayment] = useState(null);
   const [razorpayOrderData, setRazorpayOrderData] = useState(null);
+
+  // Coach connection requests (approve/reject)
+  const [showRequestsModal, setShowRequestsModal] = useState(false);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+  const [connectionRequests, setConnectionRequests] = useState([]);
+  const [respondingRequestId, setRespondingRequestId] = useState(null);
+  const [requestsError, setRequestsError] = useState('');
 
   // Notification state
   const [notifications, setNotifications] = useState([]);
@@ -136,6 +145,41 @@ const CoachDashboard = () => {
       setLoading(false);
     }
   }, []);
+
+  const loadConnectionRequests = useCallback(async () => {
+    try {
+      setRequestsLoading(true);
+      setRequestsError('');
+      const res = await getCoachConnectionRequests('PENDING', { page: 1, limit: 50 });
+      if (res?.success) {
+        setConnectionRequests(res.data?.connections || []);
+      } else {
+        setConnectionRequests([]);
+        setRequestsError(res?.message || 'Failed to load connection requests');
+      }
+    } catch (e) {
+      setConnectionRequests([]);
+      setRequestsError(e?.message || 'Failed to load connection requests');
+    } finally {
+      setRequestsLoading(false);
+    }
+  }, []);
+
+  const handleRespondToRequest = async (connectionId, action) => {
+    try {
+      setRespondingRequestId(connectionId);
+      setRequestsError('');
+      const res = await respondToCoachConnectionRequest(connectionId, action);
+      if (!res?.success) {
+        throw new Error(res?.message || 'Failed to update request');
+      }
+      await Promise.all([loadConnectionRequests(), loadDashboardData()]);
+    } catch (e) {
+      setRequestsError(e?.message || 'Failed to update request');
+    } finally {
+      setRespondingRequestId(null);
+    }
+  };
 
   // Initial data load - only runs once on mount
   useEffect(() => {
@@ -993,6 +1037,17 @@ const CoachDashboard = () => {
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-lg font-semibold text-gray-900">My Athletes ({dashboardData?.students?.length || dashboardData?.totalStudents || 0})</h3>
                   <div className="flex space-x-3">
+                    {Number(dashboardData?.pendingRequests || 0) > 0 && (
+                      <button
+                        onClick={async () => {
+                          setShowRequestsModal(true);
+                          await loadConnectionRequests();
+                        }}
+                        className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg font-medium"
+                      >
+                        Review Requests ({dashboardData?.pendingRequests})
+                      </button>
+                    )}
                     <input
                       type="text"
                       placeholder="Search athletes..."
@@ -1060,6 +1115,80 @@ const CoachDashboard = () => {
                     </Link>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Connection Requests Modal */}
+            {showRequestsModal && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl">
+                  <div className="flex items-center justify-between px-6 py-4 border-b">
+                    <h3 className="text-lg font-semibold text-gray-900">Connection Requests</h3>
+                    <button
+                      onClick={() => setShowRequestsModal(false)}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="p-6">
+                    {requestsError && (
+                      <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4">
+                        {requestsError}
+                      </div>
+                    )}
+
+                    {requestsLoading ? (
+                      <div className="py-10 text-center">
+                        <Spinner />
+                        <div className="text-sm text-gray-600 mt-3">Loading requests…</div>
+                      </div>
+                    ) : connectionRequests.length === 0 ? (
+                      <div className="py-10 text-center text-gray-600">No pending requests.</div>
+                    ) : (
+                      <div className="space-y-3">
+                        {connectionRequests.map((reqItem) => (
+                          <div key={reqItem.id} className="border rounded-lg p-4 flex items-start justify-between">
+                            <div>
+                              <div className="font-semibold text-gray-900">
+                                {reqItem.student?.name || 'Student'}
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                {reqItem.student?.sport || '—'} • {reqItem.student?.level || '—'}
+                              </div>
+                              {reqItem.message && (
+                                <div className="text-sm text-gray-700 mt-2">
+                                  “{reqItem.message}”
+                                </div>
+                              )}
+                              <div className="text-xs text-gray-500 mt-2">
+                                {new Date(reqItem.createdAt).toLocaleString()}
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <button
+                                disabled={respondingRequestId === reqItem.id}
+                                onClick={() => handleRespondToRequest(reqItem.id, 'REJECT')}
+                                className="px-3 py-2 rounded-md text-sm font-medium bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                              >
+                                Reject
+                              </button>
+                              <button
+                                disabled={respondingRequestId === reqItem.id}
+                                onClick={() => handleRespondToRequest(reqItem.id, 'ACCEPT')}
+                                className="px-3 py-2 rounded-md text-sm font-medium bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                              >
+                                Approve
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
