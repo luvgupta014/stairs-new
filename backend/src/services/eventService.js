@@ -87,6 +87,7 @@ class EventService {
         name,
         description,
         sport,
+        level,
         startDate,
         endDate,
         venue,
@@ -116,12 +117,20 @@ class EventService {
       // Generate unique event UID
       const uniqueId = await generateEventUID(sport, city, start);
 
+      // Validate level (EventLevel enum)
+      const validLevels = ['DISTRICT', 'STATE', 'NATIONAL', 'SCHOOL'];
+      const normalizedLevel = level ? String(level).toUpperCase() : 'DISTRICT';
+      if (normalizedLevel && !validLevels.includes(normalizedLevel)) {
+        throw new Error(`Invalid event level. Must be one of: ${validLevels.join(', ')}`);
+      }
+
       // Create event data object based on creator type
       const eventCreateData = {
         uniqueId,
         name,
         description,
         sport,
+        level: normalizedLevel || 'DISTRICT',
         startDate: start,
         endDate: end,
         venue,
@@ -950,7 +959,7 @@ class EventService {
     const allowedFields = [
       'name', 'description', 'sport', 'startDate', 'endDate', 'venue',
       'address', 'city', 'state', 'latitude', 'longitude', 'maxParticipants',
-      'eventFee', 'registrationDeadline'
+      'eventFee', 'registrationDeadline', 'level'
     ];
 
     allowedFields.forEach(field => {
@@ -992,6 +1001,16 @@ class EventService {
 
     if (validatedData.longitude) {
       validatedData.longitude = parseFloat(validatedData.longitude);
+    }
+
+    // Validate level if provided
+    if (validatedData.level) {
+      const validLevels = ['DISTRICT', 'STATE', 'NATIONAL', 'SCHOOL'];
+      const normalizedLevel = String(validatedData.level).toUpperCase();
+      if (!validLevels.includes(normalizedLevel)) {
+        throw new Error(`Invalid event level. Must be one of: ${validLevels.join(', ')}`);
+      }
+      validatedData.level = normalizedLevel;
     }
 
     return validatedData;
@@ -1156,7 +1175,19 @@ class EventService {
 
       // --- Mark event status as RESULTS_UPLOADED ---
       await prisma.event.update({ where: { id: event.id }, data: { status: 'RESULTS_UPLOADED' } });
+
+      // Persist uploaded file metadata for Admin "Event Results" and per-event results pages
+      const fileMeta = await this._processFile(
+        file,
+        event.id,
+        description,
+        uploaderId,
+        uploaderType,
+        event.coachId
+      );
+
       return {
+        file: fileMeta,
         event: { id: event.id, name: event.name },
         numProcessed: sorted.length,
         winners: sorted.slice(0, 3), // First 3 placings for quick admin view
@@ -1489,7 +1520,7 @@ class EventService {
   /**
    * Private method to process file upload
    */
-  async _processFile(file, eventId, description, uploaderId, uploaderType) {
+  async _processFile(file, eventId, description, uploaderId, uploaderType, ownerCoachId = null) {
     try {
       // Multer has already saved the file to the final location
       // file.path contains the full path to the saved file
@@ -1510,13 +1541,18 @@ class EventService {
         description: description,        // Include description
       };
 
-      // Only set coachId if uploader is a coach
+      // EventResultFile schema requires coachId:
+      // - Coach upload: use uploaderId
+      // - Admin upload: associate to owning coachId (e.g., System Admin Coach)
       if (uploaderType === 'COACH') {
         dataToSave.coachId = uploaderId;
+      } else if (uploaderType === 'ADMIN') {
+        if (!ownerCoachId) {
+          throw new Error('Cannot save result file: event has no coachId to associate with.');
+        }
+        dataToSave.coachId = ownerCoachId;
       } else {
-        // For non-coach users, we need to find a related coach or handle differently
-        // For now, throw an error as the schema doesn't support this
-        throw new Error('Only coaches can upload event result files');
+        throw new Error('Only coaches or admins can upload event result files');
       }
 
       console.log(`💾 Saving to database:`, dataToSave);

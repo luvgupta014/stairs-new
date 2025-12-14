@@ -2383,9 +2383,24 @@ const AdminEventsManagement = () => {
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
-                          {event.level || 'DISTRICT'}
-                        </span>
+                        {(() => {
+                          const lvl = (event.level || 'DISTRICT').toString().toUpperCase();
+                          const label = lvl === 'DISTRICT' ? 'District'
+                            : lvl === 'STATE' ? 'State'
+                            : lvl === 'NATIONAL' ? 'National'
+                            : lvl === 'SCHOOL' ? 'School'
+                            : lvl;
+                          const cls = lvl === 'DISTRICT' ? 'bg-green-100 text-green-800'
+                            : lvl === 'STATE' ? 'bg-blue-100 text-blue-800'
+                            : lvl === 'NATIONAL' ? 'bg-purple-100 text-purple-800'
+                            : lvl === 'SCHOOL' ? 'bg-amber-100 text-amber-800'
+                            : 'bg-gray-100 text-gray-800';
+                          return (
+                            <span className={`px-2 py-1 ${cls} rounded-full text-xs font-medium`}>
+                              {label}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="py-3 px-4">
                         <div>

@@ -13,6 +13,25 @@ const EventCard = ({
 }) => {
   if (!event) return null;
 
+  const getLevelBadge = () => {
+    const lvl = (event.level || 'DISTRICT').toString().toUpperCase();
+    const label = lvl === 'DISTRICT' ? 'District'
+      : lvl === 'STATE' ? 'State'
+      : lvl === 'NATIONAL' ? 'National'
+      : lvl === 'SCHOOL' ? 'School'
+      : lvl;
+    const cls = lvl === 'DISTRICT' ? 'bg-green-100 text-green-800'
+      : lvl === 'STATE' ? 'bg-blue-100 text-blue-800'
+      : lvl === 'NATIONAL' ? 'bg-purple-100 text-purple-800'
+      : lvl === 'SCHOOL' ? 'bg-amber-100 text-amber-800'
+      : 'bg-gray-100 text-gray-800';
+    return (
+      <span className={`${cls} px-2 py-1 rounded text-xs font-medium`}>
+        {label}
+      </span>
+    );
+  };
+
   // Get event status
   const getEventStatus = () => {
     const now = new Date();
@@ -121,6 +140,7 @@ const EventCard = ({
           <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">
             {event.sport}
           </span>
+          {getLevelBadge()}
           {event.eventFee > 0 && (
             <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded">
               ₹{event.eventFee}
