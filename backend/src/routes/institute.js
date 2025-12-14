@@ -400,20 +400,19 @@ router.post('/bulk-upload/students', authenticate, requireInstitute, requireAppr
             password: hashedPassword,
             role: 'STUDENT',
             isActive: true,
-            phoneVerified: true,
-            student: {
+            isVerified: true,
+            studentProfile: {
               create: {
-                firstName: rowData.firstName,
-                lastName: rowData.lastName,
+                name: `${rowData.firstName} ${rowData.lastName}`.trim(),
                 dateOfBirth: rowData.dateOfBirth ? new Date(rowData.dateOfBirth) : null,
                 sport: rowData.sport || null,
                 level: rowData.level || 'BEGINNER',
-                preferredLocation: rowData.preferredLocation || null,
+                address: rowData.preferredLocation || null
               }
             }
           },
           include: {
-            student: true
+            studentProfile: true
           }
         });
 
@@ -421,7 +420,7 @@ router.post('/bulk-upload/students', authenticate, requireInstitute, requireAppr
         await prisma.instituteStudent.create({
           data: {
             instituteId: req.institute.id,
-            studentId: user.student.id
+            studentId: user.studentProfile.id
           }
         });
 
@@ -432,7 +431,7 @@ router.post('/bulk-upload/students', authenticate, requireInstitute, requireAppr
             email: user.email,
             phone: user.phone,
             tempPassword: password,
-            student: user.student
+            student: user.studentProfile
           }
         });
 

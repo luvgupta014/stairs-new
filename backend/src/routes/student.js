@@ -407,10 +407,17 @@ router.post('/connect/:coachId', authenticate, requireStudent, async (req, res) 
     const { message } = req.body;
 
     // Check if coach exists and has paid
-    const coach = await prisma.coach.findUnique({
-      where: { 
+    const coach = await prisma.coach.findFirst({
+      where: {
         id: coachId,
         paymentStatus: 'SUCCESS'
+      },
+      select: {
+        id: true,
+        name: true,
+        specialization: true,
+        rating: true,
+        user: { select: { phone: true, email: true, uniqueId: true } }
       }
     });
 
@@ -438,14 +445,17 @@ router.post('/connect/:coachId', authenticate, requireStudent, async (req, res) 
         studentId: req.student.id,
         coachId: coachId,
         status: 'PENDING',
+        initiatedBy: 'STUDENT',
         message: message || 'I would like to connect with you as my coach.'
       },
       include: {
         coach: {
           select: {
-            firstName: true,
-            lastName: true,
-            specialization: true
+            id: true,
+            name: true,
+            specialization: true,
+            rating: true,
+            user: { select: { phone: true, uniqueId: true } }
           }
         }
       }
@@ -479,12 +489,9 @@ router.get('/connections', authenticate, requireStudent, async (req, res) => {
           coach: {
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
+              name: true,
               specialization: true,
-              hourlyRate: true,
               rating: true,
-              profilePicture: true,
               user: {
                 select: {
                   phone: true,

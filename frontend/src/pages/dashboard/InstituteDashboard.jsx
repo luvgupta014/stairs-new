@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { getInstituteDashboard, bulkUploadStudents } from '../../api';
+import { getInstituteDashboard, bulkUploadInstituteStudents } from '../../api';
 import Spinner from '../../components/Spinner';
 import Modal from '../../components/Modal';
 import StudentCard from '../../components/StudentCard';
@@ -131,9 +131,7 @@ const InstituteDashboard = () => {
 
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      const results = await bulkUploadStudents(formData);
+      const results = await bulkUploadInstituteStudents(selectedFile);
       setUploadResults(results);
     } catch (error) {
       console.error('Upload failed:', error);

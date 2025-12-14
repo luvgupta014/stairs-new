@@ -333,6 +333,18 @@ export const bulkUploadStudents = async (file) => {
   }
 };
 
+// Institute: bulk upload students
+export const bulkUploadInstituteStudents = async (file) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/api/institute/bulk-upload/students', formData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 export const createEvent = async (data, adminMode = false) => {
   try {
     const endpoint = adminMode ? '/api/admin/events' : '/api/coach/events';

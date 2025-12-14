@@ -245,7 +245,7 @@ router.put('/connection-requests/:connectionId', authenticate, requireCoach, req
     const updatedConnection = await prisma.studentCoachConnection.update({
       where: { id: connectionId },
       data: {
-        status: action === 'ACCEPT' ? 'ACTIVE' : 'REJECTED',
+        status: action === 'ACCEPT' ? 'ACCEPTED' : 'REJECTED',
         responseMessage: message,
         respondedAt: new Date()
       },
