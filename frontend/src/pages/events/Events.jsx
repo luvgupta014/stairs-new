@@ -13,7 +13,8 @@ import {
   registerForEvent,
   unregisterFromEvent,
   getStudentEventDetails,
-  createStudentEventPaymentOrder
+  createStudentEventPaymentOrder,
+  getMyAssignedEvents
 } from '../../api';
 
 /**
@@ -242,6 +243,13 @@ const Events = () => {
         });
         console.log('📚 Student events response:', response);
         loadedEvents = response.data?.events || [];
+      } else if (user?.role === 'EVENT_INCHARGE') {
+        // Event Incharge sees only assigned events
+        const assigned = await getMyAssignedEvents();
+        const assignments = assigned?.data || assigned || [];
+        loadedEvents = Array.isArray(assignments)
+          ? assignments.map(a => a.event).filter(Boolean)
+          : [];
       } else if (user?.role === 'COACH') {
         // Coaches see their own events
         response = await getCoachEvents({

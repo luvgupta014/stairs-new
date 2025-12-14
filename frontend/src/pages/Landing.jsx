@@ -62,7 +62,7 @@ const Landing = () => {
       color: 'bg-indigo-500',
       hoverColor: 'hover:bg-indigo-600',
       loginPath: '/login/incharge',
-      registerPath: '/login/admin',
+      registerPath: null, // no self-register; admin creates accounts
       features: ['Assigned Events', 'Result Upload (if permitted)', 'Certificates (if permitted)', 'Fee Management (if permitted)']
     }
   ];
@@ -141,6 +141,12 @@ const Landing = () => {
                     className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
                   >
                     Admin Login
+                  </Link>
+                  <Link
+                    to="/login/incharge"
+                    className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                  >
+                    Incharge Login
                   </Link>
                   {/*<Link
                     to="/register/student"
@@ -309,12 +315,14 @@ const Landing = () => {
                       >
                         Login
                       </Link>
-                      <Link
-                        to={role.registerPath}
-                        className="block w-full border-2 border-gray-300 text-gray-700 font-semibold py-3 px-4 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-                      >
-                        Register
-                      </Link>
+                      {!!role.registerPath && (
+                        <Link
+                          to={role.registerPath}
+                          className="block w-full border-2 border-gray-300 text-gray-700 font-semibold py-3 px-4 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                        >
+                          Register
+                        </Link>
+                      )}
                     </motion.div>
                   )}
 

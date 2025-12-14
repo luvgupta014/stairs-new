@@ -11,6 +11,7 @@ const ROLES = [
   { value: 'INSTITUTE', label: 'Institutes' },
   { value: 'CLUB', label: 'Clubs' },
   { value: 'ADMIN', label: 'Admins' },
+  { value: 'EVENT_INCHARGE', label: 'Event Incharge' },
 ];
 
 const STATUSES = [
@@ -25,7 +26,8 @@ const getRoleColor = (role) => {
     COACH: 'bg-green-100 text-green-800 border border-green-300',
     INSTITUTE: 'bg-purple-100 text-purple-800 border border-purple-300',
     CLUB: 'bg-orange-100 text-orange-800 border border-orange-300',
-    ADMIN: 'bg-red-100 text-red-800 border border-red-300'
+    ADMIN: 'bg-red-100 text-red-800 border border-red-300',
+    EVENT_INCHARGE: 'bg-indigo-100 text-indigo-800 border border-indigo-300'
   };
   return colors[role] || 'bg-gray-100 text-gray-800 border border-gray-300';
 };

@@ -101,7 +101,7 @@ const EventInchargeLogin = () => {
             subtitle="Access your assigned events and tasks"
             icon="🛠️"
             color="indigo"
-            registerPath="/login/admin" // no self-register; point to admin login
+            registerPath={null} // no self-register; admin creates accounts
             onSubmit={handleLogin}
             loading={loading}
             error=""

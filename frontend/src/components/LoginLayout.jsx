@@ -210,18 +210,20 @@ const LoginLayout = ({
             </button>
           </form>
 
-          {/* Register Link */}
-          <div className="mt-6 text-center">
-            <p className="text-gray-600">
-              Don't have an account?{" "}
-              <Link
-                to={registerPath}
-                className={`${currentColor.text} hover:opacity-80 font-semibold transition-opacity`}
-              >
-                Register here
-              </Link>
-            </p>
-          </div>
+          {/* Register Link (optional) */}
+          {!!registerPath && (
+            <div className="mt-6 text-center">
+              <p className="text-gray-600">
+                Don't have an account?{" "}
+                <Link
+                  to={registerPath}
+                  className={`${currentColor.text} hover:opacity-80 font-semibold transition-opacity`}
+                >
+                  Register here
+                </Link>
+              </p>
+            </div>
+          )}
 
           {/* Demo Credentials */}
           {import.meta.env.DEV && (

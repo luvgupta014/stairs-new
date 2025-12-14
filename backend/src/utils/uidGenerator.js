@@ -197,7 +197,7 @@ const getNextEventSerial = async () => {
  * Generate User UID
  * Format: <Type><Serial><StateCode><DDMMYY>
  * Example: A0001DL071125
- * @param {string} userType - STUDENT, COACH, INSTITUTE, CLUB, ADMIN
+ * @param {string} userType - STUDENT, COACH, INSTITUTE, CLUB, ADMIN, EVENT_INCHARGE
  * @param {string} state - State name (e.g., "Delhi", "Maharashtra")
  * @param {Date} registrationDate - Date of registration (optional, defaults to now)
  * @returns {Promise<string>} Generated UID (e.g., A0001DL071125)
@@ -222,6 +222,10 @@ const generateUID = async (userType, state = 'Delhi', registrationDate = null) =
       break;
     case 'CLUB':
       prefix = 'B';
+      break;
+    case 'EVENT_INCHARGE':
+      // Event incharge user UID prefix
+      prefix = 'E';
       break;
     default:
       throw new Error(`Invalid user type: ${userType}`);

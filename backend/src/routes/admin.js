@@ -11,7 +11,7 @@ const {
 } = require('../utils/helpers');
 const { sendEventModerationEmail, sendOrderStatusEmail, sendEventCompletionEmail, sendAssignmentEmail } = require('../utils/emailService');
 const EventService = require('../services/eventService');
-const { generateEventUID } = require('../utils/uidGenerator');
+const { generateEventUID, generateUID } = require('../utils/uidGenerator');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -2218,6 +2218,141 @@ router.get('/events/:eventId/participants', authenticate, requireAdmin, async (r
   } catch (error) {
     console.error('Get event participants error:', error);
     res.status(500).json(errorResponse('Failed to retrieve event participants.', 500));
+  }
+});
+
+// Get event payments (Admin access) - includes student participation fee payments
+router.get('/events/:eventId/payments', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, name: true, uniqueId: true }
+    });
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    // Fetch payments that reference this event in metadata (covers EVENT_STUDENT_FEE and other event-related payments)
+    const rawPayments = await prisma.payment.findMany({
+      where: {
+        metadata: { contains: eventId }
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            uniqueId: true,
+            email: true,
+            phone: true,
+            role: true,
+            name: true,
+            studentProfile: { select: { id: true, name: true } }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Filter to payments actually for this event (metadata contains can be noisy)
+    const payments = rawPayments.filter(p => {
+      try {
+        const meta = p.metadata ? JSON.parse(p.metadata) : {};
+        return meta.eventId === eventId;
+      } catch {
+        return false;
+      }
+    }).map(p => {
+      let meta = {};
+      try { meta = p.metadata ? JSON.parse(p.metadata) : {}; } catch {}
+
+      return {
+        id: p.id,
+        type: p.type,
+        amount: Number(p.amount) || 0,
+        currency: p.currency || 'INR',
+        status: p.status,
+        description: p.description,
+        razorpayOrderId: p.razorpayOrderId,
+        razorpayPaymentId: p.razorpayPaymentId,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+        metadata: meta,
+        user: p.user ? {
+          id: p.user.id,
+          uniqueId: p.user.uniqueId,
+          email: p.user.email,
+          phone: p.user.phone,
+          role: p.user.role,
+          name: p.user.studentProfile?.name || p.user.name || p.user.email
+        } : null
+      };
+    });
+
+    res.json(successResponse({
+      event,
+      payments
+    }, 'Event payments retrieved successfully.'));
+  } catch (error) {
+    console.error('Get event payments error:', error);
+    res.status(500).json(errorResponse('Failed to retrieve event payments.', 500));
+  }
+});
+
+// Admin: Create Event Incharge user (no self-register)
+router.post('/create-event-incharge', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, email, phone, password, state = 'Delhi' } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json(errorResponse('name, email and password are required.', 400));
+    }
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email },
+          ...(phone ? [{ phone }] : [])
+        ]
+      }
+    });
+    if (existingUser) {
+      return res.status(409).json(errorResponse('User with this email/phone already exists.', 409));
+    }
+
+    const uniqueId = await generateUID('EVENT_INCHARGE', state);
+    const hashedPassword = await hashPassword(password);
+
+    const user = await prisma.user.create({
+      data: {
+        uniqueId,
+        name,
+        email,
+        phone: phone || null,
+        password: hashedPassword,
+        role: 'EVENT_INCHARGE',
+        isActive: true,
+        isVerified: true
+      },
+      select: {
+        id: true,
+        uniqueId: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        isVerified: true,
+        createdAt: true
+      }
+    });
+
+    res.status(201).json(successResponse({ user }, 'Event Incharge user created successfully.', 201));
+  } catch (error) {
+    console.error('Create event incharge error:', error);
+    res.status(500).json(errorResponse('Failed to create Event Incharge user.', 500));
   }
 });
 

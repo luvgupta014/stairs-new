@@ -1285,7 +1285,8 @@ router.post('/login', async (req, res) => {
         'COACH': 'Coach/Coordinator', 
         'INSTITUTE': 'Institute',
         'CLUB': 'Club',
-        'ADMIN': 'Administrator'
+        'ADMIN': 'Administrator',
+        'EVENT_INCHARGE': 'Event Incharge'
       };
       const expectedRole = roleNames[role] || role;
       const actualRole = roleNames[user.role] || user.role;
@@ -1344,7 +1345,7 @@ router.post('/login', async (req, res) => {
         phone: user.phone,
         role: user.role,
         isVerified: user.isVerified,
-        profile: user.studentProfile || user.coachProfile || user.instituteProfile || user.clubProfile || user.adminProfile
+        profile: user.studentProfile || user.coachProfile || user.instituteProfile || user.clubProfile || user.adminProfile || (user.name ? { name: user.name } : {})
       }
     };
     console.log('📤 Sending login response for user:', user.email);
