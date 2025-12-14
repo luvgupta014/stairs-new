@@ -230,13 +230,30 @@ const requireAdmin = async (req, res, next) => {
 
 // Approval status middleware (for coaches/institutes pending approval)
 const requireApproved = (req, res, next) => {
-  // If you add approvalStatus to Coach/Institute, check here
-  if (req.user.role === 'COACH' && req.coach?.approvalStatus !== 'APPROVED') {
-    return res.status(403).json(errorResponse('Coach account pending approval.', 403));
+  // Prefer explicit approvalStatus if present in the model
+  if (req.user.role === 'COACH') {
+    if (req.coach && Object.prototype.hasOwnProperty.call(req.coach, 'approvalStatus')) {
+      if (req.coach.approvalStatus !== 'APPROVED') {
+        return res.status(403).json(errorResponse('Coach account pending approval.', 403));
+      }
+      return next();
+    }
+    // Fallback: treat active subscription/payment as approval in older schemas
+    if (req.coach && Object.prototype.hasOwnProperty.call(req.coach, 'isActive')) {
+      if (!req.coach.isActive) {
+        return res.status(403).json(errorResponse('Coach account is not active yet.', 403));
+      }
+      return next();
+    }
   }
 
-  if (req.user.role === 'INSTITUTE' && req.institute?.approvalStatus !== 'APPROVED') {
-    return res.status(403).json(errorResponse('Institute account pending approval.', 403));
+  if (req.user.role === 'INSTITUTE') {
+    if (req.institute && Object.prototype.hasOwnProperty.call(req.institute, 'approvalStatus')) {
+      if (req.institute.approvalStatus !== 'APPROVED') {
+        return res.status(403).json(errorResponse('Institute account pending approval.', 403));
+      }
+      return next();
+    }
   }
 
   next();

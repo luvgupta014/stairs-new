@@ -207,7 +207,7 @@ router.get('/connection-requests', authenticate, requireCoach, async (req, res) 
 });
 
 // Respond to connection request
-router.put('/connection-requests/:connectionId', authenticate, requireCoach, requireApproved, async (req, res) => {
+router.put('/connection-requests/:connectionId', authenticate, requireCoach, async (req, res) => {
   try {
     const { connectionId } = req.params;
     const { action, message } = req.body; // action: 'ACCEPT' or 'REJECT'
