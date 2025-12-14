@@ -660,7 +660,25 @@ const AdminEventsManagement = () => {
 
   // Enhanced helper: derive payment status / summary for an event object with comprehensive edge case handling
   const getEventPaymentSummary = (event, modalPayments = []) => {
-    // Prefer server-provided summary fields if present (from registration orders)
+    // Prefer modal-loaded payments when available (fixes "No Payments" badge when modal has payments)
+    if (Array.isArray(modalPayments) && modalPayments.length > 0) {
+      const total = modalPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const paid = modalPayments.reduce((s, p) => {
+        const amount = Number(p.amount) || 0;
+        const isPaid = p.status === 'COMPLETED' || p.status === 'SUCCESS' || p.status === 'PAID';
+        return isPaid ? s + amount : s;
+      }, 0);
+      const status = total > 0 ? (paid >= total ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'PENDING')) : (paid > 0 ? 'PAID' : 'NO_PAYMENTS');
+      return {
+        totalAmount: total,
+        paidAmount: paid,
+        status,
+        orderCount: modalPayments.length,
+        paidOrderCount: modalPayments.filter(p => p.status === 'COMPLETED' || p.status === 'SUCCESS' || p.status === 'PAID').length
+      };
+    }
+
+    // Prefer server-provided summary fields if present
     if (event.paymentSummary && typeof event.paymentSummary === 'object') {
       return {
         totalAmount: event.paymentSummary.totalAmount || 0,

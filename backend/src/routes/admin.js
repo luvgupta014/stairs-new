@@ -1619,7 +1619,10 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
 
     const pagination = getPaginationMeta(total, parseInt(page), parseInt(limit));
 
-    // Calculate payment status for each event from registration orders
+    // Calculate payment status for each event.
+    // NOTE: There are multiple revenue/payment sources:
+    // - EventRegistrationOrder (legacy / coordinator flows)
+    // - Payment (includes student participation fee payments: type=EVENT_STUDENT_FEE, tied via metadata.eventId)
     const eventsWithPaymentStatus = await Promise.all(
       events.map(async (event) => {
         try {
@@ -1634,15 +1637,53 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
             }
           }).catch(() => []); // Fallback to empty array on error
 
-          // Calculate payment summary
-          const totalAmount = registrationOrders.reduce((sum, order) => sum + (parseFloat(order.totalFeeAmount) || 0), 0);
-          const paidAmount = registrationOrders
+          // 1) Registration order summary (existing behavior)
+          const orderTotalAmount = registrationOrders.reduce((sum, order) => sum + (parseFloat(order.totalFeeAmount) || 0), 0);
+          const orderPaidAmount = registrationOrders
             .filter(order => order.paymentStatus === 'PAID' || order.paymentStatus === 'SUCCESS')
             .reduce((sum, order) => sum + (parseFloat(order.totalFeeAmount) || 0), 0);
-          
+
+          // 2) Payment table summary (student participation fee + other payment records tied via metadata.eventId)
+          const rawPayments = await prisma.payment.findMany({
+            where: {
+              metadata: { contains: event.id }
+            },
+            select: {
+              id: true,
+              type: true,
+              amount: true,
+              status: true,
+              metadata: true
+            },
+            orderBy: { createdAt: 'desc' }
+          }).catch(() => []);
+
+          const eventPayments = rawPayments.filter(p => {
+            try {
+              const meta = p.metadata ? JSON.parse(p.metadata) : {};
+              return meta.eventId === event.id;
+            } catch {
+              return false;
+            }
+          });
+
+          const paymentTotalAmount = eventPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+          const paymentPaidAmount = eventPayments
+            .filter(p => p.status === 'SUCCESS' || p.status === 'PAID' || p.status === 'COMPLETED')
+            .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+          // Prefer payment table summary when present; otherwise fall back to registration order summary.
+          const hasPaymentRecords = eventPayments.length > 0;
+          const totalAmount = hasPaymentRecords ? paymentTotalAmount : orderTotalAmount;
+          const paidAmount = hasPaymentRecords ? paymentPaidAmount : orderPaidAmount;
+          const orderCount = hasPaymentRecords ? eventPayments.length : registrationOrders.length;
+          const paidOrderCount = hasPaymentRecords
+            ? eventPayments.filter(p => p.status === 'SUCCESS' || p.status === 'PAID' || p.status === 'COMPLETED').length
+            : registrationOrders.filter(o => o.paymentStatus === 'PAID' || o.paymentStatus === 'SUCCESS').length;
+
           let paymentStatus = 'NO_PAYMENTS';
-          if (totalAmount > 0) {
-            if (paidAmount >= totalAmount) {
+          if (totalAmount > 0 || orderCount > 0) {
+            if (paidAmount > 0 && (paidAmount >= totalAmount || totalAmount === 0)) {
               paymentStatus = 'PAID';
             } else if (paidAmount > 0) {
               paymentStatus = 'PARTIAL';
@@ -1657,8 +1698,8 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
               totalAmount,
               paidAmount,
               status: paymentStatus,
-              orderCount: registrationOrders.length,
-              paidOrderCount: registrationOrders.filter(o => o.paymentStatus === 'PAID' || o.paymentStatus === 'SUCCESS').length
+              orderCount,
+              paidOrderCount
             }
           };
         } catch (error) {
@@ -4281,7 +4322,7 @@ router.post('/events/:eventId/registrations/notify-completion', authenticate, re
       console.warn(`⚠️ Notifying for event ${eventId} with status: ${event.status} (not COMPLETED)`);
     }
 
-    // Find all paid registration orders for this event
+    // Find all paid registration orders for this event (legacy flow)
     const registrationOrders = await prisma.eventRegistrationOrder.findMany({
       where: {
         eventId,
@@ -4311,9 +4352,134 @@ router.post('/events/:eventId/registrations/notify-completion', authenticate, re
       }
     });
 
-    // Check if there are any paid orders
+    // If there are no paid registration orders (e.g. admin-created events / student-fee events),
+    // fall back to notifying event owner + assigned users (INCHARGE/COORDINATOR/TEAM).
     if (registrationOrders.length === 0) {
-      return res.status(400).json(errorResponse('No paid registration orders found for this event. Coaches must complete payment before notifications can be sent.', 400));
+      const fallbackMessage =
+        (notifyMessage && String(notifyMessage).trim()) ||
+        `Event "${event.name}" has been completed. Certificates can now be issued. Please check your dashboard for details.`;
+
+      // Build target users: event owner (coach user) + assigned users
+      const targets = [];
+
+      // Event owner coach user (if available)
+      const owner = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: {
+          coach: { select: { userId: true, name: true, user: { select: { email: true } } } }
+        }
+      }).catch(() => null);
+      if (owner?.coach?.userId) {
+        targets.push({
+          userId: owner.coach.userId,
+          name: owner.coach.name || 'Coordinator',
+          email: owner.coach.user?.email || null
+        });
+      }
+
+      // Assigned users
+      const assignments = await prisma.eventAssignment.findMany({
+        where: { eventId, role: { in: ['INCHARGE', 'COORDINATOR', 'TEAM'] } },
+        include: {
+          user: { select: { id: true, email: true, name: true } }
+        }
+      }).catch(() => []);
+
+      assignments.forEach(a => {
+        if (a?.user?.id) {
+          targets.push({
+            userId: a.user.id,
+            name: a.user.name || 'Assigned User',
+            email: a.user.email || null
+          });
+        }
+      });
+
+      // Deduplicate by userId
+      const uniqueTargets = Array.from(new Map(targets.map(t => [t.userId, t])).values());
+      if (uniqueTargets.length === 0) {
+        return res.status(400).json(errorResponse('No paid registration orders found and no assigned users available to notify for this event.', 400));
+      }
+
+      // Count participants + paid amount (best-effort) for email content
+      const participantCount = await prisma.eventRegistration.count({ where: { eventId } }).catch(() => 0);
+      const paidStudentAmount = await prisma.payment.aggregate({
+        where: {
+          status: 'SUCCESS',
+          type: 'EVENT_STUDENT_FEE',
+          metadata: { contains: eventId }
+        },
+        _sum: { amount: true }
+      }).then(r => r?._sum?.amount || 0).catch(() => 0);
+
+      const results = await Promise.all(uniqueTargets.map(async (t) => {
+        let dbNotification = null;
+        let emailSent = false;
+        const errors = [];
+
+        try {
+          dbNotification = await prisma.notification.create({
+            data: {
+              userId: t.userId,
+              type: 'ORDER_COMPLETED',
+              title: `Event Completed - Certificates Ready: ${event.name}`,
+              message: fallbackMessage,
+              data: JSON.stringify({
+                eventId,
+                eventName: event.name,
+                participantCount,
+                totalPaidAmount: paidStudentAmount,
+                notificationType: 'event_completion',
+                actionUrl: `/events/${eventId}`
+              })
+            }
+          });
+        } catch (e) {
+          errors.push(`Failed to create notification: ${e.message}`);
+        }
+
+        if (t.email) {
+          try {
+            const emailResult = await sendEventCompletionEmail(
+              t.email,
+              t.name,
+              event.name,
+              participantCount,
+              paidStudentAmount,
+              notifyMessage || ''
+            );
+            emailSent = !!emailResult?.success;
+            if (!emailSent) errors.push(`Failed to send email: ${emailResult?.error || 'unknown error'}`);
+          } catch (e) {
+            errors.push(`Error sending email: ${e.message}`);
+          }
+        } else {
+          errors.push('Missing email, skipping email notification');
+        }
+
+        return { userId: t.userId, name: t.name, notificationCreated: !!dbNotification, emailSent, errors };
+      }));
+
+      const notificationsCreated = results.filter(r => r.notificationCreated).length;
+      const emailsSent = results.filter(r => r.emailSent).length;
+      const totalErrors = results.reduce((s, r) => s + (r.errors?.length || 0), 0);
+
+      return res.json(successResponse({
+        ordersNotified: 0,
+        totalStudentsForCertificates: participantCount,
+        totalAmount: paidStudentAmount,
+        notificationsCreated,
+        emailsSent,
+        totalErrors,
+        coachesNotified: results.map(r => ({
+          coachId: null,
+          coachName: r.name,
+          notificationCreated: r.notificationCreated,
+          emailSent: r.emailSent,
+          errors: r.errors
+        })),
+        message: `Notified ${notificationsCreated}/${uniqueTargets.length} user(s) via dashboard. ${emailsSent}/${uniqueTargets.length} email(s) sent.${totalErrors > 0 ? ` ${totalErrors} warning(s) occurred.` : ''}`
+      }, 'Completion notification sent successfully.'));
     }
 
     // Mark orders as notified and ready for certificate generation
@@ -4475,6 +4641,11 @@ router.post('/registrations/orders/:orderId/generate-certificates', authenticate
       return res.status(404).json(errorResponse('Registration order not found.', 404));
     }
 
+    // Ensure the registration order is paid before issuing certificates
+    if (registrationOrder.paymentStatus !== 'PAID') {
+      return res.status(400).json(errorResponse('Cannot generate certificates until the registration order is PAID.', 400));
+    }
+
     // Check event is completed
     if (registrationOrder.event.status !== 'COMPLETED') {
       return res.status(400).json(errorResponse('Cannot generate certificates until event is completed.', 400));
@@ -4579,6 +4750,133 @@ router.get('/events/:eventId/certificates', authenticate, requireAdmin, async (r
   } catch (error) {
     console.error('❌ Get certificates error:', error);
     res.status(500).json(errorResponse('Failed to retrieve certificates.', 500));
+  }
+});
+
+// Generate certificates directly from event registrations (supports admin-created/student-fee events)
+router.post('/events/:eventId/certificates/generate-from-registrations', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        uniqueId: true,
+        name: true,
+        sport: true,
+        status: true,
+        createdByAdmin: true,
+        studentFeeEnabled: true,
+        studentFeeAmount: true
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    if (event.status !== 'COMPLETED') {
+      return res.status(400).json(errorResponse('Cannot generate certificates until event is COMPLETED.', 400));
+    }
+
+    // Eligible registrations:
+    // - Paid admin-created student-fee events: only APPROVED registrations (payment verified)
+    // - Otherwise: REGISTERED/APPROVED
+    const requiresStudentPayment = !!(event.createdByAdmin && event.studentFeeEnabled && (event.studentFeeAmount || 0) > 0);
+    const eligibleStatuses = requiresStudentPayment ? ['APPROVED'] : ['APPROVED', 'REGISTERED'];
+
+    const regs = await prisma.eventRegistration.findMany({
+      where: {
+        eventId,
+        status: { in: eligibleStatuses }
+      },
+      include: {
+        student: {
+          include: {
+            user: { select: { uniqueId: true, email: true } }
+          }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    if (!regs || regs.length === 0) {
+      return res.status(400).json(errorResponse('No eligible participants found for certificate generation.', 400));
+    }
+
+    let created = 0;
+    let skippedExisting = 0;
+    let skippedNoUid = 0;
+
+    const certificates = [];
+    for (const r of regs) {
+      const studentUid = r.student?.user?.uniqueId;
+      if (!studentUid || !event.uniqueId) {
+        skippedNoUid += 1;
+        continue;
+      }
+
+      const existingCert = await prisma.certificate.findFirst({
+        where: { studentId: r.studentId, eventId }
+      });
+      if (existingCert) {
+        skippedExisting += 1;
+        certificates.push(existingCert);
+        continue;
+      }
+
+      const certUid = `STAIRS-CERT-${event.uniqueId}-${studentUid}`;
+      try {
+        const cert = await prisma.certificate.create({
+          data: {
+            studentId: r.studentId,
+            eventId,
+            orderId: null,
+            participantName: r.student?.name || 'Participant',
+            sportName: event.sport || '',
+            eventName: event.name || '',
+            uniqueId: certUid,
+            certificateUrl: `/certificates/${certUid}.pdf`
+          }
+        });
+        created += 1;
+        certificates.push(cert);
+      } catch (e) {
+        // If uniqueId collided, append timestamp and retry once
+        if (String(e?.message || '').toLowerCase().includes('unique') || String(e?.code || '') === 'P2002') {
+          const certUid2 = `STAIRS-CERT-${event.uniqueId}-${studentUid}-${Date.now()}`;
+          const cert2 = await prisma.certificate.create({
+            data: {
+              studentId: r.studentId,
+              eventId,
+              orderId: null,
+              participantName: r.student?.name || 'Participant',
+              sportName: event.sport || '',
+              eventName: event.name || '',
+              uniqueId: certUid2,
+              certificateUrl: `/certificates/${certUid2}.pdf`
+            }
+          });
+          created += 1;
+          certificates.push(cert2);
+        } else {
+          throw e;
+        }
+      }
+    }
+
+    return res.json(successResponse({
+      eventId,
+      certificatesGenerated: created,
+      skippedExisting,
+      skippedNoUid,
+      totalEligibleParticipants: regs.length,
+      certificates
+    }, 'Certificates generated successfully from registrations.'));
+  } catch (error) {
+    console.error('❌ Generate certificates from registrations error:', error);
+    return res.status(500).json(errorResponse('Failed to generate certificates from registrations: ' + error.message, 500));
   }
 });
 

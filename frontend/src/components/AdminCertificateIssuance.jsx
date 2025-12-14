@@ -4,7 +4,9 @@ import {
   notifyCoordinatorForCompletion,
   generateCertificates,
   getEventCertificatesAdmin,
-  updateEventStatus
+  updateEventStatus,
+  getEventParticipants,
+  generateCertificatesFromRegistrationsAdmin
 } from '../api';
 import Spinner from './Spinner';
 import {
@@ -19,6 +21,7 @@ import {
 const AdminCertificateIssuance = ({ event, onSuccess }) => {
   const [registrationOrders, setRegistrationOrders] = useState([]);
   const [certificates, setCertificates] = useState([]);
+  const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [notifying, setNotifying] = useState(false);
@@ -35,18 +38,33 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const ordersResponse = await getEventRegistrationOrdersAdmin(event.id);
-      if (ordersResponse.success) {
-        setRegistrationOrders(ordersResponse.data.orders || []);
+      const [ordersResponse, certsResponse, participantsResponse] = await Promise.allSettled([
+        getEventRegistrationOrdersAdmin(event.id),
+        getEventCertificatesAdmin(event.id),
+        getEventParticipants(event.id, { page: 1, limit: 1000 })
+      ]);
+
+      if (ordersResponse.status === 'fulfilled' && ordersResponse.value?.success) {
+        setRegistrationOrders(ordersResponse.value.data.orders || []);
+      } else {
+        setRegistrationOrders([]);
       }
 
-      const certsResponse = await getEventCertificatesAdmin(event.id);
-      if (certsResponse.success) {
-        setCertificates(certsResponse.data.certificates);
+      if (certsResponse.status === 'fulfilled' && certsResponse.value?.success) {
+        setCertificates(certsResponse.value.data.certificates || []);
+      } else {
+        setCertificates([]);
+      }
+
+      if (participantsResponse.status === 'fulfilled' && participantsResponse.value?.success) {
+        setParticipants(participantsResponse.value.data.registrations || []);
+      } else {
+        setParticipants([]);
       }
     } catch (err) {
       console.error('Failed to load data:', err);
-      setError(err.message);
+      const msg = err?.message || err?.response?.data?.message || 'Failed to load certificate issuance data.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -63,7 +81,7 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
       if (response.success) {
         const data = response.data;
         setSuccess(
-          `✅ ${data.ordersNotified || 0} coordinator(s) notified successfully! ${data.totalStudentsForCertificates || 0} student certificate(s) ready to be generated. Email notifications have been sent to all coaches.`
+          `✅ Notification sent! ${data.notificationsCreated || 0} dashboard notification(s), ${data.emailsSent || 0} email(s). ${data.totalStudentsForCertificates || 0} certificate(s) eligible.`
         );
         setNotifyMessage('');
         await loadData();
@@ -109,6 +127,26 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
       }
     } catch (err) {
       setError(err.message || 'Failed to generate certificates');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleGenerateCertificatesFromRegistrations = async () => {
+    try {
+      setProcessing(true);
+      setError('');
+      const response = await generateCertificatesFromRegistrationsAdmin(event.id);
+      if (response.success) {
+        const d = response.data || {};
+        setSuccess(`✅ ${d.certificatesGenerated || 0} certificates generated successfully! (Skipped existing: ${d.skippedExisting || 0})`);
+        await loadData();
+      } else {
+        setError(response.message || 'Failed to generate certificates');
+      }
+    } catch (err) {
+      const msg = err?.message || err?.response?.data?.message || 'Failed to generate certificates';
+      setError(msg);
     } finally {
       setProcessing(false);
     }
@@ -281,9 +319,48 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
 
           {/* Orders List */}
           {registrationOrders.length === 0 ? (
-            <div className="text-center py-8 bg-gray-50 rounded-lg">
-              <FaFileAlt className="text-4xl text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-600">No registration orders for this event yet.</p>
+            <div className="space-y-4">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div className="flex items-start">
+                  <FaFileAlt className="text-gray-400 mt-1 mr-3" />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">No Registration Orders</p>
+                    <p className="text-sm text-gray-700 mt-1">
+                      This event has no coordinator registration orders. If this is an admin-created / student-fee event, generate certificates from participant registrations instead.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Generate from registrations (admin-created events) */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                <h4 className="font-semibold text-emerald-900 mb-2">Generate Certificates from Participants</h4>
+                <p className="text-sm text-emerald-800 mb-3">
+                  Eligible participants: {participants.length}. For paid admin-created events, only APPROVED participants are eligible.
+                </p>
+                <button
+                  onClick={handleGenerateCertificatesFromRegistrations}
+                  disabled={processing || event.status !== 'COMPLETED' || participants.length === 0}
+                  className="w-full bg-emerald-600 text-white py-2 rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center"
+                >
+                  {processing ? (
+                    <>
+                      <Spinner size="sm" color="white" />
+                      <span className="ml-2">Generating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FaCertificate className="mr-2" />
+                      Generate Certificates ({participants.length})
+                    </>
+                  )}
+                </button>
+                {event.status !== 'COMPLETED' && (
+                  <p className="text-xs text-emerald-800 mt-2">
+                    Mark the event as COMPLETED first.
+                  </p>
+                )}
+              </div>
             </div>
           ) : (
             <div className="space-y-4">

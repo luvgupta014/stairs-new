@@ -640,6 +640,18 @@ export const createStudentEventPaymentOrder = async (eventId) => {
   }
 };
 
+// Coordinator/coach event fee payment (event payment for certificate/results workflow)
+export const createEventPaymentOrder = async (eventId) => {
+  try {
+    const response = await api.post('/api/payment/create-order-events', { eventId });
+    return response.data;
+  } catch (error) {
+    console.error('Create event payment order error:', error);
+    // Keep error shape consistent with other helpers
+    throw error.response?.data || error.message;
+  }
+};
+
 // Admin APIs
 export const adminLogin = async (credentials) => {
   try {
@@ -1470,6 +1482,15 @@ export const generateCertificates = async (orderId) => {
 export const getEventCertificatesAdmin = async (eventId) => {
   try {
     const response = await api.get(`/api/admin/events/${eventId}/certificates`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const generateCertificatesFromRegistrationsAdmin = async (eventId) => {
+  try {
+    const response = await api.post(`/api/admin/events/${eventId}/certificates/generate-from-registrations`);
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;

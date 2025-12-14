@@ -10,7 +10,8 @@ import {
   markNotificationAsRead,
   cancelEventAPI,
   getEventRegistrationOrders,
-  getEventPaymentStatus
+  getEventPaymentStatus,
+  createEventPaymentOrder
 } from '../../api';
 import StudentCard from '../../components/StudentCard';
 import Spinner from '../../components/Spinner';
@@ -308,45 +309,10 @@ const CoachDashboard = () => {
         return;
       }
 
-      // Create payment order on backend
-      const createOrderResponse = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/payment/create-order-events`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify({ eventId })
-      });
-
-      // Check if response is HTML (error page) before parsing JSON
-      const contentType = createOrderResponse.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        const text = await createOrderResponse.text();
-        console.error('Server returned non-JSON response:', text.substring(0, 200));
-        if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
-          throw new Error('Server returned an error page. Please check if the backend is running correctly.');
-        }
-        throw new Error('Server returned invalid response format. Please try again.');
-      }
-
-      let orderData;
-      try {
-        orderData = await createOrderResponse.json();
-      } catch (parseError) {
-        console.error('Failed to parse order response:', parseError);
-        throw new Error('Server returned invalid JSON response. Please try again.');
-      }
-      
-      if (!createOrderResponse.ok || !orderData.success) {
-        if (createOrderResponse.status === 401) {
-          localStorage.removeItem('authToken');
-          localStorage.removeItem('userRole');
-          throw new Error('Your session has expired. Please login again.');
-        }
-        if (createOrderResponse.status === 403) {
-          throw new Error(orderData.message || 'You are not authorized to make payment for this event.');
-        }
-        throw new Error(orderData.message || `Server error: ${createOrderResponse.status}`);
+      // Create payment order on backend (consistent API helper; uses /api/payment/create-order-events)
+      const orderData = await createEventPaymentOrder(eventId);
+      if (!orderData?.success) {
+        throw new Error(orderData?.message || 'Payment initialization failed. Please try again.');
       }
 
       const { orderId, amount, currency, eventName, razorpayKeyId } = orderData.data || {};
@@ -428,7 +394,7 @@ const CoachDashboard = () => {
         handler: async function (response) {
           try {
             // Verify payment on backend
-            const verifyResponse = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/payment/verify-payment`, {
+            const verifyResponse = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/payment/verify`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -1728,7 +1694,7 @@ const CoachDashboard = () => {
               setRazorpayOrderData(null);
             }}
             onConfirm={handleConfirmEventPayment}
-            loading={false}
+            loading={actionLoading}
             paymentData={{
               title: 'Review Your Event Payment',
               description: 'Please review the payment details before proceeding to Razorpay',
