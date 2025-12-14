@@ -404,7 +404,7 @@ router.get('/coaches/:coachId', authenticate, requireStudent, async (req, res) =
 router.post('/connect/:coachId', authenticate, requireStudent, async (req, res) => {
   try {
     const { coachId } = req.params;
-    const { message } = req.body;
+    const { message } = req.body || {};
 
     // Check if coach exists and has paid
     const coach = await prisma.coach.findFirst({
@@ -446,7 +446,9 @@ router.post('/connect/:coachId', authenticate, requireStudent, async (req, res) 
         coachId: coachId,
         status: 'PENDING',
         initiatedBy: 'STUDENT',
-        message: message || 'I would like to connect with you as my coach.'
+        message: (typeof message === 'string' && message.trim().length > 0)
+          ? message.trim()
+          : 'I would like to connect with you as my coach.'
       },
       include: {
         coach: {
