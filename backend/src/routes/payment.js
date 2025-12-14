@@ -1216,29 +1216,30 @@ router.get('/event/:eventId/payment-status', authenticate, async (req, res) => {
     }
 
     // Payment model selection:
-    // - Admin-created student-fee events: payment complete if there is any SUCCESS EVENT_STUDENT_FEE for this event,
-    //   or any APPROVED registration exists (payment verified).
-    const requiresStudentFee = !!(event.createdByAdmin && event.studentFeeEnabled && (event.studentFeeAmount || 0) > 0);
+    // Detect student-fee payments robustly (even if event flags were not set on old events).
+    const paidStudentAmount = await prisma.payment.aggregate({
+      where: {
+        status: 'SUCCESS',
+        type: 'EVENT_STUDENT_FEE',
+        metadata: { contains: event.id }
+      },
+      _sum: { amount: true }
+    }).then(r => r?._sum?.amount || 0).catch(() => 0);
 
-    if (requiresStudentFee) {
-      const paid = await prisma.payment.aggregate({
-        where: {
-          status: 'SUCCESS',
-          type: 'EVENT_STUDENT_FEE',
-          metadata: { contains: event.id }
-        },
-        _sum: { amount: true }
-      }).then(r => r?._sum?.amount || 0).catch(() => 0);
+    const approvedCount = await prisma.eventRegistration.count({
+      where: { eventId: event.id, status: 'APPROVED' }
+    }).catch(() => 0);
 
-      const approvedCount = await prisma.eventRegistration.count({
-        where: { eventId: event.id, status: 'APPROVED' }
-      }).catch(() => 0);
+    const studentFeeModeByFlags = !!(event.createdByAdmin && event.studentFeeEnabled && (event.studentFeeAmount || 0) > 0);
+    const studentFeeModeByPayments = paidStudentAmount > 0;
+    const studentFeeMode = studentFeeModeByFlags || studentFeeModeByPayments;
 
-      const paymentCompleted = paid > 0 || approvedCount > 0;
+    if (studentFeeMode) {
+      const paymentCompleted = paidStudentAmount > 0 || approvedCount > 0;
       return res.json(successResponse({
         paymentStatus: paymentCompleted ? 'SUCCESS' : 'PENDING',
         paymentCompleted,
-        totalAmount: paid,
+        totalAmount: paidStudentAmount,
         paymentDate: null,
         eventId: event.id,
         eventName: event.name,

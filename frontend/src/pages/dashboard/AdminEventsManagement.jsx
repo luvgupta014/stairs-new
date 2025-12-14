@@ -18,7 +18,8 @@ const AdminEventsManagement = () => {
     return {
       status: searchParams.get('status') || '',
       sport: searchParams.get('sport') || '',
-      search: searchParams.get('search') || ''
+      search: searchParams.get('search') || '',
+      openEventId: searchParams.get('openEventId') || ''
     };
   };
   
@@ -112,6 +113,25 @@ const AdminEventsManagement = () => {
   useEffect(() => {
     applyFilters();
   }, [filters, events]);
+
+  // Deep-link support: /admin/events?openEventId=<eventId>
+  useEffect(() => {
+    const openEventId = filters?.openEventId;
+    if (!openEventId) return;
+    if (!events || events.length === 0) return;
+
+    const ev = events.find(e => e.id === openEventId);
+    if (ev) {
+      handleViewEventDetails(ev);
+      // Clear the param so it doesn't keep reopening
+      const params = new URLSearchParams(location.search);
+      params.delete('openEventId');
+      const next = params.toString();
+      window.history.replaceState({}, '', next ? `?${next}` : location.pathname);
+      setFilters(prev => ({ ...prev, openEventId: '' }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events]);
 
   const fetchAllEvents = async () => {
     try {

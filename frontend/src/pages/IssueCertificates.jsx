@@ -172,12 +172,6 @@ const IssueCertificates = () => {
       return;
     }
 
-    // Check payment status (supports both student-fee and coach-fee via backend paymentMode)
-    if (!paymentStatus?.paymentCompleted) {
-      setShowPaymentModal(true);
-      return;
-    }
-
     const confirmMsg = `Are you sure you want to issue participant certificates to ${selectedStudents.length} student(s)? This action cannot be undone.`;
     if (!window.confirm(confirmMsg)) {
       return;
@@ -220,12 +214,6 @@ const IssueCertificates = () => {
   const handleIssueWinnerCertificates = async () => {
     if (selectedWinners.length === 0) {
       setError('Please select at least one winner with position');
-      return;
-    }
-
-    // Check payment status (supports both student-fee and coach-fee via backend paymentMode)
-    if (!paymentStatus?.paymentCompleted) {
-      setShowPaymentModal(true);
       return;
     }
 
@@ -429,7 +417,7 @@ const IssueCertificates = () => {
                 <button
                   onClick={() => {
                     setShowPaymentModal(false);
-                    navigate(`/admin/events`);
+                    navigate(`/admin/events?openEventId=${eventId}`);
                   }}
                   className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
                 >
@@ -703,7 +691,7 @@ const IssueCertificates = () => {
                 <div className="mt-6 pt-6 border-t border-gray-200">
                   <button
                     onClick={handleIssueWinnerCertificates}
-                    disabled={selectedWinners.length === 0 || issuing || (paymentStatus && !paymentStatus.paymentCompleted)}
+                    disabled={selectedWinners.length === 0 || issuing}
                     className="w-full bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-yellow-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                   >
                     {issuing ? (
