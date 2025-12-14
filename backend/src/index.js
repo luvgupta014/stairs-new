@@ -174,6 +174,8 @@ app.use('/api/admin', adminRoutes);
 app.use('/api', adminPaymentsRouter);
 app.use('/api/events', eventRoutes);
 app.use('/api/payment', paymentRoutes);
+// Backwards/forwards compatibility: some frontends call /api/payments/*
+app.use('/api/payments', paymentRoutes);
 app.use('/api/certificates', certificateRoutes);
 // Notification routes are included in admin routes for now
 
