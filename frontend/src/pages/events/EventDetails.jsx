@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getStudentEventDetails, getEvents, registerForEvent, unregisterFromEvent, createStudentEventPaymentOrder, getEventFeeSettings, updateEventFeeSettings } from '../../api';
+import { getStudentEventDetails, getEventById, registerForEvent, unregisterFromEvent, createStudentEventPaymentOrder, getEventFeeSettings, updateEventFeeSettings } from '../../api';
 import Spinner from '../../components/Spinner';
 import Button from '../../components/Button';
 import BackButton from '../../components/BackButton';
@@ -85,13 +85,11 @@ const EventDetails = () => {
         console.log('✅ Student API response:', response);
         setEvent(response.data);
       } else {
-        // Use general events API for other roles
-        console.log('🌐 Using general events API for role:', user?.role);
-        response = await getEvents({ eventId });
-        const eventData = response.data?.events?.find(e => e.id === eventId);
-        if (!eventData) {
-          throw new Error('Event not found');
-        }
+        // Use dedicated event details endpoint for other roles (includes proper access checks)
+        console.log('🌐 Using event details API for role:', user?.role);
+        response = await getEventById(eventId);
+        const eventData = response?.data || response;
+        if (!eventData) throw new Error('Event not found');
         setEvent(eventData);
       }
 
