@@ -1252,19 +1252,17 @@ router.post('/login', async (req, res) => {
 
     // Find user
     console.log('🔍 Looking for user with email:', email);
-    const user = await prisma.user.findUnique({
+    // NOTE: Do NOT include eventInchargeProfile here directly; if DB migrations haven't been
+    // applied yet on production, Prisma will throw P2021 and break all logins.
+    // We load eventInchargeProfile only when role is EVENT_INCHARGE (best-effort).
+    let user = await prisma.user.findUnique({
       where: { email },
       include: {
         studentProfile: true,
         coachProfile: true,
         instituteProfile: true,
         clubProfile: true,
-        adminProfile: true,
-        eventInchargeProfile: {
-          include: {
-            vendor: true
-          }
-        }
+        adminProfile: true
       }
     });
     console.log('🔎 User lookup result:', user);
@@ -1341,6 +1339,23 @@ router.post('/login', async (req, res) => {
     console.log('✅ JWT token generated');
 
     console.log('🎉 === LOGIN COMPLETED ===');
+    // Load incharge profile in a follow-up query only if needed
+    if (user?.role === 'EVENT_INCHARGE') {
+      try {
+        const withIncharge = await prisma.user.findUnique({
+          where: { id: user.id },
+          include: {
+            eventInchargeProfile: { include: { vendor: true } }
+          }
+        });
+        if (withIncharge?.eventInchargeProfile) {
+          user = { ...user, eventInchargeProfile: withIncharge.eventInchargeProfile };
+        }
+      } catch (e) {
+        console.warn('[AUTH] Login: failed to load eventInchargeProfile (migration pending?):', e?.code || e?.message || e);
+      }
+    }
+
     const responseData = {
       token,
       user: {

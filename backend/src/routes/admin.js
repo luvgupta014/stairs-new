@@ -8,7 +8,8 @@ const {
   errorResponse, 
   getPaginationParams, 
   getPaginationMeta,
-  hashPassword
+  hashPassword,
+  validateEmail
 } = require('../utils/helpers');
 const { sendEventModerationEmail, sendOrderStatusEmail, sendEventCompletionEmail, sendAssignmentEmail, sendEventInchargeInviteEmail } = require('../utils/emailService');
 const EventService = require('../services/eventService');
@@ -5697,6 +5698,9 @@ router.post('/events/:eventId/incharge-invites', authenticate, requireAdmin, asy
 
     if (!email) return res.status(400).json(errorResponse('email is required', 400));
     const normalizedEmail = email.toString().trim().toLowerCase();
+    if (!validateEmail(normalizedEmail)) {
+      return res.status(400).json(errorResponse('Invalid email format.', 400));
+    }
 
     const event = await prisma.event.findUnique({
       where: { id: eventId },
@@ -5728,6 +5732,26 @@ router.post('/events/:eventId/incharge-invites', authenticate, requireAdmin, asy
       certificateManagement: !!permissions.certificateManagement,
       feeManagement: !!permissions.feeManagement
     };
+
+    // Prevent duplicate active invites for same event+email (idempotency)
+    const now = new Date();
+    const activeInvite = await prisma.eventInchargeInvite.findFirst({
+      where: {
+        eventId,
+        email: normalizedEmail,
+        revokedAt: null,
+        usedAt: null,
+        expiresAt: { gte: now }
+      },
+      select: { id: true, expiresAt: true }
+    });
+    if (activeInvite && !existingUser) {
+      return res.status(409).json(errorResponse(
+        `An active invite already exists for ${normalizedEmail}. Use "Resend" or "Revoke" from the invites list.`,
+        409,
+        { inviteId: activeInvite.id, expiresAt: activeInvite.expiresAt }
+      ));
+    }
 
     // If user already exists as EVENT_INCHARGE, assign directly (no registration needed)
     if (existingUser) {
@@ -5807,7 +5831,7 @@ router.post('/events/:eventId/incharge-invites', authenticate, requireAdmin, asy
     const frontendUrl = process.env.FRONTEND_URL || 'https://portal.stairs.org.in';
     const registrationLink = `${frontendUrl}/register/incharge?token=${rawToken}`;
 
-    await sendEventInchargeInviteEmail({
+    const emailResult = await sendEventInchargeInviteEmail({
       to: normalizedEmail,
       event,
       registrationLink,
@@ -5815,11 +5839,36 @@ router.post('/events/:eventId/incharge-invites', authenticate, requireAdmin, asy
       isPointOfContact: !!isPointOfContact
     });
 
+    // In production, do not silently succeed if email isn't sent.
+    if (!emailResult?.success) {
+      // Clean up invite so admin can retry after fixing email config
+      await prisma.eventInchargeInvite.delete({ where: { id: invite.id } }).catch(() => {});
+
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(503).json(errorResponse(
+          'Invite email could not be sent. Please configure EMAIL_USER/EMAIL_PASS and try again.',
+          503
+        ));
+      }
+
+      // Non-prod: allow manual testing by returning the link to admin
+      return res.status(201).json(successResponse({
+        inviteId: invite.id,
+        eventId,
+        email: normalizedEmail,
+        expiresAt: invite.expiresAt,
+        emailSent: false,
+        emailError: emailResult?.error || 'Email service not configured',
+        registrationLink
+      }, 'Invite created but email was not sent (non-production).', 201));
+    }
+
     res.status(201).json(successResponse({
       inviteId: invite.id,
       eventId,
       email: normalizedEmail,
-      expiresAt: invite.expiresAt
+      expiresAt: invite.expiresAt,
+      emailSent: true
     }, 'Invite created and email sent.', 201));
   } catch (error) {
     console.error('❌ Create incharge invite error:', error);
@@ -5944,7 +5993,7 @@ router.post('/events/:eventId/incharge-invites/:inviteId/resend', authenticate, 
       feeManagement: newInvite.feeManagement
     };
 
-    await sendEventInchargeInviteEmail({
+    const emailResult = await sendEventInchargeInviteEmail({
       to: newInvite.email,
       event,
       registrationLink,
@@ -5952,10 +6001,35 @@ router.post('/events/:eventId/incharge-invites/:inviteId/resend', authenticate, 
       isPointOfContact: newInvite.isPointOfContact
     });
 
+    if (!emailResult?.success) {
+      // Revoke the new invite too to avoid "sent but not delivered" ambiguity.
+      await prisma.eventInchargeInvite.update({
+        where: { id: newInvite.id },
+        data: { revokedAt: new Date() }
+      }).catch(() => {});
+
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(503).json(errorResponse(
+          'Invite email could not be sent. Please configure EMAIL_USER/EMAIL_PASS and try again.',
+          503
+        ));
+      }
+
+      return res.json(successResponse({
+        oldInviteId: oldInvite.id,
+        newInviteId: newInvite.id,
+        expiresAt: newInvite.expiresAt,
+        emailSent: false,
+        emailError: emailResult?.error || 'Email service not configured',
+        registrationLink
+      }, 'Invite reissued but email was not sent (non-production).'));
+    }
+
     res.json(successResponse({
       oldInviteId: oldInvite.id,
       newInviteId: newInvite.id,
-      expiresAt: newInvite.expiresAt
+      expiresAt: newInvite.expiresAt,
+      emailSent: true
     }, 'Invite resent.'));
   } catch (error) {
     console.error('❌ Resend incharge invite error:', error);

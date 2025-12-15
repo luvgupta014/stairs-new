@@ -12,6 +12,7 @@ const EventInchargeRegister = () => {
   const [invite, setInvite] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const [form, setForm] = useState({
     fullName: '',
@@ -73,14 +74,36 @@ const EventInchargeRegister = () => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    setFieldErrors({});
 
     if (!token) return setError('Missing invite token.');
-    if (!form.fullName.trim()) return setError('Full name is required.');
-    if (!form.password) return setError('Password is required.');
-    if (form.password !== form.confirmPassword) return setError('Passwords do not match.');
+    const nextErrors = {};
+    const fullName = form.fullName.trim();
+    const phone = form.phone.trim();
+    const pan = form.panNumber.trim();
+    const aadhaar = form.aadhaar.trim();
+    const gstin = form.vendorGstin.trim();
+    const vendorName = form.vendorName.trim();
+    const vendorPincode = form.vendorPincode.trim();
 
-    if (!form.vendorId && !form.vendorName.trim()) {
-      return setError('Vendor name is required.');
+    if (!fullName) nextErrors.fullName = 'Full name is required.';
+    if (phone && !/^[6-9]\d{9}$/.test(phone)) nextErrors.phone = 'Use 10-digit Indian mobile number.';
+    if (pan && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan.toUpperCase())) nextErrors.panNumber = 'Invalid PAN format (e.g., ABCDE1234F).';
+    if (aadhaar && !/^\d{12}$/.test(aadhaar)) nextErrors.aadhaar = 'Aadhaar must be 12 digits.';
+    if (gstin && !/^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z0-9]{1}Z[A-Z0-9]{1}$/.test(gstin.toUpperCase())) {
+      nextErrors.vendorGstin = 'Invalid GSTIN format.';
+    }
+    if (!form.vendorId && !vendorName) nextErrors.vendorName = 'Vendor name is required.';
+    if (vendorPincode && !/^\d{6}$/.test(vendorPincode)) nextErrors.vendorPincode = 'Pincode must be 6 digits.';
+    if (!form.password) nextErrors.password = 'Password is required.';
+    if (form.password && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(form.password)) {
+      nextErrors.password = 'Password must be 8+ chars with uppercase, lowercase, and number.';
+    }
+    if (form.password !== form.confirmPassword) nextErrors.confirmPassword = 'Passwords do not match.';
+
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      return;
     }
 
     setSubmitting(true);
@@ -88,19 +111,19 @@ const EventInchargeRegister = () => {
       const payload = {
         token,
         password: form.password,
-        fullName: form.fullName.trim(),
-        phone: form.phone.trim() || null,
+        fullName,
+        phone: phone || null,
         designation: form.designation.trim() || null,
-        panNumber: form.panNumber.trim() || null,
-        aadhaar: form.aadhaar.trim() || null,
+        panNumber: pan || null,
+        aadhaar: aadhaar || null,
         vendorId: form.vendorId || null,
-        vendorName: form.vendorId ? null : (form.vendorName.trim() || null),
-        vendorGstin: form.vendorGstin.trim() || null,
+        vendorName: form.vendorId ? null : (vendorName || null),
+        vendorGstin: gstin || null,
         vendorPan: form.vendorPan.trim() || null,
         vendorAddress: form.vendorAddress.trim() || null,
         vendorCity: form.vendorCity.trim() || null,
         vendorState: form.vendorState.trim() || null,
-        vendorPincode: form.vendorPincode.trim() || null
+        vendorPincode: vendorPincode || null
       };
 
       const res = await registerEventInchargeFromInvite(payload);
@@ -191,10 +214,12 @@ const EventInchargeRegister = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
                   <input value={form.fullName} onChange={onChange('fullName')} className="w-full px-3 py-2 border rounded-lg" />
+                  {fieldErrors.fullName ? <div className="text-xs text-red-600 mt-1">{fieldErrors.fullName}</div> : null}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                   <input value={form.phone} onChange={onChange('phone')} className="w-full px-3 py-2 border rounded-lg" />
+                  {fieldErrors.phone ? <div className="text-xs text-red-600 mt-1">{fieldErrors.phone}</div> : <div className="text-xs text-gray-500 mt-1">Optional, 10-digit Indian mobile number</div>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
@@ -203,10 +228,12 @@ const EventInchargeRegister = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">PAN</label>
                   <input value={form.panNumber} onChange={onChange('panNumber')} className="w-full px-3 py-2 border rounded-lg" />
+                  {fieldErrors.panNumber ? <div className="text-xs text-red-600 mt-1">{fieldErrors.panNumber}</div> : null}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Aadhaar</label>
                   <input value={form.aadhaar} onChange={onChange('aadhaar')} className="w-full px-3 py-2 border rounded-lg" />
+                  {fieldErrors.aadhaar ? <div className="text-xs text-red-600 mt-1">{fieldErrors.aadhaar}</div> : null}
                 </div>
               </div>
 
@@ -223,6 +250,7 @@ const EventInchargeRegister = () => {
                       disabled={!!form.vendorId}
                       className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100"
                     />
+                    {fieldErrors.vendorName ? <div className="text-xs text-red-600 mt-1">{fieldErrors.vendorName}</div> : null}
                     {form.vendorId ? (
                       <div className="text-xs text-gray-500 mt-1">Vendor is pre-linked by Admin.</div>
                     ) : null}
@@ -230,6 +258,7 @@ const EventInchargeRegister = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
                     <input value={form.vendorGstin} onChange={onChange('vendorGstin')} className="w-full px-3 py-2 border rounded-lg" />
+                    {fieldErrors.vendorGstin ? <div className="text-xs text-red-600 mt-1">{fieldErrors.vendorGstin}</div> : null}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Vendor PAN</label>
@@ -250,6 +279,7 @@ const EventInchargeRegister = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Pincode</label>
                     <input value={form.vendorPincode} onChange={onChange('vendorPincode')} className="w-full px-3 py-2 border rounded-lg" />
+                    {fieldErrors.vendorPincode ? <div className="text-xs text-red-600 mt-1">{fieldErrors.vendorPincode}</div> : null}
                   </div>
                 </div>
               </div>
@@ -261,10 +291,12 @@ const EventInchargeRegister = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
                     <input type="password" value={form.password} onChange={onChange('password')} className="w-full px-3 py-2 border rounded-lg" />
+                    {fieldErrors.password ? <div className="text-xs text-red-600 mt-1">{fieldErrors.password}</div> : null}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password *</label>
                     <input type="password" value={form.confirmPassword} onChange={onChange('confirmPassword')} className="w-full px-3 py-2 border rounded-lg" />
+                    {fieldErrors.confirmPassword ? <div className="text-xs text-red-600 mt-1">{fieldErrors.confirmPassword}</div> : null}
                   </div>
                 </div>
               </div>

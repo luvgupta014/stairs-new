@@ -71,22 +71,39 @@ const authenticate = async (req, res, next) => {
       return res.status(500).json(errorResponse('Authentication error.', 500));
     }
 
-    // Get user from database with correct profile field names as per schema
-    const user = await prisma.user.findUnique({
+    // Get user from database with correct profile field names as per schema.
+    // NOTE: We intentionally do NOT include eventInchargeProfile here, because production DBs
+    // might not have the new event_incharges tables migrated yet (would cause P2021).
+    // If the user is EVENT_INCHARGE we load that profile in a follow-up query.
+    let user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       include: {
         studentProfile: true,
         coachProfile: true,
         instituteProfile: true,
         clubProfile: true,
-        adminProfile: true,
-        eventInchargeProfile: {
-          include: {
-            vendor: true
-          }
-        }
+        adminProfile: true
       }
     });
+
+    if (user?.role === 'EVENT_INCHARGE') {
+      try {
+        const withIncharge = await prisma.user.findUnique({
+          where: { id: decoded.userId },
+          include: {
+            eventInchargeProfile: {
+              include: { vendor: true }
+            }
+          }
+        });
+        if (withIncharge?.eventInchargeProfile) {
+          user = { ...user, eventInchargeProfile: withIncharge.eventInchargeProfile };
+        }
+      } catch (e) {
+        // If migration isn't applied yet, do not fail auth for other roles.
+        console.warn('[AUTH] Failed to load eventInchargeProfile (migration pending?):', e?.code || e?.message || e);
+      }
+    }
 
     if (!user) {
       console.warn('[AUTH] User not found for decoded.userId:', decoded.userId);
@@ -271,21 +288,35 @@ const optionalAuth = async (req, res, next) => {
     
     if (token) {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await prisma.user.findUnique({
+      // Same note as above: keep optional auth resilient if migrations haven't run yet.
+      let user = await prisma.user.findUnique({
         where: { id: decoded.userId },
         include: {
           studentProfile: true,
           coachProfile: true,
           instituteProfile: true,
           clubProfile: true,
-          adminProfile: true,
-          eventInchargeProfile: {
-            include: {
-              vendor: true
-            }
-          }
+          adminProfile: true
         }
       });
+
+      if (user?.role === 'EVENT_INCHARGE') {
+        try {
+          const withIncharge = await prisma.user.findUnique({
+            where: { id: decoded.userId },
+            include: {
+              eventInchargeProfile: {
+                include: { vendor: true }
+              }
+            }
+          });
+          if (withIncharge?.eventInchargeProfile) {
+            user = { ...user, eventInchargeProfile: withIncharge.eventInchargeProfile };
+          }
+        } catch (e) {
+          console.warn('[AUTH] Optional auth: failed to load eventInchargeProfile (migration pending?):', e?.code || e?.message || e);
+        }
+      }
 
       if (user && user.isActive) {
         req.user = user;

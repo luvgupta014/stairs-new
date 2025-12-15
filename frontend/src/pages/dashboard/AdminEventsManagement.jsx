@@ -55,6 +55,7 @@ const AdminEventsManagement = () => {
   });
   const [inchargeInvites, setInchargeInvites] = useState([]);
   const [loadingInvites, setLoadingInvites] = useState(false);
+  const [sendingInvite, setSendingInvite] = useState(false);
   const [inviteMsg, setInviteMsg] = useState('');
   const [inviteErr, setInviteErr] = useState('');
   const [permissionForm, setPermissionForm] = useState({
@@ -409,6 +410,10 @@ const AdminEventsManagement = () => {
 
     if (!assignmentForm.eventId) return setInviteErr('Please select an event first.');
     if (!inchargeInviteForm.email.trim()) return setInviteErr('Email is required.');
+    // basic email check (backend validates too)
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inchargeInviteForm.email.trim())) {
+      return setInviteErr('Please enter a valid email address.');
+    }
     const permissions = {
       resultUpload: !!inchargeInviteForm.resultUpload,
       studentManagement: !!inchargeInviteForm.studentManagement,
@@ -417,13 +422,20 @@ const AdminEventsManagement = () => {
     };
 
     try {
+      setSendingInvite(true);
       const res = await createEventInchargeInvite(assignmentForm.eventId, {
         email: inchargeInviteForm.email.trim(),
         isPointOfContact: !!inchargeInviteForm.isPointOfContact,
         permissions
       });
       if (res?.success) {
-        setInviteMsg(res.message || 'Invite sent.');
+        const emailSent = res?.data?.emailSent;
+        const regLink = res?.data?.registrationLink;
+        if (emailSent === false && regLink) {
+          setInviteMsg('Email not sent. Copy the registration link below (non-production).');
+        } else {
+          setInviteMsg(res.message || 'Invite sent.');
+        }
         setInchargeInviteForm(prev => ({ ...prev, email: '' }));
         await loadInchargeInvites(assignmentForm.eventId);
         await loadEventAssignments(assignmentForm.eventId);
@@ -433,6 +445,30 @@ const AdminEventsManagement = () => {
       }
     } catch (err) {
       setInviteErr(err?.message || 'Failed to send invite.');
+    }
+    finally {
+      setSendingInvite(false);
+    }
+  };
+
+  const handleMakePoc = async (assignment) => {
+    if (!assignmentForm.eventId) return;
+    if (!assignment?.userId) return;
+    try {
+      setAssignmentMsg('');
+      setAssignmentErr('');
+      const res = await updateEventAssignments(assignmentForm.eventId, [
+        { userId: assignment.userId, role: 'INCHARGE', isPointOfContact: true }
+      ], 'add');
+      if (res?.success) {
+        setAssignmentMsg('Point of Contact updated.');
+        await loadEventAssignments(assignmentForm.eventId);
+        setTimeout(() => setAssignmentMsg(''), 4000);
+      } else {
+        setAssignmentErr(res?.message || 'Failed to update POC.');
+      }
+    } catch (e) {
+      setAssignmentErr(e?.message || 'Failed to update POC.');
     }
   };
 
@@ -1899,7 +1935,7 @@ const AdminEventsManagement = () => {
             <div className="flex items-center space-x-3">
               <button
                 onClick={() => {
-                  setAssignmentForm({ eventId: '', userId: '', role: 'INCHARGE' });
+                  setAssignmentForm({ eventId: '', userId: '', role: 'COORDINATOR' });
                   setAssignmentEventIdSearch('');
                   setUserUniqueIdSearch('');
                   setUserSearch('');
@@ -1911,8 +1947,8 @@ const AdminEventsManagement = () => {
                 }}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
               >
-                <span>👤</span>
-                <span>Assign Event to User</span>
+                <span>🏷️</span>
+                <span>Assign Event Vendor (Incharge)</span>
               </button>
               <button
                 onClick={() => {
@@ -1943,7 +1979,7 @@ const AdminEventsManagement = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col">
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-t-xl flex-shrink-0 flex items-center justify-between">
-                <h3 className="text-xl font-bold">Assign Event to User</h3>
+                <h3 className="text-xl font-bold">Assign Event Vendor (Incharge)</h3>
                 <button
                   onClick={() => {
                     setShowAssignmentModal(false);
@@ -1987,22 +2023,40 @@ const AdminEventsManagement = () => {
                       {existingAssignments.length > 0 ? (
                         <div className="space-y-2">
                           {existingAssignments.map((assignment) => (
-                            <div key={assignment.id} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                            <div key={assignment.id} className="flex items-start justify-between gap-3 p-2 bg-white rounded border border-gray-200">
                               <div className="flex-1">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {assignment.user?.name || assignment.user?.email || 'Unknown User'}
+                                <div className="flex items-center gap-2">
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {assignment.user?.name || assignment.user?.email || 'Unknown User'}
+                                  </div>
+                                  {assignment.role === 'INCHARGE' && assignment.isPointOfContact ? (
+                                    <span className="inline-flex text-[11px] font-semibold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full">
+                                      POC
+                                    </span>
+                                  ) : null}
                                 </div>
                                 <div className="text-xs text-gray-500">
                                   Role: {assignment.role} • {assignment.user?.email}
                                 </div>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveAssignment(assignmentForm.eventId, assignment.id)}
-                                className="ml-2 text-red-600 hover:text-red-800 text-xs font-medium"
-                              >
-                                Remove
-                              </button>
+                              <div className="flex items-center gap-2">
+                                {assignment.role === 'INCHARGE' && !assignment.isPointOfContact ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMakePoc(assignment)}
+                                    className="text-xs text-indigo-700 hover:text-indigo-900 font-medium"
+                                  >
+                                    Make POC
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveAssignment(assignmentForm.eventId, assignment.id)}
+                                  className="text-xs text-red-600 hover:text-red-800 font-medium"
+                                >
+                                  Remove
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -2012,7 +2066,7 @@ const AdminEventsManagement = () => {
                     </div>
                   )}
                
-              <form onSubmit={handleAssignSubmit} className="space-y-3">
+              <div className="space-y-3">
                 <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Event <span className="text-gray-500 text-xs">(or search by Event ID)</span>
@@ -2126,9 +2180,10 @@ const AdminEventsManagement = () => {
                       <div className="flex items-center gap-3">
                         <button
                           type="submit"
+                          disabled={sendingInvite}
                           className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium"
                         >
-                          Send Invite
+                          {sendingInvite ? 'Sending...' : 'Send Invite'}
                         </button>
                         {inviteMsg ? (
                           <div className="text-green-700 text-sm bg-green-50 p-2 rounded">{inviteMsg}</div>
@@ -2137,6 +2192,16 @@ const AdminEventsManagement = () => {
                           <div className="text-red-700 text-sm bg-red-50 p-2 rounded">{inviteErr}</div>
                         ) : null}
                       </div>
+
+                      {/* Non-production fallback: show copy link if backend returns it */}
+                      {inviteMsg && inviteMsg.includes('Copy the registration link') && (
+                        <div className="text-xs bg-white border border-indigo-200 rounded-lg p-3">
+                          <div className="font-semibold text-indigo-900 mb-1">Registration link</div>
+                          <div className="text-gray-700 break-all">
+                            (Check the API response in Network tab for <code className="px-1 bg-gray-100 rounded">data.registrationLink</code>)
+                          </div>
+                        </div>
+                      )}
                     </form>
 
                     <div className="mt-4">
@@ -2160,6 +2225,15 @@ const AdminEventsManagement = () => {
                                   Status:{' '}
                                   {inv.revokedAt ? 'REVOKED' : inv.usedAt ? 'USED' : inv.isExpired ? 'EXPIRED' : 'PENDING'} •
                                   Expires: {inv.expiresAt ? new Date(inv.expiresAt).toLocaleString('en-IN') : '-'}
+                                </div>
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {inv.permissions?.resultUpload ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">Result Upload</span> : null}
+                                  {inv.permissions?.studentManagement ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">Student Mgmt</span> : null}
+                                  {inv.permissions?.certificateManagement ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">Certificates</span> : null}
+                                  {inv.permissions?.feeManagement ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">Fees</span> : null}
+                                  {!inv.permissions?.resultUpload && !inv.permissions?.studentManagement && !inv.permissions?.certificateManagement && !inv.permissions?.feeManagement ? (
+                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-50 text-gray-500">No permissions</span>
+                                  ) : null}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
@@ -2187,119 +2261,7 @@ const AdminEventsManagement = () => {
                     </div>
                   </div>
                 )}
-                <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        User <span className="text-gray-500 text-xs">(or search by Unique ID)</span>
-                      </label>
-                  <div className="space-y-2">
-                    <input
-                      type="text"
-                          placeholder="Type User Unique ID to auto-select"
-                          value={userUniqueIdSearch}
-                          onChange={(e) => handleUserUniqueIdSearch(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                          disabled={searchingUser}
-                        />
-                        {searchingUser && (
-                          <div className="text-xs text-blue-600">Searching...</div>
-                        )}
-                        {userSearchResult && (
-                          <div className={`text-xs p-2 rounded ${
-                            userSearchResult.error 
-                              ? 'text-red-600 bg-red-50' 
-                              : 'text-green-600 bg-green-50'
-                          }`}>
-                            {userSearchResult.error || `✓ Found: ${userSearchResult.name || userSearchResult.email} (${userSearchResult.role})`}
-                          </div>
-                        )}
-                        <input
-                          type="text"
-                          placeholder="Or search user by name/email/phone"
-                      value={userSearch}
-                      onChange={(e) => setUserSearch(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                    <select
-                      value={assignmentForm.userId}
-                          onChange={(e) => {
-                            setAssignmentForm(prev => ({ ...prev, userId: e.target.value }));
-                            setUserUniqueIdSearch('');
-                            setUserSearchResult(null);
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          <option value="">Select user from dropdown</option>
-                      {allUsers
-                        .filter(u => {
-                          if (!userSearch.trim()) return true;
-                          const term = userSearch.toLowerCase();
-                          return (
-                            (u.name || '').toLowerCase().includes(term) ||
-                            (u.email || '').toLowerCase().includes(term) ||
-                                (u.phone || '').toLowerCase().includes(term) ||
-                                (u.uniqueId || '').toLowerCase().includes(term)
-                          );
-                        })
-                        .map(u => (
-                          <option key={u.id} value={u.id}>
-                                {u.name || u.email || u.phone} ({u.role}) {u.uniqueId ? `[${u.uniqueId}]` : ''}
-                          </option>
-                        ))}
-                    </select>
-                        {assignmentForm.userId && (
-                          <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
-                            ✓ Selected: {allUsers.find(u => u.id === assignmentForm.userId)?.name || 'User'}
-                          </div>
-                        )}
-                    {allUsers.length >= userListLimit && (
-                      <button
-                        type="button"
-                        onClick={() => setUserListLimit(prev => prev + 200)}
-                        className="text-xs text-indigo-600 hover:text-indigo-800"
-                      >
-                        Load more users
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                  <select
-                    value={assignmentForm.role}
-                    onChange={(e) => setAssignmentForm(prev => ({ ...prev, role: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="COORDINATOR">COORDINATOR</option>
-                    <option value="TEAM">TEAM</option>
-                  </select>
-                </div>
-                <div className="flex items-center space-x-3 pt-1">
-                  <button
-                    type="submit"
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-60"
-                  >
-                    {assigningEventId === assignmentForm.eventId ? 'Saving...' : 'Save Assignment'}
-                  </button>
-                      {assignmentMsg && (
-                        <div className="text-green-600 text-sm bg-green-50 p-2 rounded">
-                          {assignmentMsg}
-                        </div>
-                      )}
-                      {assignmentErr && (
-                        <div className="text-red-600 text-sm bg-red-50 p-2 rounded">
-                          {assignmentErr}
-                        </div>
-                      )}
-                    </div>
-                 
-                    {/* Info Note */}
-                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                      <p className="text-xs text-blue-800">
-                        <strong>Note:</strong> After assigning a user, make sure to set permissions for their role using the "Set Permissions" button. 
-                        Users need both assignment and permissions to access event features.
-                      </p>
-                </div>
-              </form>
+              </div>
             </div>
               </div>
               <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-xl flex justify-end flex-shrink-0">

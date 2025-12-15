@@ -9,6 +9,18 @@ const router = express.Router();
 
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
+const validateIndianPhone = (phone) => {
+  if (!phone) return true; // optional
+  const p = phone.toString().trim();
+  return /^[6-9]\d{9}$/.test(p);
+};
+
+const normalizeOptional = (v) => {
+  if (v === undefined || v === null) return null;
+  const s = v.toString().trim();
+  return s.length ? s : null;
+};
+
 const validateStrongPassword = (password) => {
   // At least 8 chars, 1 uppercase, 1 lowercase, 1 number
   if (typeof password !== 'string') return false;
@@ -104,6 +116,9 @@ router.post('/register', async (req, res) => {
       return res.status(400).json(errorResponse('Password must be at least 8 characters with uppercase, lowercase, and number.', 400));
     }
     if (!fullName) return res.status(400).json(errorResponse('fullName is required', 400));
+    if (!validateIndianPhone(phone)) {
+      return res.status(400).json(errorResponse('Invalid phone number. Use 10-digit Indian mobile number.', 400));
+    }
 
     const tokenHash = hashToken(token.toString().trim());
 
@@ -139,13 +154,13 @@ router.post('/register', async (req, res) => {
         if (!vendorName) throw new Error('vendorName is required when vendorId is not provided.');
         const vendor = await tx.eventVendor.create({
           data: {
-            name: vendorName,
-            gstin: vendorGstin || null,
-            pan: vendorPan || null,
-            address: vendorAddress || null,
-            city: vendorCity || null,
-            state: vendorState || null,
-            pincode: vendorPincode || null
+            name: normalizeOptional(vendorName),
+            gstin: normalizeOptional(vendorGstin),
+            pan: normalizeOptional(vendorPan),
+            address: normalizeOptional(vendorAddress),
+            city: normalizeOptional(vendorCity),
+            state: normalizeOptional(vendorState),
+            pincode: normalizeOptional(vendorPincode)
           }
         });
         resolvedVendorId = vendor.id;
@@ -154,9 +169,9 @@ router.post('/register', async (req, res) => {
       const user = await tx.user.create({
         data: {
           uniqueId,
-          name: fullName,
+          name: normalizeOptional(fullName),
           email,
-          phone: phone || null,
+          phone: normalizeOptional(phone),
           password: hashedPassword,
           role: 'EVENT_INCHARGE',
           isActive: true,
@@ -168,12 +183,12 @@ router.post('/register', async (req, res) => {
         data: {
           userId: user.id,
           vendorId: resolvedVendorId,
-          fullName,
-          phone: phone || null,
-          designation: designation || null,
-          panNumber: panNumber || null,
-          aadhaar: aadhaar || null,
-          gstin: vendorGstin || null
+          fullName: normalizeOptional(fullName),
+          phone: normalizeOptional(phone),
+          designation: normalizeOptional(designation),
+          panNumber: normalizeOptional(panNumber),
+          aadhaar: normalizeOptional(aadhaar),
+          gstin: normalizeOptional(vendorGstin)
         }
       });
 
@@ -228,6 +243,9 @@ router.post('/register', async (req, res) => {
     }, 'Registration completed. You can now login as Event Incharge.', 201));
   } catch (error) {
     console.error('❌ Event incharge registration error:', error);
+    if (error?.code === 'P2002') {
+      return res.status(409).json(errorResponse('A record with this data already exists (email/phone).', 409));
+    }
     res.status(500).json(errorResponse(error.message || 'Registration failed.', 500));
   }
 });
