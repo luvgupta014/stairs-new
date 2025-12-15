@@ -479,8 +479,25 @@ class EventService {
         throw new Error('Event not found');
       }
 
+      // Event Incharge access: must be assigned to the event (role INCHARGE)
+      if (userRole === 'EVENT_INCHARGE' && userId) {
+        const assignment = await prisma.eventAssignment.findFirst({
+          where: {
+            eventId: event.id,
+            userId,
+            role: 'INCHARGE'
+          },
+          select: { id: true }
+        });
+        if (!assignment) {
+          throw new Error('Access denied to this event');
+        }
+      }
+
       // Check access permissions
-      if (userRole && userId) {
+      // NOTE: EVENT_INCHARGE access is validated above via event assignment.
+      // Do not run the generic creator-only access check for incharges.
+      if (userRole && userId && userRole !== 'EVENT_INCHARGE') {
         const hasAccess = this._checkEventAccess(event, userRole, userId);
         if (!hasAccess) {
           throw new Error('Access denied to this event');
@@ -1509,6 +1526,22 @@ class EventService {
       return eventWithDetails; // Admin has access to all events
     }
 
+    // Event Incharge access: must be assigned as INCHARGE for this event
+    if (userType === 'INCHARGE') {
+      const assignment = await prisma.eventAssignment.findFirst({
+        where: {
+          eventId: eventWithDetails.id,
+          userId,
+          role: 'INCHARGE'
+        },
+        select: { id: true }
+      });
+      if (!assignment) {
+        throw new Error('You do not have permission to access this event');
+      }
+      return eventWithDetails;
+    }
+
     const hasAccess = this._canModifyFile(eventWithDetails, userId, userType);
     if (!hasAccess) {
       throw new Error('You do not have permission to access this event');
@@ -1551,6 +1584,11 @@ class EventService {
           throw new Error('Cannot save result file: event has no coachId to associate with.');
         }
         dataToSave.coachId = ownerCoachId;
+      } else if (uploaderType === 'INCHARGE') {
+        if (!ownerCoachId) {
+          throw new Error('Cannot save result file: event has no coachId to associate with.');
+        }
+        dataToSave.coachId = ownerCoachId;
       } else {
         throw new Error('Only coaches or admins can upload event result files');
       }
@@ -1583,6 +1621,9 @@ class EventService {
    */
   _canModifyFile(event, userId, userType) {
     if (userType === 'ADMIN') return true;
+    // For INCHARGE, event assignment is checked in _verifyEventAccess.
+    // Route-level permission checks ensure only authorized incharges can reach file ops.
+    if (userType === 'INCHARGE') return true;
     
     // Check ownership based on user type
     if (userType === 'COACH') return event.coachId === userId;

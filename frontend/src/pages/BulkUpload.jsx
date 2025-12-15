@@ -174,9 +174,8 @@ const BulkUploadWithManual = () => {
   };
 
   const downloadTemplate = () => {
-    const csvContent = `Name,Email,Phone,Sport,Level,Date of Birth,Father Name,Aadhaar,Gender,Address,City,State,District,Pincode,Sport 2,Sport 3,School,Club,Coach Name,Coach Mobile,Achievements
-John Doe,john.doe@email.com,+1234567890,Football,Intermediate,2005-01-15,Robert Doe,123456789012,Male,123 Main St,New York,NY,Manhattan,10001,Basketball,,State High School,City Football Club,Mike Johnson,+1234567895,Regional Champion 2023
-Jane Smith,jane.smith@email.com,+1234567892,Basketball,Advanced,2004-03-22,David Smith,234567890123,Female,456 Oak Ave,Los Angeles,CA,Los Angeles,90001,Tennis,Swimming,Metro High School,Sports Academy,Sarah Wilson,+1234567896,State Level Player`;
+    // Header-only template (no sample rows)
+    const csvContent = `Name,Email,Phone,Sport,Level,Date of Birth,Father Name,Aadhaar,Gender,Address,City,State,District,Pincode,Sport 2,Sport 3,School,Club,Coach Name,Coach Mobile,Achievements\n`;
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);

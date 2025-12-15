@@ -1,17 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { getEventRegistrations } from '../../api';
+import { bulkAddEventParticipants, getEventParticipants } from '../../api';
 import Spinner from '../../components/Spinner';
 import BackButton from '../../components/BackButton';
 import { FaDownload, FaEnvelope, FaPhone, FaUser } from 'react-icons/fa';
+import { useAuth } from '../../contexts/AuthContext';
 
 const EventParticipants = () => {
   const { eventId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [singleId, setSingleId] = useState('');
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState('');
   const [filters, setFilters] = useState({
     search: '',
     status: ''
@@ -26,10 +33,10 @@ const EventParticipants = () => {
   const loadParticipants = async () => {
     try {
       setLoading(true);
-      const response = await getEventRegistrations(eventId);
+      const response = await getEventParticipants(eventId);
       
       if (response.success) {
-        setParticipants(response.data.registrations || []);
+        setParticipants(response.data.participants || []);
       } else {
         throw new Error(response.message || 'Failed to load participants');
       }
@@ -41,11 +48,79 @@ const EventParticipants = () => {
     }
   };
 
+  const handleBulkAdd = async () => {
+    try {
+      setBulkSubmitting(true);
+      setBulkMsg('');
+      setError('');
+
+      const identifiers = bulkText
+        .split(/[\n,]+/g)
+        .map(s => s.trim())
+        .filter(Boolean)
+        .slice(0, 300);
+
+      if (identifiers.length === 0) {
+        setBulkMsg('Please paste at least one Student ID / email / phone / UID.');
+        return;
+      }
+
+      const res = await bulkAddEventParticipants(eventId, identifiers);
+      if (res?.success) {
+        const d = res.data || {};
+        const failed = Array.isArray(d.failed) ? d.failed : [];
+        const failedPreview = failed.slice(0, 3).map(f => `${f.identifier}: ${f.reason}`).join(' | ');
+        setBulkMsg(`Added: ${d.registered || 0}, Failed: ${d.failedCount || 0}${failedPreview ? ` (${failedPreview}${failed.length > 3 ? ' ...' : ''})` : ''}`);
+        await loadParticipants();
+      } else {
+        setBulkMsg(res?.message || 'Failed to add students.');
+      }
+    } catch (e) {
+      setBulkMsg(e?.message || 'Failed to add students.');
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
+  const handleSingleAdd = async () => {
+    try {
+      const id = String(singleId || '').trim();
+      if (!id) {
+        setBulkMsg('Please enter a Student ID / email / phone / UID.');
+        return;
+      }
+
+      setBulkSubmitting(true);
+      setBulkMsg('');
+      setError('');
+      const res = await bulkAddEventParticipants(eventId, [id]);
+      if (res?.success) {
+        const d = res.data || {};
+        const failed = Array.isArray(d.failed) ? d.failed : [];
+        if (d.registered > 0) {
+          setBulkMsg('Student added successfully.');
+          setSingleId('');
+          await loadParticipants();
+        } else if (failed.length) {
+          setBulkMsg(`${failed[0].identifier}: ${failed[0].reason || 'Failed to add'}`);
+        } else {
+          setBulkMsg('Failed to add student.');
+        }
+      } else {
+        setBulkMsg(res?.message || 'Failed to add student.');
+      }
+    } catch (e) {
+      setBulkMsg(e?.message || 'Failed to add student.');
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
   const exportParticipants = () => {
     const csvContent = "data:text/csv;charset=utf-8," 
       + "Name,Email,Phone,Sport,Level,Registration Date,Status\n"
       + participants.map(p => 
-          `"${p.student.name}","${p.student.user.email}","${p.student.user.phone}","${p.student.sport}","${p.student.level}","${new Date(p.registrationDate).toLocaleDateString()}","${p.status}"`
+          `"${p.student.name}","${p.student.user.email}","${p.student.user.phone}","${p.student.sport}","${p.student.level}","${new Date(p.registeredAt).toLocaleDateString()}","${p.status}"`
         ).join("\n");
 
     const encodedUri = encodeURI(csvContent);
@@ -81,9 +156,9 @@ const EventParticipants = () => {
       <div className="mb-8">
         <div className="mb-4">
           <BackButton 
-            to="/dashboard/coach" 
+            to="/events" 
             label="Back to Events"
-            onClick={() => navigate('/dashboard/coach', { state: { activeTab: 'events' } })}
+            onClick={() => navigate('/events')}
           />
         </div>
         
@@ -101,6 +176,14 @@ const EventParticipants = () => {
             </div>
             
             <div className="flex space-x-3">
+              {user?.role === 'EVENT_INCHARGE' ? (
+                <button
+                  onClick={() => setBulkOpen(v => !v)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg inline-flex items-center"
+                >
+                  Bulk Add Students
+                </button>
+              ) : null}
               <button
                 onClick={exportParticipants}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg inline-flex items-center"
@@ -110,6 +193,62 @@ const EventParticipants = () => {
               </button>
             </div>
           </div>
+
+          {bulkOpen ? (
+            <div className="mt-4 border-t pt-4">
+              <div className="text-sm font-medium text-gray-900 mb-2">Bulk Add Students</div>
+              <div className="text-xs text-gray-600 mb-2">
+                Paste one per line (or comma-separated). Accepts Student DB ID, Student UID, email, or phone.
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+                <input
+                  value={singleId}
+                  onChange={(e) => setSingleId(e.target.value)}
+                  className="md:col-span-2 border rounded-md p-3 text-sm"
+                  placeholder="Single add: Student UID / email / phone"
+                  disabled={bulkSubmitting}
+                />
+                <button
+                  onClick={handleSingleAdd}
+                  className="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm disabled:opacity-50"
+                  type="button"
+                  disabled={bulkSubmitting}
+                >
+                  {bulkSubmitting ? 'Adding...' : 'Add One'}
+                </button>
+              </div>
+
+              <textarea
+                value={bulkText}
+                onChange={(e) => setBulkText(e.target.value)}
+                rows={4}
+                className="w-full border rounded-md p-3 text-sm"
+                placeholder={`e.g.\nSTU-UID-123\nstudent@email.com\n9876543210`}
+              />
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <div className="text-sm text-gray-600">{bulkMsg}</div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setBulkText(''); setBulkMsg(''); }}
+                    className="px-3 py-2 rounded-md border text-sm"
+                    type="button"
+                    disabled={bulkSubmitting}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    onClick={handleBulkAdd}
+                    className="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm disabled:opacity-50"
+                    type="button"
+                    disabled={bulkSubmitting}
+                  >
+                    {bulkSubmitting ? 'Adding...' : 'Add'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -217,7 +356,7 @@ const EventParticipants = () => {
                     
                     <td className="py-4 px-6">
                       <div className="text-sm text-gray-600">
-                        {new Date(participant.registrationDate).toLocaleDateString('en-US', {
+                        {new Date(participant.registeredAt).toLocaleDateString('en-US', {
                           year: 'numeric',
                           month: 'short',
                           day: 'numeric',

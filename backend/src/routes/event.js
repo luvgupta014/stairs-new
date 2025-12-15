@@ -259,12 +259,177 @@ router.delete('/:eventId/register',
   eventController.unregisterFromEvent.bind(eventController)
 );
 
-// Get event participants (event creators and admin only)
-router.get('/:eventId/participants', 
-  authenticate, 
-  requireRole(['COACH', 'INSTITUTE', 'CLUB', 'ADMIN']), 
-  eventController.getEventParticipants.bind(eventController)
-);
+/**
+ * Bulk add/register students to an event (Event Incharge with studentManagement)
+ * POST /api/events/:eventId/registrations/bulk
+ * Body: { identifiers: string[] }
+ *
+ * Notes:
+ * - Only registers EXISTING students (no student creation here)
+ * - Enforces the same payment rules as normal student registration (via EventService.registerForEvent)
+ */
+router.post('/:eventId/registrations/bulk', authenticate, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { user } = req;
+    const { identifiers = [] } = req.body || {};
+
+    if (!Array.isArray(identifiers) || identifiers.length === 0) {
+      return res.status(400).json(errorResponse('identifiers must be a non-empty array.', 400));
+    }
+    if (identifiers.length > 300) {
+      return res.status(400).json(errorResponse('Too many identifiers. Max 300 per request.', 400));
+    }
+
+    // Authorization
+    if (user.role === 'EVENT_INCHARGE') {
+      const has = await checkEventPermission({ user, eventId, permissionKey: 'studentManagement' });
+      if (!has) return res.status(403).json(errorResponse('Access denied. Student management permission required.', 403));
+    } else if (user.role !== 'ADMIN') {
+      return res.status(403).json(errorResponse('Access denied.', 403));
+    }
+
+    // Resolve event to DB id (supports uniqueId too)
+    const EventService = require('../services/eventService');
+    const eventServiceLocal = new EventService();
+    const resolvedEvent = await eventServiceLocal.resolveEventId(eventId);
+
+    // Normalize identifiers
+    const uniq = Array.from(new Set(identifiers.map(x => String(x || '').trim()).filter(Boolean)));
+    if (uniq.length === 0) return res.status(400).json(errorResponse('No valid identifiers found.', 400));
+
+    // Lookup students by:
+    // - student.id
+    // - user.uniqueId
+    // - user.email
+    // - user.phone
+    const students = await prisma.student.findMany({
+      where: {
+        OR: [
+          { id: { in: uniq } },
+          { user: { uniqueId: { in: uniq } } },
+          { user: { email: { in: uniq } } },
+          { user: { phone: { in: uniq } } }
+        ]
+      },
+      select: {
+        id: true,
+        name: true,
+        user: { select: { uniqueId: true, email: true, phone: true } }
+      }
+    });
+
+    // Build best-effort map identifier -> student
+    const studentByAnyKey = new Map();
+    for (const s of students) {
+      studentByAnyKey.set(String(s.id), s);
+      if (s.user?.uniqueId) studentByAnyKey.set(String(s.user.uniqueId), s);
+      if (s.user?.email) studentByAnyKey.set(String(s.user.email), s);
+      if (s.user?.phone) studentByAnyKey.set(String(s.user.phone), s);
+    }
+
+    const tasks = uniq.map(async (identifier) => {
+      const student = studentByAnyKey.get(identifier);
+      if (!student) {
+        return { ok: false, identifier, reason: 'Student not found' };
+      }
+      try {
+        await eventServiceLocal.registerForEvent(resolvedEvent.id, student.id);
+        return { ok: true, identifier, studentId: student.id };
+      } catch (e) {
+        return { ok: false, identifier, reason: e?.message || 'Failed to register' };
+      }
+    });
+
+    const results = await Promise.all(tasks);
+    const registered = results.filter(r => r.ok).length;
+    const failed = results.filter(r => !r.ok);
+
+    return res.json(successResponse({
+      eventId: resolvedEvent.id,
+      requested: uniq.length,
+      registered,
+      failedCount: failed.length,
+      failed
+    }, 'Bulk registration completed.'));
+  } catch (error) {
+    console.error('Bulk register students error:', error);
+    return res.status(500).json(errorResponse('Failed to bulk register students.', 500));
+  }
+});
+
+// Get event participants
+// - COACH/INSTITUTE/CLUB/ADMIN: allowed (legacy behavior)
+// - EVENT_INCHARGE: allowed only when studentManagement permission is granted for this event
+router.get('/:eventId/participants', authenticate, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { user } = req;
+
+    if (['COACH', 'INSTITUTE', 'CLUB', 'ADMIN'].includes(user.role)) {
+      return eventController.getEventParticipants(req, res);
+    }
+
+    if (user.role !== 'EVENT_INCHARGE') {
+      return res.status(403).json(errorResponse('Access denied.', 403));
+    }
+
+    const has = await checkEventPermission({ user, eventId, permissionKey: 'studentManagement' });
+    if (!has) {
+      return res.status(403).json(errorResponse('Access denied. Student management permission required.', 403));
+    }
+
+    const ev = await prisma.event.findFirst({
+      where: { OR: [{ id: eventId }, { uniqueId: eventId }] },
+      select: {
+        id: true,
+        name: true,
+        startDate: true,
+        endDate: true,
+        maxParticipants: true,
+        _count: { select: { registrations: true } }
+      }
+    });
+    if (!ev) return res.status(404).json(errorResponse('Event not found.', 404));
+
+    const registrations = await prisma.eventRegistration.findMany({
+      where: { eventId: ev.id },
+      orderBy: { registeredAt: 'desc' },
+      include: {
+        student: {
+          select: {
+            id: true,
+            name: true,
+            sport: true,
+            user: { select: { email: true, phone: true, uniqueId: true } }
+          }
+        }
+      }
+    });
+
+    const participants = registrations.map(r => ({
+      id: r.id,
+      status: r.status,
+      registeredAt: r.registeredAt,
+      student: r.student
+    }));
+
+    return res.json(successResponse({
+      event: {
+        id: ev.id,
+        name: ev.name,
+        startDate: ev.startDate,
+        endDate: ev.endDate,
+        maxParticipants: ev.maxParticipants,
+        currentParticipants: ev._count.registrations
+      },
+      participants
+    }, 'Event participants retrieved successfully'));
+  } catch (error) {
+    console.error('Get event participants (incharge) error:', error);
+    return res.status(500).json(errorResponse('Failed to retrieve event participants.', 500));
+  }
+});
 
 // Get event registrations (event creators and admin only)
 router.get('/:eventId/registrations', 
@@ -295,10 +460,20 @@ router.post('/test-upload',
   }
 );
 
-// Upload event results (coaches only for now due to schema limitations)
+// Upload event results
+// - COACH: allowed (legacy behavior)
+// - EVENT_INCHARGE: allowed only when resultUpload permission is granted for this event
 router.post('/:eventId/results', 
-  authenticate, 
-  requireCoach, // Use requireCoach middleware to ensure req.coach is set
+  authenticate,
+  async (req, res, next) => {
+    if (req.user?.role === 'COACH') return requireCoach(req, res, next);
+    if (req.user?.role === 'EVENT_INCHARGE') {
+      const has = await checkEventPermission({ user: req.user, eventId: req.params.eventId, permissionKey: 'resultUpload' });
+      if (!has) return res.status(403).json(errorResponse('Access denied. Result upload permission required.', 403));
+      return next();
+    }
+    return res.status(403).json(errorResponse('Access denied.', 403));
+  },
   clearExpressFileUpload, // Prevent express-fileupload interference with multer - MUST BE BEFORE MULTER
   (req, res, next) => {
     console.log('🔍 Upload endpoint hit:', {
@@ -323,8 +498,18 @@ router.post('/:eventId/results',
   eventController.uploadResults.bind(eventController)
 );
 
-// GET /api/events/:eventId/results/sample-sheet - Download sample result sheet template (for coaches)
-router.get('/:eventId/results/sample-sheet', authenticate, requireCoach, async (req, res) => {
+// GET /api/events/:eventId/results/sample-sheet - Download sample result sheet template
+// - COACH: allowed
+// - EVENT_INCHARGE: allowed only when resultUpload permission is granted for this event
+router.get('/:eventId/results/sample-sheet', authenticate, async (req, res, next) => {
+  if (req.user?.role === 'COACH') return requireCoach(req, res, next);
+  if (req.user?.role === 'EVENT_INCHARGE') {
+    const has = await checkEventPermission({ user: req.user, eventId: req.params.eventId, permissionKey: 'resultUpload' });
+    if (!has) return res.status(403).json(errorResponse('Access denied. Result upload permission required.', 403));
+    return next();
+  }
+  return res.status(403).json(errorResponse('Access denied.', 403));
+}, async (req, res) => {
   try {
     const { eventId } = req.params;
     const XLSX = require('xlsx');
@@ -340,9 +525,8 @@ router.get('/:eventId/results/sample-sheet', authenticate, requireCoach, async (
     } catch (error) {
       return res.status(404).json(errorResponse('Event not found.', 404));
     }
-
-    // Verify event belongs to coach
-    if (event.coachId !== req.coach.id) {
+    // For coaches, keep ownership check. For incharges, route-level permission is enough.
+    if (req.user?.role === 'COACH' && event.coachId !== req.coach.id) {
       return res.status(403).json(errorResponse('You can only download sample sheets for your own events.', 403));
     }
 
@@ -431,6 +615,12 @@ router.get('/:eventId/results/sample-sheet', authenticate, requireCoach, async (
 // Get event results (files)
 router.get('/:eventId/results', 
   authenticate,
+  async (req, res, next) => {
+    if (req.user?.role !== 'EVENT_INCHARGE') return next();
+    const has = await checkEventPermission({ user: req.user, eventId: req.params.eventId, permissionKey: 'resultUpload' });
+    if (!has) return res.status(403).json(errorResponse('Access denied. Result upload permission required.', 403));
+    return next();
+  },
   eventController.getResults.bind(eventController)
 );
 
@@ -440,31 +630,63 @@ router.get('/:eventId/student-results',
   eventController.getStudentResults.bind(eventController)
 );
 
-// Download event results (coaches only for now due to schema limitations)
+// Download event results (legacy: latest file)
 router.get('/:eventId/results/download', 
   authenticate,
-  requireCoach, // Add requireCoach for consistency
+  async (req, res, next) => {
+    if (req.user?.role === 'COACH') return requireCoach(req, res, next);
+    if (req.user?.role === 'EVENT_INCHARGE') {
+      const has = await checkEventPermission({ user: req.user, eventId: req.params.eventId, permissionKey: 'resultUpload' });
+      if (!has) return res.status(403).json(errorResponse('Access denied. Result upload permission required.', 403));
+      return next();
+    }
+    return res.status(403).json(errorResponse('Access denied.', 403));
+  },
   eventController.downloadResults.bind(eventController)
 );
 
-// Download individual result file (coaches only)
+// Download individual result file
 router.get('/:eventId/results/:fileId/download', 
   authenticate,
-  requireCoach,
+  async (req, res, next) => {
+    if (req.user?.role === 'COACH') return requireCoach(req, res, next);
+    if (req.user?.role === 'EVENT_INCHARGE') {
+      const has = await checkEventPermission({ user: req.user, eventId: req.params.eventId, permissionKey: 'resultUpload' });
+      if (!has) return res.status(403).json(errorResponse('Access denied. Result upload permission required.', 403));
+      return next();
+    }
+    return res.status(403).json(errorResponse('Access denied.', 403));
+  },
   eventController.downloadResultFile.bind(eventController)
 );
 
-// Delete event results (coaches only for now due to schema limitations)
+// Delete event results
 router.delete('/:eventId/results', 
   authenticate, 
-  requireCoach, // Use requireCoach middleware to ensure req.coach is set
+  async (req, res, next) => {
+    if (req.user?.role === 'COACH') return requireCoach(req, res, next);
+    if (req.user?.role === 'EVENT_INCHARGE') {
+      const has = await checkEventPermission({ user: req.user, eventId: req.params.eventId, permissionKey: 'resultUpload' });
+      if (!has) return res.status(403).json(errorResponse('Access denied. Result upload permission required.', 403));
+      return next();
+    }
+    return res.status(403).json(errorResponse('Access denied.', 403));
+  },
   eventController.deleteResults.bind(eventController)
 );
 
-// Delete individual result file (coaches only)
+// Delete individual result file
 router.delete('/:eventId/results/:fileId', 
   authenticate, 
-  requireCoach,
+  async (req, res, next) => {
+    if (req.user?.role === 'COACH') return requireCoach(req, res, next);
+    if (req.user?.role === 'EVENT_INCHARGE') {
+      const has = await checkEventPermission({ user: req.user, eventId: req.params.eventId, permissionKey: 'resultUpload' });
+      if (!has) return res.status(403).json(errorResponse('Access denied. Result upload permission required.', 403));
+      return next();
+    }
+    return res.status(403).json(errorResponse('Access denied.', 403));
+  },
   eventController.deleteResultFile.bind(eventController)
 );
 

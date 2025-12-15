@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, requireCoach, requireAdmin } = require('../utils/authMiddleware');
+const { authenticate, requireCoach, requireAdmin, checkEventPermission } = require('../utils/authMiddleware');
 const certificateService = require('../services/certificateService');
 const EventService = require('../services/eventService');
 const { PrismaClient } = require('@prisma/client');
@@ -11,12 +11,37 @@ const eventService = new EventService();
 const successResponse = (data, message = 'Success') => ({ success: true, message, data });
 const errorResponse = (message, statusCode = 400) => ({ success: false, message, statusCode });
 
+// Allow Admin OR Event Incharge with certificateManagement permission for the given event
+const requireAdminOrCertificateManager = async (req, res, next) => {
+  try {
+    const user = req.user;
+    if (!user) return res.status(401).json(errorResponse('Unauthorized', 401));
+
+    if (user.role === 'ADMIN') return next();
+
+    if (user.role !== 'EVENT_INCHARGE') {
+      return res.status(403).json(errorResponse('Access denied.', 403));
+    }
+
+    const eventId = req.params?.eventId || req.body?.eventId;
+    if (!eventId) return res.status(400).json(errorResponse('Missing eventId.', 400));
+
+    const has = await checkEventPermission({ user, eventId, permissionKey: 'certificateManagement' });
+    if (!has) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
+
+    return next();
+  } catch (e) {
+    console.error('Certificate permission check error:', e);
+    return res.status(500).json(errorResponse('Failed to authorize certificate access.', 500));
+  }
+};
+
 /**
  * @route   POST /api/certificates/issue
- * @desc    Issue certificates to selected students (Admin only)
- * @access  Private (Admin)
+ * @desc    Issue certificates to selected students (Admin or authorized Event Incharge)
+ * @access  Private
  */
-router.post('/issue', authenticate, requireAdmin, async (req, res) => {
+router.post('/issue', authenticate, requireAdminOrCertificateManager, async (req, res) => {
   try {
     const { eventId, orderId, selectedStudents } = req.body;
 
@@ -239,10 +264,10 @@ router.post('/issue', authenticate, requireAdmin, async (req, res) => {
 
 /**
  * @route   POST /api/certificates/issue-winner
- * @desc    Issue winner certificates to selected students with positions (Admin only)
- * @access  Private (Admin)
+ * @desc    Issue winner certificates to selected students with positions (Admin or authorized Event Incharge)
+ * @access  Private
  */
-router.post('/issue-winner', authenticate, requireAdmin, async (req, res) => {
+router.post('/issue-winner', authenticate, requireAdminOrCertificateManager, async (req, res) => {
   try {
     const { eventId, selectedStudentsWithPositions } = req.body; // [{studentId, position, positionText}]
 
@@ -382,9 +407,9 @@ router.post('/issue-winner', authenticate, requireAdmin, async (req, res) => {
 /**
  * @route   GET /api/certificates/event/:eventId/payment-status
  * @desc    Check payment status for event certificate issuance
- * @access  Private (Admin)
+ * @access  Private (Admin or authorized Event Incharge)
  */
-router.get('/event/:eventId/payment-status', authenticate, requireAdmin, async (req, res) => {
+router.get('/event/:eventId/payment-status', authenticate, requireAdminOrCertificateManager, async (req, res) => {
   try {
     const { eventId } = req.params;
     
@@ -475,11 +500,11 @@ router.get('/verify/:uid', async (req, res) => {
 
 /**
  * @route   GET /api/certificates/event/:eventId/issued
- * @desc    Get all issued certificates for an event (Admin only)
- * @access  Private (Admin)
+ * @desc    Get all issued certificates for an event (Admin or authorized Event Incharge)
+ * @access  Private
  * @note    Returns all certificates for the event regardless of order
  */
-router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res) => {
+router.get('/event/:eventId/issued', authenticate, requireAdminOrCertificateManager, async (req, res) => {
   try {
     const { eventId } = req.params;
 
@@ -626,11 +651,11 @@ router.get('/event/:eventId/issued', authenticate, requireAdmin, async (req, res
 
 /**
  * @route   GET /api/certificates/event/:eventId/eligible-students
- * @desc    Get eligible students for certificate issuance for an event (Admin only)
- * @access  Private (Admin)
+ * @desc    Get eligible students for certificate issuance for an event (Admin or authorized Event Incharge)
+ * @access  Private
  * @note    Order verification commented out - Admin can issue certificates without order completion
  */
-router.get('/event/:eventId/eligible-students', authenticate, requireAdmin, async (req, res) => {
+router.get('/event/:eventId/eligible-students', authenticate, requireAdminOrCertificateManager, async (req, res) => {
   try {
     const { eventId } = req.params;
     const { orderId } = req.query;

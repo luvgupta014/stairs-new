@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, getEventAssignments, updateEventPermissions, getEventInchargePermissions, updateEventInchargePermissions, getAllUsers, createEventInchargeInvite, getEventInchargeInvites, revokeEventInchargeInvite, resendEventInchargeInvite } from '../../api';
+import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, getEventAssignments, getEventInchargePermissions, updateEventInchargePermissions, getAllUsers, createEventInchargeInvite, getEventInchargeInvites, revokeEventInchargeInvite, resendEventInchargeInvite } from '../../api';
 import ParticipantsModal from '../../components/ParticipantsModal';
 import AdminCertificateIssuance from '../../components/AdminCertificateIssuance';
 
@@ -59,12 +59,10 @@ const AdminEventsManagement = () => {
   const [inviteMsg, setInviteMsg] = useState('');
   const [inviteErr, setInviteErr] = useState('');
   const [inviteDebugLink, setInviteDebugLink] = useState('');
-  const [permissionMode, setPermissionMode] = useState('INCHARGE_USER'); // INCHARGE_USER | ROLE
   const [permissionLoading, setPermissionLoading] = useState(false);
   const [permissionForm, setPermissionForm] = useState({
     eventId: '',
-    role: 'COORDINATOR', // used only for ROLE mode
-    userId: '', // used only for INCHARGE_USER mode
+    userId: '',
     resultUpload: false,
     studentManagement: false,
     certificateManagement: false,
@@ -86,6 +84,17 @@ const AdminEventsManagement = () => {
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const assignmentRef = useRef(null);
+
+  // Bulk incharge invites (Admin)
+  const [bulkInviteOpen, setBulkInviteOpen] = useState(false);
+  const [bulkInviteText, setBulkInviteText] = useState('');
+  const [bulkInviting, setBulkInviting] = useState(false);
+  const [bulkInviteReport, setBulkInviteReport] = useState(null); // {total, sent, assigned, failed, rows:[]}
+  const [bulkInviteRows, setBulkInviteRows] = useState([]); // [{ email, isPointOfContact, permissions }]
+  const [bulkInviteFileName, setBulkInviteFileName] = useState('');
+
+  // Cache incharge assignments per event for quick UI rendering
+  const [eventIncharges, setEventIncharges] = useState({}); // { [eventId]: [{ userId, name, email, uniqueId, isPointOfContact }] }
 
   // Toasts (lightweight, no deps)
   const [toasts, setToasts] = useState([]);
@@ -213,7 +222,39 @@ const AdminEventsManagement = () => {
         console.log(`✅ Received ${eventsData.length} events`);
         
         if (Array.isArray(eventsData)) {
-          setEvents(eventsData);
+          // Enrich events with incharge assignments (for button visibility + name display)
+          const settled = await Promise.allSettled(
+            eventsData.map(async (ev) => {
+              try {
+                const aRes = await getEventAssignments(ev.id);
+                const assignments = aRes?.success ? (aRes.data || []) : [];
+                const incharges = assignments
+                  .filter(a => a.role === 'INCHARGE' && a.user?.role === 'EVENT_INCHARGE')
+                  .map(a => ({
+                    userId: a.userId,
+                    name: a.user?.name || '',
+                    email: a.user?.email || '',
+                    uniqueId: a.user?.uniqueId || '',
+                    isPointOfContact: !!a.isPointOfContact
+                  }));
+                return { ev, incharges };
+              } catch {
+                return { ev, incharges: [] };
+              }
+            })
+          );
+
+          const nextMap = {};
+          const enriched = settled
+            .filter(r => r.status === 'fulfilled')
+            .map(r => {
+              const { ev, incharges } = r.value || {};
+              if (ev?.id) nextMap[ev.id] = incharges || [];
+              return ev;
+            });
+
+          setEventIncharges(nextMap);
+          setEvents(enriched);
         } else {
           console.warn('⚠️  Events data is not an array:', eventsData);
           setEvents([]);
@@ -518,6 +559,156 @@ const AdminEventsManagement = () => {
     }
   };
 
+  const parseBulkInviteEmails = (text) => {
+    const raw = String(text || '');
+    const parts = raw.split(/[\n,;]+/g).map(s => s.trim()).filter(Boolean);
+    return Array.from(new Set(parts.map(p => p.toLowerCase())));
+  };
+
+  const downloadInchargeInviteTemplateCsv = () => {
+    // Header-only template (no sample data)
+    const header = 'email,isPointOfContact,resultUpload,studentManagement,certificateManagement,feeManagement\n';
+    const blob = new Blob([header], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'incharge_invite_template.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const parseBool = (v) => {
+    const s = String(v ?? '').trim().toLowerCase();
+    return ['1', 'true', 'yes', 'y'].includes(s);
+  };
+
+  const parseInviteCsv = (csvText) => {
+    const lines = String(csvText || '')
+      .split(/\r?\n/g)
+      .map(l => l.trim())
+      .filter(l => l.length > 0);
+    if (lines.length === 0) return { rows: [], error: 'CSV is empty.' };
+    const header = lines[0].split(',').map(h => h.trim());
+    const idx = (name) => header.findIndex(h => h.toLowerCase() === name.toLowerCase());
+
+    const emailIdx = idx('email');
+    if (emailIdx === -1) return { rows: [], error: 'CSV must include an "email" column.' };
+
+    const pocIdx = idx('isPointOfContact');
+    const ruIdx = idx('resultUpload');
+    const smIdx = idx('studentManagement');
+    const cmIdx = idx('certificateManagement');
+    const fmIdx = idx('feeManagement');
+
+    const out = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',').map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+      const email = (cols[emailIdx] || '').toLowerCase().trim();
+      if (!email) continue;
+      out.push({
+        email,
+        isPointOfContact: pocIdx >= 0 ? parseBool(cols[pocIdx]) : false,
+        permissions: {
+          resultUpload: ruIdx >= 0 ? parseBool(cols[ruIdx]) : undefined,
+          studentManagement: smIdx >= 0 ? parseBool(cols[smIdx]) : undefined,
+          certificateManagement: cmIdx >= 0 ? parseBool(cols[cmIdx]) : undefined,
+          feeManagement: fmIdx >= 0 ? parseBool(cols[fmIdx]) : undefined
+        }
+      });
+    }
+    return { rows: out, error: '' };
+  };
+
+  const handleBulkInvite = async () => {
+    setInviteMsg('');
+    setInviteErr('');
+    setInviteDebugLink('');
+    setBulkInviteReport(null);
+
+    if (!assignmentForm.eventId) {
+      setInviteErr('Please select an event first.');
+      return;
+    }
+
+    const fallbackEmails = parseBulkInviteEmails(bulkInviteText);
+    const inputRows = bulkInviteRows.length
+      ? bulkInviteRows
+      : fallbackEmails.map(email => ({ email, isPointOfContact: false, permissions: {} }));
+
+    if (!inputRows.length) {
+      setInviteErr('Paste emails or upload a CSV first.');
+      return;
+    }
+    if (inputRows.length > 200) {
+      setInviteErr('Too many emails. Max 200 per upload.');
+      return;
+    }
+
+    const permissions = {
+      resultUpload: !!inchargeInviteForm.resultUpload,
+      studentManagement: !!inchargeInviteForm.studentManagement,
+      certificateManagement: !!inchargeInviteForm.certificateManagement,
+      feeManagement: !!inchargeInviteForm.feeManagement
+    };
+
+    setBulkInviting(true);
+    let sent = 0;
+    let assigned = 0;
+    let failed = 0;
+    const rows = [];
+
+    for (const row of inputRows) {
+      const email = String(row.email || '').trim().toLowerCase();
+      if (!email) continue;
+      const rowPerms = row.permissions || {};
+      const effPerms = {
+        resultUpload: typeof rowPerms.resultUpload === 'boolean' ? rowPerms.resultUpload : permissions.resultUpload,
+        studentManagement: typeof rowPerms.studentManagement === 'boolean' ? rowPerms.studentManagement : permissions.studentManagement,
+        certificateManagement: typeof rowPerms.certificateManagement === 'boolean' ? rowPerms.certificateManagement : permissions.certificateManagement,
+        feeManagement: typeof rowPerms.feeManagement === 'boolean' ? rowPerms.feeManagement : permissions.feeManagement
+      };
+      try {
+        const res = await createEventInchargeInvite(assignmentForm.eventId, {
+          email,
+          isPointOfContact: !!row.isPointOfContact,
+          permissions: effPerms
+        });
+        if (res?.success) {
+          if (res?.data?.assigned) assigned += 1;
+          else sent += 1;
+          rows.push({ email, ok: true, assigned: !!res?.data?.assigned, message: res?.message || 'OK' });
+        } else {
+          failed += 1;
+          rows.push({ email, ok: false, message: res?.message || 'Failed' });
+        }
+      } catch (e) {
+        failed += 1;
+        rows.push({ email, ok: false, message: getErrorMessage(e, 'Failed') });
+      }
+    }
+
+    setBulkInviteReport({ total: inputRows.length, sent, assigned, failed, rows });
+    setBulkInviting(false);
+
+    await loadInchargeInvites(assignmentForm.eventId);
+    const aRes = await getEventAssignments(assignmentForm.eventId).catch(() => null);
+    const assignments = aRes?.success ? (aRes.data || []) : [];
+    setExistingAssignments(assignments);
+
+    setEventIncharges(prev => ({
+      ...prev,
+      [assignmentForm.eventId]: assignments
+        .filter(a => a.role === 'INCHARGE' && a.user?.role === 'EVENT_INCHARGE')
+        .map(a => ({
+          userId: a.userId,
+          name: a.user?.name || '',
+          email: a.user?.email || '',
+          uniqueId: a.user?.uniqueId || '',
+          isPointOfContact: !!a.isPointOfContact
+        }))
+    }));
+  };
+
   const handleMakePoc = async (assignment) => {
     if (!assignmentForm.eventId) return;
     if (!assignment?.userId) return;
@@ -609,17 +800,40 @@ const AdminEventsManagement = () => {
     }
   };
 
-  const handlePermissionClick = (eventId) => {
-    setPermissionForm(prev => ({ ...prev, eventId }));
+  const handlePermissionClick = async (eventId, userId = '') => {
+    setPermissionForm(prev => ({ ...prev, eventId, userId }));
     setPermissionEventIdSearch('');
     setPermissionMsg('');
     setPermissionErr('');
-    setPermissionMode('INCHARGE_USER');
     setPermissionLoading(false);
     // Open the modal
     setShowPermissionModal(true);
     // Load assignments so we can select an incharge
-    loadEventAssignments(eventId);
+    await loadEventAssignments(eventId);
+
+    // If a specific incharge is provided, load existing permissions into the form
+    if (eventId && userId) {
+      try {
+        setPermissionLoading(true);
+        const res = await getEventInchargePermissions(eventId, userId);
+        if (res?.success) {
+          const p = res.data?.permissions || {};
+          setPermissionForm(prev => ({
+            ...prev,
+            resultUpload: !!p.resultUpload,
+            studentManagement: !!p.studentManagement,
+            certificateManagement: !!p.certificateManagement,
+            feeManagement: !!p.feeManagement
+          }));
+        }
+      } catch (err) {
+        const msg = getErrorMessage(err, 'Failed to load incharge permissions.');
+        setPermissionErr(msg);
+        pushToast('error', 'Load failed', msg);
+      } finally {
+        setPermissionLoading(false);
+      }
+    }
   };
 
   // Auto-select event by uniqueId search
@@ -686,7 +900,7 @@ const AdminEventsManagement = () => {
       return;
     }
 
-    if (permissionMode === 'INCHARGE_USER' && !permissionForm.userId) {
+    if (!permissionForm.userId) {
       setPermissionErr('Please select an Incharge.');
       return;
     }
@@ -709,46 +923,17 @@ const AdminEventsManagement = () => {
       if (permissionForm.certificateManagement) permissionsList.push('Certificate Management');
       if (permissionForm.feeManagement) permissionsList.push('Fee Management');
 
-      if (permissionMode === 'INCHARGE_USER') {
-        const res = await updateEventInchargePermissions(permissionForm.eventId, permissionForm.userId, {
-          resultUpload: !!permissionForm.resultUpload,
-          studentManagement: !!permissionForm.studentManagement,
-          certificateManagement: !!permissionForm.certificateManagement,
-          feeManagement: !!permissionForm.feeManagement
-        });
-
-        if (res?.success) {
-          const selectedEvent = events.find(e => e.id === permissionForm.eventId);
-          const selectedUser = existingAssignments.find(a => a.userId === permissionForm.userId)?.user;
-          setPermissionMsg(
-            `✓ Incharge permissions saved for "${selectedEvent?.name || 'Event'}" • ${selectedUser?.name || selectedUser?.email || 'Incharge'}`
-          );
-          pushToast('success', 'Incharge permissions saved', `Granted: ${permissionsList.join(', ') || 'None'}`);
-          setTimeout(() => setPermissionMsg(''), 5000);
-          return;
-        }
-        const msg = res?.message || 'Failed to save incharge permissions.';
-        setPermissionErr(msg);
-        pushToast('error', 'Save failed', msg);
-        return;
-      }
-
-      // ROLE mode (for COORDINATOR/TEAM)
-      const payload = [{
-        role: permissionForm.role,
+      const res = await updateEventInchargePermissions(permissionForm.eventId, permissionForm.userId, {
         resultUpload: !!permissionForm.resultUpload,
         studentManagement: !!permissionForm.studentManagement,
         certificateManagement: !!permissionForm.certificateManagement,
         feeManagement: !!permissionForm.feeManagement
-      }];
-      const res = await updateEventPermissions(permissionForm.eventId, payload);
+      });
       if (res?.success) {
         const selectedEvent = events.find(e => e.id === permissionForm.eventId);
-        setPermissionMsg(
-          `✓ Role permissions saved for ${permissionForm.role} on "${selectedEvent?.name || 'Event'}". ` +
-          `Granted: ${permissionsList.join(', ')}`
-        );
-        pushToast('success', 'Permissions saved', `Granted: ${permissionsList.join(', ')}`);
+        const selectedUser = existingAssignments.find(a => a.userId === permissionForm.userId)?.user;
+        setPermissionMsg(`✓ Incharge permissions saved for "${selectedEvent?.name || 'Event'}" • ${selectedUser?.name || selectedUser?.email || 'Incharge'}`);
+        pushToast('success', 'Incharge permissions saved', `Granted: ${permissionsList.join(', ') || 'None'}`);
         setTimeout(() => setPermissionMsg(''), 5000);
       } else {
         const msg = res?.message || 'Failed to save permissions.';
@@ -2084,7 +2269,6 @@ const AdminEventsManagement = () => {
                 onClick={() => {
                   setPermissionForm({
                     eventId: '',
-                    role: 'COORDINATOR',
                     userId: '',
                     resultUpload: false,
                     studentManagement: false,
@@ -2125,6 +2309,12 @@ const AdminEventsManagement = () => {
                     setInchargeInvites([]);
                     setInviteMsg('');
                     setInviteErr('');
+                    setBulkInviteOpen(false);
+                    setBulkInviteText('');
+                    setBulkInviteRows([]);
+                    setBulkInviteFileName('');
+                    setBulkInviting(false);
+                    setBulkInviteReport(null);
                     setInchargeInviteForm({
                       email: '',
                       isPointOfContact: false,
@@ -2345,6 +2535,134 @@ const AdminEventsManagement = () => {
                       ) : null}
                     </form>
 
+                    {/* Bulk invite */}
+                    <div className="mt-3 border-t border-indigo-200 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => setBulkInviteOpen((v) => !v)}
+                        className="text-xs font-semibold text-indigo-900 hover:text-indigo-700"
+                      >
+                        {bulkInviteOpen ? 'Hide Bulk Invite' : 'Bulk Invite Incharges (Upload list)'}
+                      </button>
+
+                      {bulkInviteOpen ? (
+                        <div className="mt-2 bg-white border border-indigo-200 rounded-lg p-3">
+                          <div className="text-xs text-gray-700">
+                            Upload CSV or paste emails (comma/newline separated). CSV rows can optionally override permissions per email.
+                          </div>
+                          <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={downloadInchargeInviteTemplateCsv}
+                              className="px-3 py-2 rounded-md border text-xs font-semibold"
+                            >
+                              Download CSV Template
+                            </button>
+                            <label className="text-xs text-gray-700 flex items-center gap-2">
+                              <input
+                                type="file"
+                                accept=".csv,text/csv"
+                                disabled={bulkInviting}
+                                onChange={async (e) => {
+                                  const f = e.target.files?.[0];
+                                  if (!f) return;
+                                  setInviteErr('');
+                                  setBulkInviteReport(null);
+                                  setBulkInviteFileName(f.name || 'upload.csv');
+                                  try {
+                                    const text = await f.text();
+                                    const parsed = parseInviteCsv(text);
+                                    if (parsed.error) {
+                                      setInviteErr(parsed.error);
+                                      setBulkInviteRows([]);
+                                      return;
+                                    }
+                                    // De-dupe by email
+                                    const uniq = [];
+                                    const seen = new Set();
+                                    for (const r of parsed.rows) {
+                                      const em = String(r.email || '').toLowerCase().trim();
+                                      if (!em || seen.has(em)) continue;
+                                      seen.add(em);
+                                      uniq.push(r);
+                                    }
+                                    setBulkInviteRows(uniq);
+                                    setBulkInviteText(uniq.map(r => r.email).join('\n'));
+                                    pushToast('success', 'CSV loaded', `Loaded ${uniq.length} email(s) from ${f.name}.`);
+                                  } catch (err) {
+                                    const msg = getErrorMessage(err, 'Failed to read CSV.');
+                                    setInviteErr(msg);
+                                    setBulkInviteRows([]);
+                                  }
+                                }}
+                              />
+                              <span>{bulkInviteFileName ? `Loaded: ${bulkInviteFileName}` : 'Choose CSV file'}</span>
+                            </label>
+                          </div>
+                          <textarea
+                            value={bulkInviteText}
+                            onChange={(e) => setBulkInviteText(e.target.value)}
+                            rows={4}
+                            className="mt-2 w-full px-3 py-2 border rounded-md text-sm"
+                            placeholder={`a@vendor.com\nb@vendor.com\nc@vendor.com`}
+                            disabled={bulkInviting}
+                          />
+
+                          <div className="mt-2 flex items-center justify-between gap-3">
+                            <div className="text-xs text-gray-600">
+                              {bulkInviteReport ? (
+                                <span>
+                                  Total: <strong>{bulkInviteReport.total}</strong> • Sent: <strong>{bulkInviteReport.sent}</strong> • Assigned: <strong>{bulkInviteReport.assigned}</strong> • Failed: <strong>{bulkInviteReport.failed}</strong>
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBulkInviteText('');
+                                  setBulkInviteRows([]);
+                                  setBulkInviteFileName('');
+                                  setBulkInviteReport(null);
+                                }}
+                                className="px-3 py-2 rounded-md border text-xs font-semibold"
+                                disabled={bulkInviting}
+                              >
+                                Clear
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleBulkInvite}
+                                className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold disabled:opacity-60"
+                                disabled={bulkInviting}
+                              >
+                                {bulkInviting ? 'Inviting...' : 'Send Bulk Invites'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {bulkInviteReport?.failed ? (
+                            <div className="mt-2 text-xs">
+                              {bulkInviteReport.failed > 0 ? (
+                                <div className="text-red-700">
+                                  {bulkInviteReport.rows.filter(r => !r.ok).slice(0, 6).map((r) => (
+                                    <div key={r.email} className="break-all">
+                                      {r.email}: {r.message}
+                                    </div>
+                                  ))}
+                                  {bulkInviteReport.failed > 6 ? (
+                                    <div className="text-gray-500 mt-1">…and more.</div>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <div className="text-green-700">All invites processed successfully.</div>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+
                     <div className="mt-4">
                       <div className="text-xs font-semibold text-indigo-900 mb-2">Invites</div>
                       {inchargeInvites.length === 0 ? (
@@ -2420,6 +2738,12 @@ const AdminEventsManagement = () => {
                     setInchargeInvites([]);
                     setInviteMsg('');
                     setInviteErr('');
+                    setBulkInviteOpen(false);
+                    setBulkInviteText('');
+                    setBulkInviteRows([]);
+                    setBulkInviteFileName('');
+                    setBulkInviting(false);
+                    setBulkInviteReport(null);
                     setInchargeInviteForm({
                       email: '',
                       isPointOfContact: false,
@@ -2449,14 +2773,12 @@ const AdminEventsManagement = () => {
                     setShowPermissionModal(false);
                     setPermissionForm({
                       eventId: '',
-                      role: 'COORDINATOR',
                       userId: '',
                       resultUpload: false,
                       studentManagement: false,
                       certificateManagement: false,
                       feeManagement: false
                     });
-                    setPermissionMode('INCHARGE_USER');
                     setPermissionLoading(false);
                     setPermissionEventIdSearch('');
                     setPermissionMsg('');
@@ -2509,35 +2831,6 @@ const AdminEventsManagement = () => {
                     </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Permission Type</label>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPermissionMode('INCHARGE_USER')}
-                      className={`px-3 py-2 rounded-md border text-sm font-medium ${
-                        permissionMode === 'INCHARGE_USER'
-                          ? 'bg-indigo-50 border-indigo-300 text-indigo-900'
-                          : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      Incharge (per person)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPermissionMode('ROLE')}
-                      className={`px-3 py-2 rounded-md border text-sm font-medium ${
-                        permissionMode === 'ROLE'
-                          ? 'bg-indigo-50 border-indigo-300 text-indigo-900'
-                          : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      Role-based (Coordinator/Team)
-                    </button>
-                  </div>
-                </div>
-
-                {permissionMode === 'INCHARGE_USER' ? (
-                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Select Incharge</label>
                     <select
                       value={permissionForm.userId}
@@ -2586,20 +2879,7 @@ const AdminEventsManagement = () => {
                     <div className="text-xs text-gray-500 mt-1">
                       These permissions update the selected incharge only (per event).
                     </div>
-                  </div>
-                ) : (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                  <select
-                    value={permissionForm.role}
-                    onChange={(e) => setPermissionForm(prev => ({ ...prev, role: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="COORDINATOR">COORDINATOR</option>
-                    <option value="TEAM">TEAM</option>
-                  </select>
                 </div>
-                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <label className="inline-flex items-center space-x-2 text-sm text-gray-700">
@@ -2662,11 +2942,10 @@ const AdminEventsManagement = () => {
                   {/* Info Note */}
                   <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                     <p className="text-xs text-amber-800">
-                      <strong>Important:</strong> Permissions are set per role (INCHARGE, COORDINATOR, TEAM). 
-                      Users assigned to an event with a specific role will inherit the permissions set for that role. 
-                      Make sure to assign users to events first, then set permissions for their roles.
+                      <strong>Important:</strong> These permissions are saved per <strong>incharge person</strong> for this event.
+                      Assign an incharge first, then select them here to view/update their permissions.
                     </p>
-                </div>
+                  </div>
               </form>
             </div>
               <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-xl flex justify-end flex-shrink-0">
@@ -2675,7 +2954,7 @@ const AdminEventsManagement = () => {
                     setShowPermissionModal(false);
                     setPermissionForm({
                       eventId: '',
-                      role: 'INCHARGE',
+                      userId: '',
                       resultUpload: false,
                       studentManagement: false,
                       certificateManagement: false,
@@ -2945,14 +3224,35 @@ const AdminEventsManagement = () => {
                             >
                               Assign
                             </button>
-                            {/* Quick Incharge Permissions button */}
-                            <button
-                              type="button"
-                              onClick={() => handlePermissionClick(event.id)}
-                              className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-purple-700 transition-colors"
-                            >
-                              Incharge Permissions
-                            </button>
+                            {/* Quick Incharge Permissions button (only when incharge assigned) */}
+                            {(() => {
+                              const incharges = eventIncharges[event.id] || [];
+                              if (!incharges.length) return null;
+                              if (incharges.length === 1) {
+                                const i = incharges[0];
+                                const label = i.name || i.email || 'Incharge';
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePermissionClick(event.id, i.userId)}
+                                    className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-purple-700 transition-colors"
+                                    title={`Edit permissions for ${label}`}
+                                  >
+                                    Incharge Permissions: {label}
+                                  </button>
+                                );
+                              }
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => handlePermissionClick(event.id)}
+                                  className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-purple-700 transition-colors"
+                                  title="Select an incharge to edit permissions"
+                                >
+                                  Incharge Permissions ({incharges.length})
+                                </button>
+                              );
+                            })()}
                           </div>
 
                           {/* Certificate Action - Only show when event has ended */}

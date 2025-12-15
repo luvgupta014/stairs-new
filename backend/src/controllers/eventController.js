@@ -63,6 +63,9 @@ class EventController {
   async getEvents(req, res) {
     try {
       const { user } = req;
+      // Support old clients: if eventId is provided, return that single event in a list shape.
+      // This avoids "Event not found" caused by pagination + client-side find().
+      const requestedEventId = req.query.eventId;
       const filters = {
         sport: req.query.sport,
         location: req.query.location,
@@ -85,6 +88,20 @@ class EventController {
       else if (user.role === 'INSTITUTE') userId = req.institute?.id;
       else if (user.role === 'CLUB') userId = req.club?.id;
       else if (user.role === 'STUDENT') userId = req.student?.id;
+      else if (user.role === 'EVENT_INCHARGE') userId = user.id;
+
+      if (requestedEventId) {
+        const event = await eventService.getEventById(requestedEventId, user.role, userId);
+        return res.json(successResponse({
+          events: [event],
+          pagination: {
+            total: 1,
+            page: 1,
+            limit: 1,
+            totalPages: 1
+          }
+        }, 'Events retrieved successfully'));
+      }
 
       const result = await eventService.getEvents(filters, pagination, user.role, userId);
 
@@ -159,6 +176,7 @@ class EventController {
       else if (user.role === 'INSTITUTE') userId = req.institute?.id;
       else if (user.role === 'CLUB') userId = req.club?.id;
       else if (user.role === 'STUDENT') userId = req.student?.id;
+      else if (user.role === 'EVENT_INCHARGE') userId = user.id;
 
       const event = await eventService.getEventById(eventId, user.role, userId);
 
@@ -447,8 +465,11 @@ class EventController {
       } else if (req.coach) {
         uploaderId = req.coach.id;
         uploaderType = 'COACH';
+      } else if (user.role === 'EVENT_INCHARGE') {
+        uploaderId = user.id;
+        uploaderType = 'INCHARGE';
       } else {
-        return res.status(403).json(errorResponse('Only coaches or admins can upload results', 403));
+        return res.status(403).json(errorResponse('Only coaches, admins, or authorized event incharges can upload results', 403));
       }
 
       if (!req.files || req.files.length === 0) {
@@ -507,13 +528,15 @@ class EventController {
         userId = null; // Admin can access all
       } else if (user.role === 'STUDENT') {
         userId = req.student?.id || user.studentProfile?.id; // Students can view results
+      } else if (user.role === 'EVENT_INCHARGE') {
+        userId = user.id; // Event incharge access is verified via assignment
       }
 
       const result = await eventService.getResults(
         eventId, 
         { page, limit }, 
         userId, 
-        user.role
+        user.role === 'EVENT_INCHARGE' ? 'INCHARGE' : user.role
       );
 
       res.json(successResponse(result, 'Event result files retrieved successfully'));
@@ -576,11 +599,13 @@ class EventController {
   async deleteResultFile(req, res) {
     try {
       const { eventId, fileId } = req.params;
-      
-      // Get coach ID (guaranteed by requireCoach middleware)
-      const coachId = req.coach.id;
+      const { user } = req;
 
-      console.log(`🗑️ Coach ${coachId} deleting file ${fileId} for event ${eventId}`);
+      const isCoach = user?.role === 'COACH' && req.coach?.id;
+      const isIncharge = user?.role === 'EVENT_INCHARGE';
+
+      const actorLabel = isCoach ? `Coach ${req.coach.id}` : (isIncharge ? `Incharge ${user.id}` : 'User');
+      console.log(`🗑️ ${actorLabel} deleting file ${fileId} for event ${eventId}`);
 
       // Resolve eventId to actual database ID (it could be uniqueId)
       let resolvedEventId = eventId;
@@ -595,12 +620,12 @@ class EventController {
         }
       }
 
-      // Verify the file belongs to this coach and event
+      // Verify the file belongs to this event (and to coach if coach user)
       const file = await prisma.eventResultFile.findFirst({
         where: {
           id: fileId,
           eventId: resolvedEventId,
-          coachId: coachId
+          ...(isCoach ? { coachId: req.coach.id } : {})
         }
       });
 
@@ -621,7 +646,7 @@ class EventController {
         console.log(`🗑️ Physical file deleted: ${file.filename}`);
       }
 
-      console.log(`✅ File ${file.originalName} deleted by coach ${coachId}`);
+      console.log(`✅ File ${file.originalName} deleted by ${actorLabel}`);
 
       res.json(successResponse({ 
         deletedFile: {
@@ -644,10 +669,24 @@ class EventController {
   async deleteResults(req, res) {
     try {
       const { eventId } = req.params;
-      
-      // Get coach ID (guaranteed by requireCoach middleware)
-      const userId = req.coach.id;
-      const userType = 'COACH';
+      const { user } = req;
+
+      let userId = null;
+      let userType = null;
+      if (user?.role === 'COACH') {
+        userId = req.coach?.id;
+        userType = 'COACH';
+      } else if (user?.role === 'EVENT_INCHARGE') {
+        userId = user.id;
+        userType = 'INCHARGE';
+      } else if (user?.role === 'ADMIN') {
+        userId = user.id;
+        userType = 'ADMIN';
+      } else {
+        return res.status(403).json(errorResponse('Access denied.', 403));
+      }
+
+      if (!userId || !userType) return res.status(403).json(errorResponse('Access denied.', 403));
 
       const result = await eventService.deleteResults(eventId, userId, userType);
 
@@ -667,9 +706,12 @@ class EventController {
   async downloadResultFile(req, res) {
     try {
       const { eventId, fileId } = req.params;
-      const coachId = req.coach.id;
+      const { user } = req;
+      const isCoach = user?.role === 'COACH' && req.coach?.id;
+      const isIncharge = user?.role === 'EVENT_INCHARGE';
+      const actorLabel = isCoach ? `Coach ${req.coach.id}` : (isIncharge ? `Incharge ${user.id}` : 'User');
 
-      console.log(`📥 Coach ${coachId} downloading file ${fileId} for event ${eventId}`);
+      console.log(`📥 ${actorLabel} downloading file ${fileId} for event ${eventId}`);
 
       // Resolve eventId to actual database ID (it could be uniqueId)
       let resolvedEventId = eventId;
@@ -684,12 +726,12 @@ class EventController {
         }
       }
 
-      // Get file details and verify ownership
+      // Get file details and verify access (coach must own; incharge is event-scoped)
       const file = await prisma.eventResultFile.findFirst({
         where: {
           id: fileId,
           eventId: resolvedEventId,
-          coachId: coachId
+          ...(isCoach ? { coachId: req.coach.id } : {})
         }
       });
 
@@ -720,7 +762,7 @@ class EventController {
       res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`);
       res.sendFile(filePath);
 
-      console.log(`✅ File ${file.originalName} downloaded by coach ${coachId}`);
+      console.log(`✅ File ${file.originalName} downloaded by ${actorLabel}`);
 
     } catch (error) {
       console.error('❌ Download file error:', error);

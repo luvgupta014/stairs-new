@@ -1042,6 +1042,28 @@ export const getEventRegistrations = async (eventId, params = {}) => {
   }
 };
 
+// Event participants (event-scoped; supports EVENT_INCHARGE via backend permission checks)
+export const getEventParticipants = async (eventId) => {
+  try {
+    const response = await api.get(`/api/events/${eventId}/participants`);
+    return response.data;
+  } catch (error) {
+    console.error('Get event participants error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+// Bulk add/register existing students to an event (EVENT_INCHARGE with studentManagement)
+export const bulkAddEventParticipants = async (eventId, identifiers = []) => {
+  try {
+    const response = await api.post(`/api/events/${eventId}/registrations/bulk`, { identifiers });
+    return response.data;
+  } catch (error) {
+    console.error('Bulk add event participants error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 // Utility functions
 export const setAuthToken = (token) => {
   localStorage.setItem('authToken', token);
@@ -1436,7 +1458,7 @@ export const cleanupOrphanedRegistrations = async () => {
 };
 
 // Admin Event Participants API
-export const getEventParticipants = async (eventId, params = {}) => {
+export const getAdminEventParticipants = async (eventId, params = {}) => {
   try {
     const response = await api.get(`/api/admin/events/${eventId}/participants`, { params });
     return response.data;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getStudentEventDetails, getEventById, registerForEvent, unregisterFromEvent, createStudentEventPaymentOrder, getEventFeeSettings, updateEventFeeSettings } from '../../api';
+import { getStudentEventDetails, getEventById, registerForEvent, unregisterFromEvent, createStudentEventPaymentOrder, getEventFeeSettings, updateEventFeeSettings, getEventInchargeAssignedEvents } from '../../api';
 import Spinner from '../../components/Spinner';
 import Button from '../../components/Button';
 import BackButton from '../../components/BackButton';
@@ -25,6 +25,11 @@ const EventDetails = () => {
   const [checkoutData, setCheckoutData] = useState(null);
   const [pendingEventId, setPendingEventId] = useState(null);
   const [payingEventId, setPayingEventId] = useState(null);
+
+  // Event Incharge permissions (per-event)
+  const [inchargeAssignment, setInchargeAssignment] = useState(null);
+  const [inchargePermsLoading, setInchargePermsLoading] = useState(false);
+  const [inchargePermsError, setInchargePermsError] = useState('');
 
   // Fee management (event-scoped permissions)
   const [feePanelVisible, setFeePanelVisible] = useState(false);
@@ -78,22 +83,49 @@ const EventDetails = () => {
       console.log('🆔 User ID:', user?.id);
 
       let response;
+      let loadedEvent = null;
       if (user?.role === 'STUDENT') {
         // Use student-specific API endpoint
         console.log('📚 Using student API endpoint');
         response = await getStudentEventDetails(eventId);
         console.log('✅ Student API response:', response);
-        setEvent(response.data);
+        loadedEvent = response.data;
+        setEvent(loadedEvent);
       } else {
         // Use dedicated event details endpoint for other roles (includes proper access checks)
         console.log('🌐 Using event details API for role:', user?.role);
         response = await getEventById(eventId);
         const eventData = response?.data || response;
         if (!eventData) throw new Error('Event not found');
-        setEvent(eventData);
+        loadedEvent = eventData;
+        setEvent(loadedEvent);
       }
 
       console.log('✅ Event details loaded successfully');
+
+      // Load incharge per-event permissions for management UI
+      if (user?.role === 'EVENT_INCHARGE') {
+        try {
+          setInchargePermsLoading(true);
+          setInchargePermsError('');
+          const res = await getEventInchargeAssignedEvents();
+          const list = res?.data || res || [];
+          const resolvedId = loadedEvent?.id || eventId;
+          const match = Array.isArray(list)
+            ? list.find(a => a?.eventId === resolvedId || a?.event?.id === resolvedId || a?.event?.uniqueId === eventId)
+            : null;
+          setInchargeAssignment(match || null);
+        } catch (e) {
+          setInchargeAssignment(null);
+          setInchargePermsError(e?.message || 'Failed to load your incharge permissions for this event.');
+        } finally {
+          setInchargePermsLoading(false);
+        }
+      } else {
+        setInchargeAssignment(null);
+        setInchargePermsError('');
+        setInchargePermsLoading(false);
+      }
 
       // Fee settings: only show panel if user has feeManagement access (endpoint returns 403 otherwise)
       // Skip for STUDENT (students should not manage event fees).
@@ -508,6 +540,11 @@ const EventDetails = () => {
     return false;
   };
 
+  const inchargePerms = inchargeAssignment?.permissionOverride || {};
+  const canInchargeStudentMgmt = user?.role === 'EVENT_INCHARGE' && !!inchargePerms.studentManagement;
+  const canInchargeResultUpload = user?.role === 'EVENT_INCHARGE' && !!inchargePerms.resultUpload;
+  const canInchargeCertificates = user?.role === 'EVENT_INCHARGE' && !!inchargePerms.certificateManagement;
+
   // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) return 'Not specified';
@@ -634,6 +671,41 @@ const EventDetails = () => {
                       >
                         Participants
                       </Button>
+                    </div>
+                  )}
+
+                  {user?.role === 'EVENT_INCHARGE' && (
+                    <div className="flex flex-col items-end gap-2">
+                      {inchargePermsError ? (
+                        <div className="text-xs text-red-600">{inchargePermsError}</div>
+                      ) : null}
+                      <div className="flex space-x-2">
+                        <Button
+                          onClick={() => navigate(`/events/${eventId}/participants`)}
+                          className={canInchargeStudentMgmt ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}
+                          disabled={!canInchargeStudentMgmt || inchargePermsLoading}
+                          title={!canInchargeStudentMgmt ? 'Student Management permission not granted for this event.' : 'Student Management'}
+                        >
+                          Student Mgmt
+                        </Button>
+                        <Button
+                          onClick={() => navigate(`/events/${eventId}/results`)}
+                          className={canInchargeResultUpload ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}
+                          disabled={!canInchargeResultUpload || inchargePermsLoading}
+                          title={!canInchargeResultUpload ? 'Result Upload permission not granted for this event.' : 'Result Upload'}
+                        >
+                          Results
+                        </Button>
+                        {canInchargeCertificates ? (
+                          <Button
+                            onClick={() => navigate(`/events/${eventId}/certificates`)}
+                            className="bg-amber-600 hover:bg-amber-700 text-white"
+                            title="Certificate Management"
+                          >
+                            Certificates
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
                   )}
                 </div>

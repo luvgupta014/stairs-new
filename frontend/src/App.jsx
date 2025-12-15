@@ -477,6 +477,20 @@ function App() {
               }
             />
             <Route
+              path="/events/:eventId/certificates"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute>
+                      <IssueCertificates />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
               path="/events/:eventId/orders"
               element={
                 <>
