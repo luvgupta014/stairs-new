@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, getEventAssignments, updateEventPermissions, getAllUsers } from '../../api';
+import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, getEventAssignments, updateEventPermissions, getAllUsers, createEventInchargeInvite, getEventInchargeInvites, revokeEventInchargeInvite, resendEventInchargeInvite } from '../../api';
 import ParticipantsModal from '../../components/ParticipantsModal';
 import AdminCertificateIssuance from '../../components/AdminCertificateIssuance';
 
@@ -42,9 +42,21 @@ const AdminEventsManagement = () => {
   const [savingGlobal, setSavingGlobal] = useState(false);
   const [globalMessage, setGlobalMessage] = useState('');
   const [globalError, setGlobalError] = useState('');
-  const [assignmentForm, setAssignmentForm] = useState({ eventId: '', userId: '', role: 'INCHARGE' });
+  const [assignmentForm, setAssignmentForm] = useState({ eventId: '', userId: '', role: 'COORDINATOR' });
   const [assignmentMsg, setAssignmentMsg] = useState('');
   const [assignmentErr, setAssignmentErr] = useState('');
+  const [inchargeInviteForm, setInchargeInviteForm] = useState({
+    email: '',
+    isPointOfContact: false,
+    resultUpload: false,
+    studentManagement: false,
+    certificateManagement: false,
+    feeManagement: false
+  });
+  const [inchargeInvites, setInchargeInvites] = useState([]);
+  const [loadingInvites, setLoadingInvites] = useState(false);
+  const [inviteMsg, setInviteMsg] = useState('');
+  const [inviteErr, setInviteErr] = useState('');
   const [permissionForm, setPermissionForm] = useState({
     eventId: '',
     role: 'INCHARGE',
@@ -274,6 +286,21 @@ const AdminEventsManagement = () => {
     }
   };
 
+  const loadInchargeInvites = async (eventId) => {
+    if (!eventId) return;
+    try {
+      setLoadingInvites(true);
+      const res = await getEventInchargeInvites(eventId);
+      if (res?.success) setInchargeInvites(res.data || []);
+      else setInchargeInvites([]);
+    } catch (err) {
+      console.error('Error loading incharge invites:', err);
+      setInchargeInvites([]);
+    } finally {
+      setLoadingInvites(false);
+    }
+  };
+
   const handleAssignSubmit = async (e) => {
     e.preventDefault();
     setAssignmentMsg('');
@@ -316,7 +343,7 @@ const AdminEventsManagement = () => {
           `Don't forget to set permissions for this role!`
         );
         // Clear form but keep event selected
-        setAssignmentForm(prev => ({ eventId: prev.eventId, userId: '', role: 'INCHARGE' }));
+        setAssignmentForm(prev => ({ eventId: prev.eventId, userId: '', role: 'COORDINATOR' }));
         setUserSearch('');
         setUserUniqueIdSearch('');
         setUserSearchResult(null);
@@ -358,10 +385,88 @@ const AdminEventsManagement = () => {
     setExistingAssignments([]);
     setAssignmentMsg('');
     setAssignmentErr('');
+    setInviteMsg('');
+    setInviteErr('');
+    setInchargeInviteForm({
+      email: '',
+      isPointOfContact: false,
+      resultUpload: false,
+      studentManagement: false,
+      certificateManagement: false,
+      feeManagement: false
+    });
     // Load existing assignments for this event
     await loadEventAssignments(eventId);
+    await loadInchargeInvites(eventId);
     // Open the modal
     setShowAssignmentModal(true);
+  };
+
+  const handleInviteSubmit = async (e) => {
+    e.preventDefault();
+    setInviteMsg('');
+    setInviteErr('');
+
+    if (!assignmentForm.eventId) return setInviteErr('Please select an event first.');
+    if (!inchargeInviteForm.email.trim()) return setInviteErr('Email is required.');
+    const permissions = {
+      resultUpload: !!inchargeInviteForm.resultUpload,
+      studentManagement: !!inchargeInviteForm.studentManagement,
+      certificateManagement: !!inchargeInviteForm.certificateManagement,
+      feeManagement: !!inchargeInviteForm.feeManagement
+    };
+
+    try {
+      const res = await createEventInchargeInvite(assignmentForm.eventId, {
+        email: inchargeInviteForm.email.trim(),
+        isPointOfContact: !!inchargeInviteForm.isPointOfContact,
+        permissions
+      });
+      if (res?.success) {
+        setInviteMsg(res.message || 'Invite sent.');
+        setInchargeInviteForm(prev => ({ ...prev, email: '' }));
+        await loadInchargeInvites(assignmentForm.eventId);
+        await loadEventAssignments(assignmentForm.eventId);
+        setTimeout(() => setInviteMsg(''), 5000);
+      } else {
+        setInviteErr(res?.message || 'Failed to send invite.');
+      }
+    } catch (err) {
+      setInviteErr(err?.message || 'Failed to send invite.');
+    }
+  };
+
+  const handleResendInvite = async (inviteId) => {
+    if (!assignmentForm.eventId) return;
+    try {
+      const res = await resendEventInchargeInvite(assignmentForm.eventId, inviteId);
+      if (res?.success) {
+        setInviteMsg('Invite resent.');
+        await loadInchargeInvites(assignmentForm.eventId);
+        setTimeout(() => setInviteMsg(''), 5000);
+      } else {
+        setInviteErr(res?.message || 'Failed to resend invite.');
+      }
+    } catch (err) {
+      setInviteErr(err?.message || 'Failed to resend invite.');
+    }
+  };
+
+  const handleRevokeInvite = async (inviteId) => {
+    if (!assignmentForm.eventId) return;
+    if (!window.confirm('Revoke this invite?')) return;
+    try {
+      const res = await revokeEventInchargeInvite(assignmentForm.eventId, inviteId);
+      if (res?.success) {
+        setInviteMsg('Invite revoked.');
+        await loadInchargeInvites(assignmentForm.eventId);
+        setTimeout(() => setInviteMsg(''), 5000);
+      } else {
+        setInviteErr(res?.message || 'Failed to revoke invite.');
+      }
+    } catch (err) {
+      setInviteErr(err?.message || 'Failed to revoke invite.');
+    }
   };
 
   const handleRemoveAssignment = async (eventId, assignmentId) => {
@@ -1842,7 +1947,7 @@ const AdminEventsManagement = () => {
                 <button
                   onClick={() => {
                     setShowAssignmentModal(false);
-                    setAssignmentForm({ eventId: '', userId: '', role: 'INCHARGE' });
+                    setAssignmentForm({ eventId: '', userId: '', role: 'COORDINATOR' });
                     setAssignmentEventIdSearch('');
                     setUserUniqueIdSearch('');
                     setUserSearch('');
@@ -1850,6 +1955,17 @@ const AdminEventsManagement = () => {
                     setExistingAssignments([]);
                     setAssignmentMsg('');
                     setAssignmentErr('');
+                    setInchargeInvites([]);
+                    setInviteMsg('');
+                    setInviteErr('');
+                    setInchargeInviteForm({
+                      email: '',
+                      isPointOfContact: false,
+                      resultUpload: false,
+                      studentManagement: false,
+                      certificateManagement: false,
+                      feeManagement: false
+                    });
                   }}
                   className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-all"
                 >
@@ -1932,6 +2048,145 @@ const AdminEventsManagement = () => {
                         )}
                       </div>
                 </div>
+
+                {/* Incharge (Event Vendor) Invite */}
+                {assignmentForm.eventId && (
+                  <div className="p-4 border rounded-lg bg-indigo-50 border-indigo-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <h4 className="text-sm font-semibold text-indigo-900">Invite Event Vendor (Incharge)</h4>
+                        <p className="text-xs text-indigo-800">
+                          Admin assigns by <strong>email</strong>. The invite email contains a registration link for KYC/vendor details and password setup.
+                        </p>
+                      </div>
+                      {loadingInvites ? <span className="text-xs text-indigo-800">Loading...</span> : null}
+                    </div>
+
+                    <form onSubmit={handleInviteSubmit} className="space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-medium text-indigo-900 mb-1">Incharge Email</label>
+                          <input
+                            type="email"
+                            value={inchargeInviteForm.email}
+                            onChange={(e) => setInchargeInviteForm(prev => ({ ...prev, email: e.target.value }))}
+                            placeholder="vendor.person@example.com"
+                            className="w-full px-3 py-2 border border-indigo-200 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                          />
+                        </div>
+
+                        <label className="flex items-center gap-2 text-xs text-indigo-900">
+                          <input
+                            type="checkbox"
+                            checked={!!inchargeInviteForm.isPointOfContact}
+                            onChange={(e) => setInchargeInviteForm(prev => ({ ...prev, isPointOfContact: e.target.checked }))}
+                          />
+                          Mark as Point of Contact (POC)
+                        </label>
+                      </div>
+
+                      <div>
+                        <div className="text-xs font-medium text-indigo-900 mb-2">Permissions for this incharge (per-event)</div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <label className="flex items-center gap-2 text-xs text-indigo-900">
+                            <input
+                              type="checkbox"
+                              checked={!!inchargeInviteForm.resultUpload}
+                              onChange={(e) => setInchargeInviteForm(prev => ({ ...prev, resultUpload: e.target.checked }))}
+                            />
+                            Result Upload
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-indigo-900">
+                            <input
+                              type="checkbox"
+                              checked={!!inchargeInviteForm.studentManagement}
+                              onChange={(e) => setInchargeInviteForm(prev => ({ ...prev, studentManagement: e.target.checked }))}
+                            />
+                            Student Management
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-indigo-900">
+                            <input
+                              type="checkbox"
+                              checked={!!inchargeInviteForm.certificateManagement}
+                              onChange={(e) => setInchargeInviteForm(prev => ({ ...prev, certificateManagement: e.target.checked }))}
+                            />
+                            Certificate Management
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-indigo-900">
+                            <input
+                              type="checkbox"
+                              checked={!!inchargeInviteForm.feeManagement}
+                              onChange={(e) => setInchargeInviteForm(prev => ({ ...prev, feeManagement: e.target.checked }))}
+                            />
+                            Fee Management
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="submit"
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                        >
+                          Send Invite
+                        </button>
+                        {inviteMsg ? (
+                          <div className="text-green-700 text-sm bg-green-50 p-2 rounded">{inviteMsg}</div>
+                        ) : null}
+                        {inviteErr ? (
+                          <div className="text-red-700 text-sm bg-red-50 p-2 rounded">{inviteErr}</div>
+                        ) : null}
+                      </div>
+                    </form>
+
+                    <div className="mt-4">
+                      <div className="text-xs font-semibold text-indigo-900 mb-2">Invites</div>
+                      {inchargeInvites.length === 0 ? (
+                        <div className="text-xs text-indigo-900">No invites yet.</div>
+                      ) : (
+                        <div className="space-y-2">
+                          {inchargeInvites.map((inv) => (
+                            <div key={inv.id} className="flex items-start justify-between gap-3 p-2 bg-white rounded border border-indigo-100">
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {inv.email}{' '}
+                                  {inv.isPointOfContact ? (
+                                    <span className="ml-2 inline-flex text-xs font-semibold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full">
+                                      POC
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="text-xs text-gray-600">
+                                  Status:{' '}
+                                  {inv.revokedAt ? 'REVOKED' : inv.usedAt ? 'USED' : inv.isExpired ? 'EXPIRED' : 'PENDING'} •
+                                  Expires: {inv.expiresAt ? new Date(inv.expiresAt).toLocaleString('en-IN') : '-'}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleResendInvite(inv.id)}
+                                  disabled={!!inv.usedAt || !!inv.revokedAt}
+                                  className="text-xs text-indigo-700 hover:text-indigo-900 disabled:opacity-50"
+                                >
+                                  Resend
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRevokeInvite(inv.id)}
+                                  disabled={!!inv.usedAt || !!inv.revokedAt}
+                                  className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50"
+                                >
+                                  Revoke
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         User <span className="text-gray-500 text-xs">(or search by Unique ID)</span>
@@ -2014,7 +2269,6 @@ const AdminEventsManagement = () => {
                     onChange={(e) => setAssignmentForm(prev => ({ ...prev, role: e.target.value }))}
                     className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
-                    <option value="INCHARGE">INCHARGE</option>
                     <option value="COORDINATOR">COORDINATOR</option>
                     <option value="TEAM">TEAM</option>
                   </select>
@@ -2052,7 +2306,7 @@ const AdminEventsManagement = () => {
                 <button
                   onClick={() => {
                     setShowAssignmentModal(false);
-                    setAssignmentForm({ eventId: '', userId: '', role: 'INCHARGE' });
+                    setAssignmentForm({ eventId: '', userId: '', role: 'COORDINATOR' });
                     setAssignmentEventIdSearch('');
                     setUserUniqueIdSearch('');
                     setUserSearch('');
@@ -2060,6 +2314,17 @@ const AdminEventsManagement = () => {
                     setExistingAssignments([]);
                     setAssignmentMsg('');
                     setAssignmentErr('');
+                    setInchargeInvites([]);
+                    setInviteMsg('');
+                    setInviteErr('');
+                    setInchargeInviteForm({
+                      email: '',
+                      isPointOfContact: false,
+                      resultUpload: false,
+                      studentManagement: false,
+                      certificateManagement: false,
+                      feeManagement: false
+                    });
                   }}
                   className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-semibold"
                 >

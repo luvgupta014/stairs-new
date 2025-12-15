@@ -17,6 +17,7 @@ const eventRoutes = require('./routes/event');
 const adminPaymentsRouter = require('./routes/admin/events-payments');
 const paymentRoutes = require('./routes/payment');
 const certificateRoutes = require('./routes/certificates');
+const eventInchargeRoutes = require('./routes/eventIncharge');
 
 // Import middleware
 const { errorResponse } = require('./utils/helpers');
@@ -177,6 +178,7 @@ app.use('/api/payment', paymentRoutes);
 // Backwards/forwards compatibility: some frontends call /api/payments/*
 app.use('/api/payments', paymentRoutes);
 app.use('/api/certificates', certificateRoutes);
+app.use('/api/event-incharge', eventInchargeRoutes);
 // Notification routes are included in admin routes for now
 
 // Static file serving (for uploaded files)

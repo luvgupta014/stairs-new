@@ -27,6 +27,7 @@ model User {
   coachProfile    Coach?
   instituteProfile Institute?
   clubProfile     Club?
+  eventInchargeProfile EventIncharge?
   notifications   Notification[]
   otpRecords      OTPRecord[]
   payments        Payment[]
@@ -302,12 +303,109 @@ model EventAssignment {
   eventId   String
   userId    String
   role      EventAssignmentRole
+  /// Exactly one INCHARGE per event can be marked as point-of-contact (enforced at application level)
+  isPointOfContact Boolean        @default(false)
   createdAt DateTime              @default(now())
   event     Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, userId, role])
   @@map("event_assignments")
+}
+
+/// Event management vendor entity (organization) - can have multiple incharges
+model EventVendor {
+  id           String         @id @default(cuid())
+  name         String
+  gstin        String?
+  pan          String?
+  address      String?
+  city         String?
+  state        String?
+  pincode      String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  incharges    EventIncharge[]
+  invites      EventInchargeInvite[]
+
+  @@map("event_vendors")
+}
+
+/// Individual event incharge profile (person) linked to a vendor and a User login
+model EventIncharge {
+  id          String      @id @default(cuid())
+  userId      String      @unique
+  vendorId    String
+
+  fullName    String
+  phone       String?
+  designation String?
+
+  /// India KYC fields (optional unless enforced by UI)
+  panNumber   String?
+  aadhaar     String?
+
+  /// Optional vendor-personnel details
+  gstin       String?
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vendor      EventVendor @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+
+  @@map("event_incharges")
+}
+
+/// Admin invites an email to register as an event incharge for a specific event.
+/// Stores only a hash of the token for security.
+model EventInchargeInvite {
+  id             String      @id @default(cuid())
+  eventId         String
+  email           String
+  tokenHash       String      @unique
+  expiresAt       DateTime
+  usedAt          DateTime?
+  revokedAt       DateTime?
+  isPointOfContact Boolean    @default(false)
+
+  /// Optional: pre-link invite to a vendor (otherwise created/selected at registration time)
+  vendorId        String?
+
+  /// Per-incharge permissions for this event assignment (overrides role permissions)
+  resultUpload          Boolean @default(false)
+  studentManagement     Boolean @default(false)
+  certificateManagement Boolean @default(false)
+  feeManagement         Boolean @default(false)
+
+  createdAt       DateTime     @default(now())
+  event           Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  vendor          EventVendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+
+  @@index([eventId])
+  @@index([email])
+  @@map("event_incharge_invites")
+}
+
+/// Optional per-user permission overrides for a given event.
+/// If present, these permissions are checked before role-based EventPermission.
+model EventUserPermission {
+  id                   String    @id @default(cuid())
+  eventId              String
+  userId               String
+  resultUpload         Boolean   @default(false)
+  studentManagement    Boolean   @default(false)
+  certificateManagement Boolean  @default(false)
+  feeManagement        Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  event                Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@map("event_user_permissions")
 }
 
 model EventPermission {

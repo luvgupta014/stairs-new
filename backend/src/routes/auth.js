@@ -1259,7 +1259,12 @@ router.post('/login', async (req, res) => {
         coachProfile: true,
         instituteProfile: true,
         clubProfile: true,
-        adminProfile: true
+        adminProfile: true,
+        eventInchargeProfile: {
+          include: {
+            vendor: true
+          }
+        }
       }
     });
     console.log('🔎 User lookup result:', user);
@@ -1345,7 +1350,7 @@ router.post('/login', async (req, res) => {
         phone: user.phone,
         role: user.role,
         isVerified: user.isVerified,
-        profile: user.studentProfile || user.coachProfile || user.instituteProfile || user.clubProfile || user.adminProfile || (user.name ? { name: user.name } : {})
+        profile: user.studentProfile || user.coachProfile || user.instituteProfile || user.clubProfile || user.adminProfile || user.eventInchargeProfile || (user.name ? { name: user.name } : {})
       }
     };
     console.log('📤 Sending login response for user:', user.email);

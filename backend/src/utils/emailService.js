@@ -69,6 +69,92 @@ const sendAssignmentEmail = async ({ to, role, eventName, eventLink }) => {
 };
 
 /**
+ * Send event incharge invite email with registration link
+ */
+const sendEventInchargeInviteEmail = async ({
+  to,
+  event,
+  registrationLink,
+  permissions,
+  isPointOfContact = false
+}) => {
+  const subject = `Event assigned: ${event?.name || 'Event'} — Complete registration`;
+  const permissionList = [
+    permissions?.resultUpload ? 'Result Upload' : null,
+    permissions?.studentManagement ? 'Student Management' : null,
+    permissions?.certificateManagement ? 'Certificate Management' : null,
+    permissions?.feeManagement ? 'Fee Management' : null
+  ].filter(Boolean);
+
+  const text = [
+    `You have been assigned as Event Incharge${isPointOfContact ? ' (Point of Contact)' : ''} for event: ${event?.name || ''}.`,
+    `Event: ${event?.name || ''}`,
+    `Sport: ${event?.sport || ''}`,
+    `Venue: ${event?.venue || ''}, ${event?.city || ''}, ${event?.state || ''}`,
+    `Start: ${event?.startDate ? new Date(event.startDate).toLocaleString('en-IN') : ''}`,
+    permissionList.length ? `Permissions: ${permissionList.join(', ')}` : `Permissions: None`,
+    `Complete registration: ${registrationLink}`
+  ].filter(Boolean).join('\n');
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #111827; }
+          .container { max-width: 640px; margin: 0 auto; padding: 24px; }
+          .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; }
+          .title { font-size: 20px; font-weight: 700; margin: 0 0 12px 0; }
+          .muted { color: #6b7280; font-size: 14px; margin: 0 0 16px 0; }
+          .details { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin: 16px 0; }
+          .row { margin: 6px 0; }
+          .label { color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+          .value { font-weight: 600; }
+          .pill { display: inline-block; padding: 6px 10px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 12px; margin: 4px 6px 0 0; }
+          .button { display: inline-block; margin-top: 14px; background: #2563eb; color: #fff; text-decoration: none; padding: 12px 18px; border-radius: 10px; font-weight: 700; }
+          .warning { margin-top: 18px; background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px; border-radius: 8px; font-size: 14px; }
+          .footer { margin-top: 18px; color: #6b7280; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="card">
+            <p class="title">Event assigned — complete your Event Incharge registration</p>
+            <p class="muted">
+              You have been assigned as <strong>Event Incharge</strong>${isPointOfContact ? ' <strong>(Point of Contact)</strong>' : ''}.
+              Please complete registration to get access for this event.
+            </p>
+
+            <div class="details">
+              <div class="row"><span class="label">Event</span><div class="value">${event?.name || '-'}</div></div>
+              <div class="row"><span class="label">Sport</span><div class="value">${event?.sport || '-'}</div></div>
+              <div class="row"><span class="label">Venue</span><div class="value">${[event?.venue, event?.city, event?.state].filter(Boolean).join(', ') || '-'}</div></div>
+              <div class="row"><span class="label">Start</span><div class="value">${event?.startDate ? new Date(event.startDate).toLocaleString('en-IN') : '-'}</div></div>
+            </div>
+
+            <div>
+              <div class="label">Granted permissions</div>
+              ${(permissionList.length ? permissionList : ['None']).map(p => `<span class="pill">${p}</span>`).join('')}
+            </div>
+
+            <a class="button" href="${registrationLink}">Complete registration</a>
+
+            <div class="warning">
+              <strong>Security note:</strong> This link is intended only for you. If you did not expect this email, please ignore it.
+            </div>
+
+            <div class="footer">© ${new Date().getFullYear()} STAIRS Talent Hub</div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  return sendEmail({ to, subject, text, html });
+};
+
+/**
  * Send OTP email for registration
  * @param {string} email - Recipient email
  * @param {string} otp - OTP code
@@ -1183,5 +1269,6 @@ module.exports = {
   sendPaymentReceiptEmail,
   sendEventCompletionEmail,
   sendAssignmentEmail,
+  sendEventInchargeInviteEmail,
   sendEmail
 };

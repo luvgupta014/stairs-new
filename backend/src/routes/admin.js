@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 const { authenticate, requireAdmin } = require('../utils/authMiddleware');
 const { 
@@ -9,7 +10,7 @@ const {
   getPaginationMeta,
   hashPassword
 } = require('../utils/helpers');
-const { sendEventModerationEmail, sendOrderStatusEmail, sendEventCompletionEmail, sendAssignmentEmail } = require('../utils/emailService');
+const { sendEventModerationEmail, sendOrderStatusEmail, sendEventCompletionEmail, sendAssignmentEmail, sendEventInchargeInviteEmail } = require('../utils/emailService');
 const EventService = require('../services/eventService');
 const { generateEventUID, generateUID } = require('../utils/uidGenerator');
 
@@ -5652,6 +5653,10 @@ router.get('/events/:eventId/verify-permission/:permissionKey', authenticate, as
       }
     });
 
+    const userOverride = await prisma.eventUserPermission.findUnique({
+      where: { eventId_userId: { eventId, userId: req.user.id } }
+    });
+
     res.json(successResponse({ 
       hasPermission, 
       eventId, 
@@ -5659,6 +5664,12 @@ router.get('/events/:eventId/verify-permission/:permissionKey', authenticate, as
       userId: req.user.id,
       userRole: req.user.role,
       assignments: assignments.map(a => ({ role: a.role, eventName: a.event.name })),
+      userOverride: userOverride ? {
+        resultUpload: userOverride.resultUpload,
+        studentManagement: userOverride.studentManagement,
+        certificateManagement: userOverride.certificateManagement,
+        feeManagement: userOverride.feeManagement
+      } : null,
       permissions: permissions.map(p => ({
         role: p.role,
         [permissionKey]: p[permissionKey]
@@ -5667,6 +5678,288 @@ router.get('/events/:eventId/verify-permission/:permissionKey', authenticate, as
   } catch (error) {
     console.error('❌ Verify permission error:', error);
     res.status(500).json(errorResponse('Failed to verify permission.', 500));
+  }
+});
+
+/**
+ * Admin: Create an invite for an Event Incharge (Event Vendor personnel) with per-user permissions.
+ * If the email already belongs to an EVENT_INCHARGE user, we assign directly and set per-user overrides.
+ */
+router.post('/events/:eventId/incharge-invites', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const {
+      email,
+      isPointOfContact = false,
+      vendorId = null,
+      permissions = {}
+    } = req.body || {};
+
+    if (!email) return res.status(400).json(errorResponse('email is required', 400));
+    const normalizedEmail = email.toString().trim().toLowerCase();
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        name: true,
+        sport: true,
+        venue: true,
+        city: true,
+        state: true,
+        startDate: true,
+        endDate: true,
+        uniqueId: true
+      }
+    });
+    if (!event) return res.status(404).json(errorResponse('Event not found.', 404));
+
+    // Optional vendor validation
+    if (vendorId) {
+      const v = await prisma.eventVendor.findUnique({ where: { id: vendorId } });
+      if (!v) return res.status(400).json(errorResponse('Invalid vendorId.', 400));
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+
+    const permFlags = {
+      resultUpload: !!permissions.resultUpload,
+      studentManagement: !!permissions.studentManagement,
+      certificateManagement: !!permissions.certificateManagement,
+      feeManagement: !!permissions.feeManagement
+    };
+
+    // If user already exists as EVENT_INCHARGE, assign directly (no registration needed)
+    if (existingUser) {
+      if (existingUser.role !== 'EVENT_INCHARGE') {
+        return res.status(409).json(errorResponse('This email belongs to a non-incharge account. Incharge must be a separate entity/account.', 409));
+      }
+
+      await prisma.$transaction(async (tx) => {
+        if (isPointOfContact) {
+          await tx.eventAssignment.updateMany({
+            where: { eventId, role: 'INCHARGE' },
+            data: { isPointOfContact: false }
+          });
+        }
+
+        await tx.eventAssignment.upsert({
+          where: {
+            eventId_userId_role: {
+              eventId,
+              userId: existingUser.id,
+              role: 'INCHARGE'
+            }
+          },
+          update: {
+            isPointOfContact: !!isPointOfContact
+          },
+          create: {
+            eventId,
+            userId: existingUser.id,
+            role: 'INCHARGE',
+            isPointOfContact: !!isPointOfContact
+          }
+        });
+
+        await tx.eventUserPermission.upsert({
+          where: { eventId_userId: { eventId, userId: existingUser.id } },
+          update: permFlags,
+          create: { eventId, userId: existingUser.id, ...permFlags }
+        });
+      });
+
+      // Notify existing incharge
+      const frontendUrl = process.env.FRONTEND_URL || 'https://portal.stairs.org.in';
+      const eventLink = `${frontendUrl}/events/${eventId}`;
+      await sendAssignmentEmail({
+        to: normalizedEmail,
+        role: 'INCHARGE',
+        eventName: event.name,
+        eventLink
+      });
+
+      return res.status(200).json(successResponse({
+        assigned: true,
+        inviteCreated: false,
+        eventId,
+        email: normalizedEmail
+      }, 'Existing Event Incharge assigned and notified.'));
+    }
+
+    // Create invite token
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72 hours
+
+    const invite = await prisma.eventInchargeInvite.create({
+      data: {
+        eventId,
+        email: normalizedEmail,
+        tokenHash,
+        expiresAt,
+        isPointOfContact: !!isPointOfContact,
+        vendorId: vendorId || null,
+        ...permFlags
+      }
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://portal.stairs.org.in';
+    const registrationLink = `${frontendUrl}/register/incharge?token=${rawToken}`;
+
+    await sendEventInchargeInviteEmail({
+      to: normalizedEmail,
+      event,
+      registrationLink,
+      permissions: permFlags,
+      isPointOfContact: !!isPointOfContact
+    });
+
+    res.status(201).json(successResponse({
+      inviteId: invite.id,
+      eventId,
+      email: normalizedEmail,
+      expiresAt: invite.expiresAt
+    }, 'Invite created and email sent.', 201));
+  } catch (error) {
+    console.error('❌ Create incharge invite error:', error);
+    res.status(500).json(errorResponse('Failed to create invite.', 500));
+  }
+});
+
+/**
+ * Admin: List incharge invites for an event
+ */
+router.get('/events/:eventId/incharge-invites', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const invites = await prisma.eventInchargeInvite.findMany({
+      where: { eventId },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const now = new Date();
+    const mapped = invites.map(i => ({
+      id: i.id,
+      email: i.email,
+      createdAt: i.createdAt,
+      expiresAt: i.expiresAt,
+      usedAt: i.usedAt,
+      revokedAt: i.revokedAt,
+      isExpired: i.expiresAt < now,
+      isPointOfContact: i.isPointOfContact,
+      vendorId: i.vendorId,
+      permissions: {
+        resultUpload: i.resultUpload,
+        studentManagement: i.studentManagement,
+        certificateManagement: i.certificateManagement,
+        feeManagement: i.feeManagement
+      }
+    }));
+
+    res.json(successResponse(mapped, 'Invites retrieved.'));
+  } catch (error) {
+    console.error('❌ List incharge invites error:', error);
+    res.status(500).json(errorResponse('Failed to list invites.', 500));
+  }
+});
+
+/**
+ * Admin: Revoke an incharge invite
+ */
+router.delete('/events/:eventId/incharge-invites/:inviteId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { inviteId } = req.params;
+    const updated = await prisma.eventInchargeInvite.update({
+      where: { id: inviteId },
+      data: { revokedAt: new Date() }
+    });
+    res.json(successResponse({ id: updated.id, revokedAt: updated.revokedAt }, 'Invite revoked.'));
+  } catch (error) {
+    console.error('❌ Revoke incharge invite error:', error);
+    res.status(500).json(errorResponse('Failed to revoke invite.', 500));
+  }
+});
+
+/**
+ * Admin: Resend an incharge invite (revokes old invite and creates a new token)
+ */
+router.post('/events/:eventId/incharge-invites/:inviteId/resend', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId, inviteId } = req.params;
+
+    const oldInvite = await prisma.eventInchargeInvite.findUnique({ where: { id: inviteId } });
+    if (!oldInvite) return res.status(404).json(errorResponse('Invite not found.', 404));
+    if (oldInvite.usedAt) return res.status(400).json(errorResponse('Invite has already been used.', 400));
+    if (oldInvite.revokedAt) return res.status(400).json(errorResponse('Invite is already revoked.', 400));
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        name: true,
+        sport: true,
+        venue: true,
+        city: true,
+        state: true,
+        startDate: true,
+        endDate: true,
+        uniqueId: true
+      }
+    });
+    if (!event) return res.status(404).json(errorResponse('Event not found.', 404));
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+
+    const newInvite = await prisma.$transaction(async (tx) => {
+      await tx.eventInchargeInvite.update({
+        where: { id: oldInvite.id },
+        data: { revokedAt: new Date() }
+      });
+
+      return tx.eventInchargeInvite.create({
+        data: {
+          eventId: oldInvite.eventId,
+          email: oldInvite.email,
+          tokenHash,
+          expiresAt,
+          isPointOfContact: oldInvite.isPointOfContact,
+          vendorId: oldInvite.vendorId,
+          resultUpload: oldInvite.resultUpload,
+          studentManagement: oldInvite.studentManagement,
+          certificateManagement: oldInvite.certificateManagement,
+          feeManagement: oldInvite.feeManagement
+        }
+      });
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://portal.stairs.org.in';
+    const registrationLink = `${frontendUrl}/register/incharge?token=${rawToken}`;
+    const permFlags = {
+      resultUpload: newInvite.resultUpload,
+      studentManagement: newInvite.studentManagement,
+      certificateManagement: newInvite.certificateManagement,
+      feeManagement: newInvite.feeManagement
+    };
+
+    await sendEventInchargeInviteEmail({
+      to: newInvite.email,
+      event,
+      registrationLink,
+      permissions: permFlags,
+      isPointOfContact: newInvite.isPointOfContact
+    });
+
+    res.json(successResponse({
+      oldInviteId: oldInvite.id,
+      newInviteId: newInvite.id,
+      expiresAt: newInvite.expiresAt
+    }, 'Invite resent.'));
+  } catch (error) {
+    console.error('❌ Resend incharge invite error:', error);
+    res.status(500).json(errorResponse('Failed to resend invite.', 500));
   }
 });
 
@@ -5698,11 +5991,29 @@ router.put('/events/:eventId/assignments', authenticate, requireAdmin, async (re
       if (!a.userId || !a.role || !validRoles.includes(a.role)) {
         return res.status(400).json(errorResponse('Each assignment needs userId and valid role.', 400));
       }
+
+      // Enforce: INCHARGE assignments must be to EVENT_INCHARGE users only
+      if (a.role === 'INCHARGE') {
+        const u = await prisma.user.findUnique({ where: { id: a.userId }, select: { id: true, role: true } });
+        if (!u) return res.status(400).json(errorResponse(`Invalid userId: ${a.userId}`, 400));
+        if (u.role !== 'EVENT_INCHARGE') {
+          return res.status(400).json(errorResponse('INCHARGE role can only be assigned to users with role EVENT_INCHARGE.', 400));
+        }
+      }
     }
 
     // If mode is 'replace', delete all existing assignments first
     if (mode === 'replace') {
       await prisma.eventAssignment.deleteMany({ where: { eventId } });
+    }
+
+    // If any INCHARGE assignment is marked as point-of-contact, clear existing POC first (enforced at app level)
+    const hasPoc = assignments.some(a => a.role === 'INCHARGE' && !!a.isPointOfContact);
+    if (hasPoc) {
+      await prisma.eventAssignment.updateMany({
+        where: { eventId, role: 'INCHARGE' },
+        data: { isPointOfContact: false }
+      });
     }
 
     // Create new assignments (skipDuplicates will prevent duplicates in 'add' mode)
@@ -5720,12 +6031,13 @@ router.put('/events/:eventId/assignments', authenticate, requireAdmin, async (re
               }
             },
             update: {
-              // Update if exists (though nothing to update)
+              ...(a.role === 'INCHARGE' ? { isPointOfContact: !!a.isPointOfContact } : {})
             },
             create: {
               eventId,
               userId: a.userId,
-              role: a.role
+              role: a.role,
+              ...(a.role === 'INCHARGE' ? { isPointOfContact: !!a.isPointOfContact } : {})
             }
           });
           createdAssignments.push(assignment);

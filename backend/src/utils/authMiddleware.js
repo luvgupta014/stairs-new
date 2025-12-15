@@ -79,7 +79,12 @@ const authenticate = async (req, res, next) => {
         coachProfile: true,
         instituteProfile: true,
         clubProfile: true,
-        adminProfile: true
+        adminProfile: true,
+        eventInchargeProfile: {
+          include: {
+            vendor: true
+          }
+        }
       }
     });
 
@@ -273,7 +278,12 @@ const optionalAuth = async (req, res, next) => {
           coachProfile: true,
           instituteProfile: true,
           clubProfile: true,
-          adminProfile: true
+          adminProfile: true,
+          eventInchargeProfile: {
+            include: {
+              vendor: true
+            }
+          }
         }
       });
 
@@ -384,6 +394,18 @@ const checkEventPermission = async ({ user, eventId, permissionKey }) => {
   });
 
   if (!assignments || assignments.length === 0) return false;
+
+  // Per-user permission overrides (checked before role permissions)
+  const override = await prisma.eventUserPermission.findUnique({
+    where: { eventId_userId: { eventId, userId: user.id } },
+    select: {
+      resultUpload: true,
+      studentManagement: true,
+      certificateManagement: true,
+      feeManagement: true
+    }
+  });
+  if (override && override[permissionKey]) return true;
 
   const roles = assignments.map(a => a.role);
   const perms = await prisma.eventPermission.findMany({

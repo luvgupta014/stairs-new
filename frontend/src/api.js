@@ -66,6 +66,71 @@ export const updateEventAssignments = async (eventId, assignments, mode = 'add')
   }
 };
 
+// Event Incharge (Event Vendor) invites (Admin)
+export const createEventInchargeInvite = async (eventId, payload) => {
+  try {
+    const response = await api.post(`/api/admin/events/${eventId}/incharge-invites`, payload);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getEventInchargeInvites = async (eventId) => {
+  try {
+    const response = await api.get(`/api/admin/events/${eventId}/incharge-invites`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const revokeEventInchargeInvite = async (eventId, inviteId) => {
+  try {
+    const response = await api.delete(`/api/admin/events/${eventId}/incharge-invites/${inviteId}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const resendEventInchargeInvite = async (eventId, inviteId) => {
+  try {
+    const response = await api.post(`/api/admin/events/${eventId}/incharge-invites/${inviteId}/resend`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Event Incharge registration (Public)
+export const validateEventInchargeInvite = async (token) => {
+  try {
+    const response = await api.get('/api/event-incharge/invites/validate', { params: { token } });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const registerEventInchargeFromInvite = async (payload) => {
+  try {
+    const response = await api.post('/api/event-incharge/register', payload);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const getEventInchargeAssignedEvents = async () => {
+  try {
+    const response = await api.get('/api/event-incharge/me/assigned-events');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 // Get user's assigned events
 export const getMyAssignedEvents = async () => {
   try {
