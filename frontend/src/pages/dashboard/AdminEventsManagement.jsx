@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, getEventAssignments, updateEventPermissions, getAllUsers, createEventInchargeInvite, getEventInchargeInvites, revokeEventInchargeInvite, resendEventInchargeInvite } from '../../api';
 import ParticipantsModal from '../../components/ParticipantsModal';
@@ -58,6 +58,7 @@ const AdminEventsManagement = () => {
   const [sendingInvite, setSendingInvite] = useState(false);
   const [inviteMsg, setInviteMsg] = useState('');
   const [inviteErr, setInviteErr] = useState('');
+  const [inviteDebugLink, setInviteDebugLink] = useState('');
   const [permissionForm, setPermissionForm] = useState({
     eventId: '',
     role: 'INCHARGE',
@@ -82,6 +83,32 @@ const AdminEventsManagement = () => {
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const assignmentRef = useRef(null);
+
+  // Toasts (lightweight, no deps)
+  const [toasts, setToasts] = useState([]);
+  const pushToast = (type, title, message, ttlMs = 4500) => {
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setToasts((prev) => [...prev, { id, type, title, message }]);
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, ttlMs);
+  };
+
+  const getErrorMessage = (err, fallback = 'Something went wrong.') => {
+    // Axios-style error first
+    const apiMsg = err?.response?.data?.message || err?.response?.data?.error;
+    if (apiMsg) return apiMsg;
+    if (err?.message) return err.message;
+    if (typeof err === 'string') return err;
+    return fallback;
+  };
+
+  const toastColors = useMemo(() => ({
+    success: 'border-green-200 bg-green-50 text-green-900',
+    error: 'border-red-200 bg-red-50 text-red-900',
+    info: 'border-blue-200 bg-blue-50 text-blue-900',
+    warning: 'border-amber-200 bg-amber-50 text-amber-900'
+  }), []);
 
   // Load analytics when results tab is opened
   useEffect(() => {
@@ -111,6 +138,29 @@ const AdminEventsManagement = () => {
     fetchGlobalSettings();
     fetchAllUsers();
   }, []);
+
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      pushToast('success', 'Copied', 'Link copied to clipboard.');
+    } catch (e) {
+      // fallback
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        pushToast('success', 'Copied', 'Link copied to clipboard.');
+      } catch {
+        pushToast('error', 'Copy failed', 'Please copy the link manually.');
+      }
+    }
+  };
 
   useEffect(() => {
     // Update filters when URL query parameters change
@@ -173,8 +223,9 @@ const AdminEventsManagement = () => {
       }
     } catch (error) {
       console.error('❌ Error fetching events:', error);
-      const errorMessage = error?.message || error?.response?.data?.message || 'Failed to load events. Please try again.';
+      const errorMessage = getErrorMessage(error, 'Failed to load events. Please try again.');
       setError(errorMessage);
+      pushToast('error', 'Failed to load events', errorMessage);
       setEvents([]); // Clear events on error
     } finally {
       setLoading(false);
@@ -260,12 +311,17 @@ const AdminEventsManagement = () => {
       const res = await updateGlobalPaymentSettings(payload);
       if (res?.success) {
         setGlobalMessage('Global payment settings saved.');
+        pushToast('success', 'Saved', 'Global payment settings updated.');
       } else {
-        setGlobalError(res?.message || 'Failed to save global payment settings.');
+        const msg = res?.message || 'Failed to save global payment settings.';
+        setGlobalError(msg);
+        pushToast('error', 'Save failed', msg);
       }
     } catch (err) {
       console.error('Error saving global payment settings:', err);
-      setGlobalError(err?.message || 'Failed to save global payment settings.');
+      const msg = getErrorMessage(err, 'Failed to save global payment settings.');
+      setGlobalError(msg);
+      pushToast('error', 'Save failed', msg);
     } finally {
       setSavingGlobal(false);
     }
@@ -407,6 +463,7 @@ const AdminEventsManagement = () => {
     e.preventDefault();
     setInviteMsg('');
     setInviteErr('');
+    setInviteDebugLink('');
 
     if (!assignmentForm.eventId) return setInviteErr('Please select an event first.');
     if (!inchargeInviteForm.email.trim()) return setInviteErr('Email is required.');
@@ -432,19 +489,26 @@ const AdminEventsManagement = () => {
         const emailSent = res?.data?.emailSent;
         const regLink = res?.data?.registrationLink;
         if (emailSent === false && regLink) {
-          setInviteMsg('Email not sent. Copy the registration link below (non-production).');
+          setInviteMsg('Email not sent. Use the registration link below (non-production).');
+          setInviteDebugLink(regLink);
+          pushToast('warning', 'Email not sent', 'Email service not configured. Use the manual registration link.');
         } else {
           setInviteMsg(res.message || 'Invite sent.');
+          pushToast('success', 'Invite sent', `Invite sent to ${inchargeInviteForm.email.trim()}`);
         }
         setInchargeInviteForm(prev => ({ ...prev, email: '' }));
         await loadInchargeInvites(assignmentForm.eventId);
         await loadEventAssignments(assignmentForm.eventId);
         setTimeout(() => setInviteMsg(''), 5000);
       } else {
-        setInviteErr(res?.message || 'Failed to send invite.');
+        const msg = res?.message || 'Failed to send invite.';
+        setInviteErr(msg);
+        pushToast('error', 'Invite failed', msg);
       }
     } catch (err) {
-      setInviteErr(err?.message || 'Failed to send invite.');
+      const msg = getErrorMessage(err, 'Failed to send invite.');
+      setInviteErr(msg);
+      pushToast('error', 'Invite failed', msg);
     }
     finally {
       setSendingInvite(false);
@@ -478,13 +542,22 @@ const AdminEventsManagement = () => {
       const res = await resendEventInchargeInvite(assignmentForm.eventId, inviteId);
       if (res?.success) {
         setInviteMsg('Invite resent.');
+        if (res?.data?.emailSent === false && res?.data?.registrationLink) {
+          setInviteDebugLink(res.data.registrationLink);
+          pushToast('warning', 'Email not sent', 'Resend succeeded but email was not sent. Use manual link.');
+        } else {
+          pushToast('success', 'Invite resent', 'Invite email resent successfully.');
+        }
         await loadInchargeInvites(assignmentForm.eventId);
         setTimeout(() => setInviteMsg(''), 5000);
       } else {
         setInviteErr(res?.message || 'Failed to resend invite.');
+        pushToast('error', 'Resend failed', res?.message || 'Failed to resend invite.');
       }
     } catch (err) {
-      setInviteErr(err?.message || 'Failed to resend invite.');
+      const msg = getErrorMessage(err, 'Failed to resend invite.');
+      setInviteErr(msg);
+      pushToast('error', 'Resend failed', msg);
     }
   };
 
@@ -495,13 +568,17 @@ const AdminEventsManagement = () => {
       const res = await revokeEventInchargeInvite(assignmentForm.eventId, inviteId);
       if (res?.success) {
         setInviteMsg('Invite revoked.');
+        pushToast('info', 'Invite revoked', 'Invite was revoked.');
         await loadInchargeInvites(assignmentForm.eventId);
         setTimeout(() => setInviteMsg(''), 5000);
       } else {
         setInviteErr(res?.message || 'Failed to revoke invite.');
+        pushToast('error', 'Revoke failed', res?.message || 'Failed to revoke invite.');
       }
     } catch (err) {
-      setInviteErr(err?.message || 'Failed to revoke invite.');
+      const msg = getErrorMessage(err, 'Failed to revoke invite.');
+      setInviteErr(msg);
+      pushToast('error', 'Revoke failed', msg);
     }
   };
 
@@ -634,15 +711,19 @@ const AdminEventsManagement = () => {
           `✓ Permissions saved for ${permissionForm.role} role on "${selectedEvent?.name || 'Event'}". ` +
           `Granted: ${permissionsList.join(', ')}`
         );
+        pushToast('success', 'Permissions saved', `Granted: ${permissionsList.join(', ')}`);
         // Clear success message after 5 seconds
         setTimeout(() => setPermissionMsg(''), 5000);
       } else {
-        setPermissionErr(res?.message || 'Failed to save permissions.');
+        const msg = res?.message || 'Failed to save permissions.';
+        setPermissionErr(msg);
+        pushToast('error', 'Save failed', msg);
       }
     } catch (err) {
       console.error('Permission error:', err);
-      const errorMsg = err?.response?.data?.message || err?.message || 'Failed to save permissions.';
-      setPermissionErr(errorMsg);
+      const msg = getErrorMessage(err, 'Failed to save permissions.');
+      setPermissionErr(msg);
+      pushToast('error', 'Save failed', msg);
     }
   };
 
@@ -658,10 +739,11 @@ const AdminEventsManagement = () => {
             event.id === eventId ? { ...event, status: response.data.event.status } : event
           )
         );
+        pushToast('success', 'Event updated', `Event has been ${action.toLowerCase()}d.`);
       }
     } catch (error) {
       console.error('Error moderating event:', error);
-      alert(error.response?.data?.message || 'Failed to moderate event');
+      pushToast('error', 'Action failed', getErrorMessage(error, 'Failed to moderate event.'));
     } finally {
       setModeratingEventId(null);
     }
@@ -1812,6 +1894,18 @@ const AdminEventsManagement = () => {
 
   return (
     <>
+    {/* Toast stack */}
+    <div className="fixed top-4 right-4 z-[60] space-y-2 w-[360px] max-w-[90vw]">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className={`border rounded-xl shadow-lg p-4 ${toastColors[t.type] || toastColors.info}`}
+        >
+          <div className="font-semibold text-sm">{t.title}</div>
+          {t.message ? <div className="text-sm mt-1 opacity-90">{t.message}</div> : null}
+        </div>
+      ))}
+    </div>
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
@@ -2026,8 +2120,8 @@ const AdminEventsManagement = () => {
                             <div key={assignment.id} className="flex items-start justify-between gap-3 p-2 bg-white rounded border border-gray-200">
                               <div className="flex-1">
                                 <div className="flex items-center gap-2">
-                                  <div className="text-sm font-medium text-gray-900">
-                                    {assignment.user?.name || assignment.user?.email || 'Unknown User'}
+                                <div className="text-sm font-medium text-gray-900">
+                                  {assignment.user?.name || assignment.user?.email || 'Unknown User'}
                                   </div>
                                   {assignment.role === 'INCHARGE' && assignment.isPointOfContact ? (
                                     <span className="inline-flex text-[11px] font-semibold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full">
@@ -2049,13 +2143,13 @@ const AdminEventsManagement = () => {
                                     Make POC
                                   </button>
                                 ) : null}
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveAssignment(assignmentForm.eventId, assignment.id)}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveAssignment(assignmentForm.eventId, assignment.id)}
                                   className="text-xs text-red-600 hover:text-red-800 font-medium"
-                                >
-                                  Remove
-                                </button>
+                              >
+                                Remove
+                              </button>
                               </div>
                             </div>
                           ))}
@@ -2107,7 +2201,7 @@ const AdminEventsManagement = () => {
                 {assignmentForm.eventId && (
                   <div className="p-4 border rounded-lg bg-indigo-50 border-indigo-200">
                     <div className="flex items-center justify-between mb-2">
-                      <div>
+                <div>
                         <h4 className="text-sm font-semibold text-indigo-900">Invite Event Vendor (Incharge)</h4>
                         <p className="text-xs text-indigo-800">
                           Admin assigns by <strong>email</strong>. The invite email contains a registration link for KYC/vendor details and password setup.
@@ -2120,17 +2214,17 @@ const AdminEventsManagement = () => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="md:col-span-2">
                           <label className="block text-xs font-medium text-indigo-900 mb-1">Incharge Email</label>
-                          <input
+                    <input
                             type="email"
                             value={inchargeInviteForm.email}
                             onChange={(e) => setInchargeInviteForm(prev => ({ ...prev, email: e.target.value }))}
                             placeholder="vendor.person@example.com"
                             className="w-full px-3 py-2 border border-indigo-200 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                           />
-                        </div>
+                          </div>
 
                         <label className="flex items-center gap-2 text-xs text-indigo-900">
-                          <input
+                        <input
                             type="checkbox"
                             checked={!!inchargeInviteForm.isPointOfContact}
                             onChange={(e) => setInchargeInviteForm(prev => ({ ...prev, isPointOfContact: e.target.checked }))}
@@ -2191,17 +2285,27 @@ const AdminEventsManagement = () => {
                         {inviteErr ? (
                           <div className="text-red-700 text-sm bg-red-50 p-2 rounded">{inviteErr}</div>
                         ) : null}
-                      </div>
-
-                      {/* Non-production fallback: show copy link if backend returns it */}
-                      {inviteMsg && inviteMsg.includes('Copy the registration link') && (
-                        <div className="text-xs bg-white border border-indigo-200 rounded-lg p-3">
-                          <div className="font-semibold text-indigo-900 mb-1">Registration link</div>
-                          <div className="text-gray-700 break-all">
-                            (Check the API response in Network tab for <code className="px-1 bg-gray-100 rounded">data.registrationLink</code>)
                           </div>
-                        </div>
-                      )}
+
+                      {/* Non-production fallback: show manual registration link */}
+                      {inviteDebugLink ? (
+                        <div className="text-xs bg-white border border-indigo-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="font-semibold text-indigo-900">Registration link</div>
+                      <button
+                        type="button"
+                              onClick={() => copyToClipboard(inviteDebugLink)}
+                              className="text-xs font-semibold text-indigo-700 hover:text-indigo-900"
+                      >
+                              Copy
+                      </button>
+                  </div>
+                          <div className="text-gray-700 break-all mt-2 font-mono">{inviteDebugLink}</div>
+                          <div className="text-gray-500 mt-2">
+                            This appears only when email sending fails in non-production.
+                </div>
+                </div>
+                      ) : null}
                     </form>
 
                     <div className="mt-4">
@@ -2237,14 +2341,14 @@ const AdminEventsManagement = () => {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
-                                <button
+                  <button
                                   type="button"
                                   onClick={() => handleResendInvite(inv.id)}
                                   disabled={!!inv.usedAt || !!inv.revokedAt}
                                   className="text-xs text-indigo-700 hover:text-indigo-900 disabled:opacity-50"
                                 >
                                   Resend
-                                </button>
+                  </button>
                                 <button
                                   type="button"
                                   onClick={() => handleRevokeInvite(inv.id)}
@@ -2253,13 +2357,13 @@ const AdminEventsManagement = () => {
                                 >
                                   Revoke
                                 </button>
-                              </div>
+                        </div>
                             </div>
                           ))}
                         </div>
                       )}
                     </div>
-                  </div>
+                </div>
                 )}
               </div>
             </div>
