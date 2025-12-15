@@ -62,7 +62,7 @@ const AdminEventsManagement = () => {
   const [permissionLoading, setPermissionLoading] = useState(false);
   const [permissionForm, setPermissionForm] = useState({
     eventId: '',
-    userId: '',
+    userId: '', // legacy; kept for backwards compatibility with existing UI state resets
     resultUpload: false,
     studentManagement: false,
     certificateManagement: false,
@@ -70,6 +70,7 @@ const AdminEventsManagement = () => {
   });
   const [permissionMsg, setPermissionMsg] = useState('');
   const [permissionErr, setPermissionErr] = useState('');
+  const [permissionIncharges, setPermissionIncharges] = useState([]); // [{ userId, label, isPointOfContact, permissions, saving, error, msg }]
   const [allUsers, setAllUsers] = useState([]);
   const [userSearch, setUserSearch] = useState('');
   const [userListLimit, setUserListLimit] = useState(200);
@@ -92,6 +93,9 @@ const AdminEventsManagement = () => {
   const [bulkInviteReport, setBulkInviteReport] = useState(null); // {total, sent, assigned, failed, rows:[]}
   const [bulkInviteRows, setBulkInviteRows] = useState([]); // [{ email, isPointOfContact, permissions }]
   const [bulkInviteFileName, setBulkInviteFileName] = useState('');
+  const [bulkInvitePrepared, setBulkInvitePrepared] = useState([]); // verified rows to send
+  const [bulkInviteStats, setBulkInviteStats] = useState(null); // { raw, deduped, invalid, ready, duplicatesRemoved }
+  const [bulkInviteInvalidEmails, setBulkInviteInvalidEmails] = useState([]); // string[]
 
   // Cache incharge assignments per event for quick UI rendering
   const [eventIncharges, setEventIncharges] = useState({}); // { [eventId]: [{ userId, name, email, uniqueId, isPointOfContact }] }
@@ -465,17 +469,7 @@ const AdminEventsManagement = () => {
     }
   };
 
-  const handlePermissionSubmitWithClose = async (e) => {
-    await handlePermissionSubmit(e);
-    // Close modal after successful save (with delay to show success message)
-    if (permissionMsg && !permissionErr) {
-      setTimeout(() => {
-        if (permissionMsg && !permissionErr) {
-          setShowPermissionModal(false);
-        }
-      }, 2000);
-    }
-  };
+  // Legacy helper removed: permissions are saved per-incharge row.
 
   const handleAssignClick = async (eventId) => {
     setAssignmentForm(prev => ({ ...prev, eventId }));
@@ -565,6 +559,8 @@ const AdminEventsManagement = () => {
     return Array.from(new Set(parts.map(p => p.toLowerCase())));
   };
 
+  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
+
   const downloadInchargeInviteTemplateCsv = () => {
     // Header-only template (no sample data)
     const header = 'email,isPointOfContact,resultUpload,studentManagement,certificateManagement,feeManagement\n';
@@ -619,6 +615,95 @@ const AdminEventsManagement = () => {
     return { rows: out, error: '' };
   };
 
+  const verifyBulkInvite = (sourceRows, rawCountForStats = null) => {
+    const raw = Array.isArray(sourceRows) ? sourceRows : [];
+    const rawCount = Number.isFinite(rawCountForStats) ? rawCountForStats : raw.length;
+
+    // Dedup by email
+    const uniq = [];
+    const seen = new Set();
+    for (const r of raw) {
+      const em = String(r.email || '').toLowerCase().trim();
+      if (!em || seen.has(em)) continue;
+      seen.add(em);
+      uniq.push({ ...r, email: em });
+    }
+
+    const invalidEmails = uniq.filter(r => !isValidEmail(r.email)).map(r => r.email);
+    const ready = uniq.filter(r => isValidEmail(r.email));
+
+    setBulkInviteStats({
+      raw: rawCount,
+      deduped: uniq.length,
+      invalid: invalidEmails.length,
+      ready: ready.length,
+      duplicatesRemoved: Math.max(0, rawCount - uniq.length)
+    });
+    setBulkInvitePrepared(ready);
+    setBulkInviteInvalidEmails(invalidEmails);
+
+    return { invalidEmails, ready };
+  };
+
+  const removeBulkInviteEmail = (email) => {
+    const em = String(email || '').toLowerCase().trim();
+    if (!em) return;
+
+    const nextRows = (bulkInviteRows || []).filter(
+      (r) => String(r.email || '').toLowerCase().trim() !== em
+    );
+    setBulkInviteRows(nextRows);
+
+    // Keep textarea in sync (remove exact email lines)
+    const nextText = String(bulkInviteText || '')
+      .split(/[\r\n]+/g)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter((s) => s.toLowerCase().trim() !== em)
+      .join('\n');
+    setBulkInviteText(nextText);
+
+    verifyBulkInvite(nextRows, nextRows.length);
+  };
+
+  const removeAllInvalidBulkInviteEmails = () => {
+    if (!bulkInviteInvalidEmails?.length) return;
+    const invalidSet = new Set(bulkInviteInvalidEmails.map((e) => String(e).toLowerCase().trim()));
+
+    const nextRows = (bulkInviteRows || []).filter(
+      (r) => !invalidSet.has(String(r.email || '').toLowerCase().trim())
+    );
+    setBulkInviteRows(nextRows);
+
+    const nextText = String(bulkInviteText || '')
+      .split(/[\r\n]+/g)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter((s) => !invalidSet.has(s.toLowerCase().trim()))
+      .join('\n');
+    setBulkInviteText(nextText);
+
+    verifyBulkInvite(nextRows, nextRows.length);
+  };
+
+  const downloadBulkInviteReportCsv = () => {
+    if (!bulkInviteReport?.rows?.length) return;
+    const header = 'email,status,message\n';
+    const lines = bulkInviteReport.rows.map(r => {
+      const em = String(r.email || '').replace(/"/g, '""');
+      const st = r.ok ? (r.assigned ? 'ASSIGNED' : 'INVITED') : 'FAILED';
+      const msg = String(r.message || '').replace(/"/g, '""');
+      return `"${em}","${st}","${msg}"`;
+    });
+    const blob = new Blob([header + lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `incharge_bulk_invite_report_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
   const handleBulkInvite = async () => {
     setInviteMsg('');
     setInviteErr('');
@@ -630,13 +715,9 @@ const AdminEventsManagement = () => {
       return;
     }
 
-    const fallbackEmails = parseBulkInviteEmails(bulkInviteText);
-    const inputRows = bulkInviteRows.length
-      ? bulkInviteRows
-      : fallbackEmails.map(email => ({ email, isPointOfContact: false, permissions: {} }));
-
+    const inputRows = bulkInvitePrepared;
     if (!inputRows.length) {
-      setInviteErr('Paste emails or upload a CSV first.');
+      setInviteErr('Please click “Verify & Preview” first (and fix any invalid emails).');
       return;
     }
     if (inputRows.length > 200) {
@@ -800,40 +881,126 @@ const AdminEventsManagement = () => {
     }
   };
 
-  const handlePermissionClick = async (eventId, userId = '') => {
-    setPermissionForm(prev => ({ ...prev, eventId, userId }));
+  const loadAllInchargePermissionsForEvent = async (eventId) => {
+    if (!eventId) return;
+    try {
+      setPermissionLoading(true);
+      setPermissionErr('');
+      setPermissionMsg('');
+      setPermissionIncharges([]);
+
+      // Ensure assignments are loaded
+      const aRes = await getEventAssignments(eventId);
+      const assignments = aRes?.success ? (aRes.data || []) : [];
+      setExistingAssignments(assignments);
+
+      const incharges = assignments
+        .filter(a => a.role === 'INCHARGE' && a.user?.role === 'EVENT_INCHARGE')
+        .map(a => ({
+          userId: a.userId,
+          label: a.user?.name || a.user?.email || a.user?.uniqueId || 'Incharge',
+          email: a.user?.email || '',
+          uniqueId: a.user?.uniqueId || '',
+          isPointOfContact: !!a.isPointOfContact
+        }));
+
+      if (!incharges.length) {
+        setPermissionIncharges([]);
+        return;
+      }
+
+      const permsSettled = await Promise.allSettled(
+        incharges.map(async (i) => {
+          const res = await getEventInchargePermissions(eventId, i.userId);
+          const p = res?.success ? (res.data?.permissions || {}) : {};
+          return {
+            ...i,
+            permissions: {
+              resultUpload: !!p.resultUpload,
+              studentManagement: !!p.studentManagement,
+              certificateManagement: !!p.certificateManagement,
+              feeManagement: !!p.feeManagement
+            },
+            saving: false,
+            error: '',
+            msg: ''
+          };
+        })
+      );
+
+      const rows = permsSettled.map((r, idx) => {
+        if (r.status === 'fulfilled') return r.value;
+        const i = incharges[idx];
+        return {
+          ...i,
+          permissions: { resultUpload: false, studentManagement: false, certificateManagement: false, feeManagement: false },
+          saving: false,
+          error: 'Failed to load permissions.',
+          msg: ''
+        };
+      });
+
+      setPermissionIncharges(rows);
+    } catch (err) {
+      const msg = getErrorMessage(err, 'Failed to load incharge permissions.');
+      setPermissionErr(msg);
+      setPermissionIncharges([]);
+    } finally {
+      setPermissionLoading(false);
+    }
+  };
+
+  const updatePermissionRow = (userId, patch) => {
+    setPermissionIncharges((prev) => prev.map((r) => (r.userId === userId ? { ...r, ...patch } : r)));
+  };
+
+  const togglePermission = (userId, key, value) => {
+    setPermissionIncharges((prev) =>
+      prev.map((r) =>
+        r.userId === userId
+          ? { ...r, permissions: { ...(r.permissions || {}), [key]: value }, error: '', msg: '' }
+          : r
+      )
+    );
+  };
+
+  const saveInchargePermissionsRow = async (eventId, userId) => {
+    const row = permissionIncharges.find(r => r.userId === userId);
+    if (!row) return;
+    const p = row.permissions || {};
+    const hasAny = p.resultUpload || p.studentManagement || p.certificateManagement || p.feeManagement;
+    if (!hasAny) {
+      updatePermissionRow(userId, { error: 'Select at least one permission.', msg: '' });
+      return;
+    }
+    try {
+      updatePermissionRow(userId, { saving: true, error: '', msg: '' });
+      const res = await updateEventInchargePermissions(eventId, userId, {
+        resultUpload: !!p.resultUpload,
+        studentManagement: !!p.studentManagement,
+        certificateManagement: !!p.certificateManagement,
+        feeManagement: !!p.feeManagement
+      });
+      if (res?.success) {
+        updatePermissionRow(userId, { saving: false, msg: 'Saved.', error: '' });
+        pushToast('success', 'Incharge permissions saved', row.email || row.label);
+      } else {
+        updatePermissionRow(userId, { saving: false, error: res?.message || 'Failed to save.', msg: '' });
+      }
+    } catch (err) {
+      updatePermissionRow(userId, { saving: false, error: getErrorMessage(err, 'Failed to save.'), msg: '' });
+    }
+  };
+
+  const handlePermissionClick = async (eventId) => {
+    setPermissionForm(prev => ({ ...prev, eventId }));
     setPermissionEventIdSearch('');
     setPermissionMsg('');
     setPermissionErr('');
     setPermissionLoading(false);
     // Open the modal
     setShowPermissionModal(true);
-    // Load assignments so we can select an incharge
-    await loadEventAssignments(eventId);
-
-    // If a specific incharge is provided, load existing permissions into the form
-    if (eventId && userId) {
-      try {
-        setPermissionLoading(true);
-        const res = await getEventInchargePermissions(eventId, userId);
-        if (res?.success) {
-          const p = res.data?.permissions || {};
-          setPermissionForm(prev => ({
-            ...prev,
-            resultUpload: !!p.resultUpload,
-            studentManagement: !!p.studentManagement,
-            certificateManagement: !!p.certificateManagement,
-            feeManagement: !!p.feeManagement
-          }));
-        }
-      } catch (err) {
-        const msg = getErrorMessage(err, 'Failed to load incharge permissions.');
-        setPermissionErr(msg);
-        pushToast('error', 'Load failed', msg);
-      } finally {
-        setPermissionLoading(false);
-      }
-    }
+    await loadAllInchargePermissionsForEvent(eventId);
   };
 
   // Auto-select event by uniqueId search
@@ -891,62 +1058,7 @@ const AdminEventsManagement = () => {
     }
   };
 
-  const handlePermissionSubmit = async (e) => {
-    e.preventDefault();
-    setPermissionMsg('');
-    setPermissionErr('');
-    if (!permissionForm.eventId) {
-      setPermissionErr('Please select an event.');
-      return;
-    }
-
-    if (!permissionForm.userId) {
-      setPermissionErr('Please select an Incharge.');
-      return;
-    }
-    
-    // Check if at least one permission is selected
-    const hasAnyPermission = permissionForm.resultUpload || 
-                            permissionForm.studentManagement || 
-                            permissionForm.certificateManagement || 
-                            permissionForm.feeManagement;
-    
-    if (!hasAnyPermission) {
-      setPermissionErr('Please select at least one permission.');
-      return;
-    }
-
-    try {
-      const permissionsList = [];
-      if (permissionForm.resultUpload) permissionsList.push('Result Upload');
-      if (permissionForm.studentManagement) permissionsList.push('Student Management');
-      if (permissionForm.certificateManagement) permissionsList.push('Certificate Management');
-      if (permissionForm.feeManagement) permissionsList.push('Fee Management');
-
-      const res = await updateEventInchargePermissions(permissionForm.eventId, permissionForm.userId, {
-        resultUpload: !!permissionForm.resultUpload,
-        studentManagement: !!permissionForm.studentManagement,
-        certificateManagement: !!permissionForm.certificateManagement,
-        feeManagement: !!permissionForm.feeManagement
-      });
-      if (res?.success) {
-        const selectedEvent = events.find(e => e.id === permissionForm.eventId);
-        const selectedUser = existingAssignments.find(a => a.userId === permissionForm.userId)?.user;
-        setPermissionMsg(`✓ Incharge permissions saved for "${selectedEvent?.name || 'Event'}" • ${selectedUser?.name || selectedUser?.email || 'Incharge'}`);
-        pushToast('success', 'Incharge permissions saved', `Granted: ${permissionsList.join(', ') || 'None'}`);
-        setTimeout(() => setPermissionMsg(''), 5000);
-      } else {
-        const msg = res?.message || 'Failed to save permissions.';
-        setPermissionErr(msg);
-        pushToast('error', 'Save failed', msg);
-      }
-    } catch (err) {
-      console.error('Permission error:', err);
-      const msg = getErrorMessage(err, 'Failed to save permissions.');
-      setPermissionErr(msg);
-      pushToast('error', 'Save failed', msg);
-    }
-  };
+  // Legacy single-submit handler removed: the modal now edits all incharges per event with per-row saves.
 
   const handleModerateEvent = async (eventId, action) => {
     try {
@@ -2313,6 +2425,9 @@ const AdminEventsManagement = () => {
                     setBulkInviteText('');
                     setBulkInviteRows([]);
                     setBulkInviteFileName('');
+                    setBulkInvitePrepared([]);
+                    setBulkInviteStats(null);
+                    setBulkInviteInvalidEmails([]);
                     setBulkInviting(false);
                     setBulkInviteReport(null);
                     setInchargeInviteForm({
@@ -2549,15 +2664,15 @@ const AdminEventsManagement = () => {
                         <div className="mt-2 bg-white border border-indigo-200 rounded-lg p-3">
                           <div className="text-xs text-gray-700">
                             Upload CSV or paste emails (comma/newline separated). CSV rows can optionally override permissions per email.
-                          </div>
+                </div>
                           <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2">
-                            <button
+                  <button
                               type="button"
                               onClick={downloadInchargeInviteTemplateCsv}
                               className="px-3 py-2 rounded-md border text-xs font-semibold"
-                            >
+                  >
                               Download CSV Template
-                            </button>
+                  </button>
                             <label className="text-xs text-gray-700 flex items-center gap-2">
                               <input
                                 type="file"
@@ -2569,6 +2684,9 @@ const AdminEventsManagement = () => {
                                   setInviteErr('');
                                   setBulkInviteReport(null);
                                   setBulkInviteFileName(f.name || 'upload.csv');
+                                  setBulkInvitePrepared([]);
+                                  setBulkInviteStats(null);
+                                  setBulkInviteInvalidEmails([]);
                                   try {
                                     const text = await f.text();
                                     const parsed = parseInviteCsv(text);
@@ -2577,18 +2695,14 @@ const AdminEventsManagement = () => {
                                       setBulkInviteRows([]);
                                       return;
                                     }
-                                    // De-dupe by email
-                                    const uniq = [];
-                                    const seen = new Set();
-                                    for (const r of parsed.rows) {
-                                      const em = String(r.email || '').toLowerCase().trim();
-                                      if (!em || seen.has(em)) continue;
-                                      seen.add(em);
-                                      uniq.push(r);
+                                    setBulkInviteRows(parsed.rows);
+                                    setBulkInviteText(parsed.rows.map(r => r.email).join('\n'));
+                                    const { invalidEmails, ready } = verifyBulkInvite(parsed.rows, parsed.rows.length);
+                                    if (invalidEmails.length) {
+                                      pushToast('warning', 'CSV loaded with issues', `Loaded ${ready.length} valid email(s). Invalid: ${invalidEmails.length}.`);
+                                    } else {
+                                      pushToast('success', 'CSV verified', `Loaded ${ready.length} valid email(s) from ${f.name}.`);
                                     }
-                                    setBulkInviteRows(uniq);
-                                    setBulkInviteText(uniq.map(r => r.email).join('\n'));
-                                    pushToast('success', 'CSV loaded', `Loaded ${uniq.length} email(s) from ${f.name}.`);
                                   } catch (err) {
                                     const msg = getErrorMessage(err, 'Failed to read CSV.');
                                     setInviteErr(msg);
@@ -2598,7 +2712,7 @@ const AdminEventsManagement = () => {
                               />
                               <span>{bulkInviteFileName ? `Loaded: ${bulkInviteFileName}` : 'Choose CSV file'}</span>
                             </label>
-                          </div>
+                        </div>
                           <textarea
                             value={bulkInviteText}
                             onChange={(e) => setBulkInviteText(e.target.value)}
@@ -2610,12 +2724,99 @@ const AdminEventsManagement = () => {
 
                           <div className="mt-2 flex items-center justify-between gap-3">
                             <div className="text-xs text-gray-600">
+                              {bulkInviteStats ? (
+                                <span>
+                                  Raw: <strong>{bulkInviteStats.raw}</strong> • Deduped: <strong>{bulkInviteStats.deduped}</strong> • Ready: <strong>{bulkInviteStats.ready}</strong> • Invalid: <strong>{bulkInviteStats.invalid}</strong>
+                                </span>
+                              ) : null}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // Verify from textarea (email-only) if no CSV rows are loaded
+                                if (bulkInviteRows.length) {
+                                  verifyBulkInvite(bulkInviteRows, bulkInviteRows.length);
+                                } else {
+                                  const emails = parseBulkInviteEmails(bulkInviteText);
+                                  const rows = emails.map(email => ({ email, isPointOfContact: false, permissions: {} }));
+                                  setBulkInviteRows(rows);
+                                  verifyBulkInvite(rows, emails.length);
+                                }
+                              }}
+                              className="px-3 py-2 rounded-md border text-xs font-semibold"
+                              disabled={bulkInviting}
+                            >
+                              Verify & Preview
+                            </button>
+                          </div>
+
+                          {bulkInviteStats?.invalid ? (
+                            bulkInviteStats.invalid > 0 ? (
+                              <div className="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div>Some emails are invalid. Fix/remove them before sending.</div>
+                                  <button
+                                    type="button"
+                                    onClick={removeAllInvalidBulkInviteEmails}
+                                    className="px-2 py-1 rounded border text-[11px] font-semibold"
+                                  >
+                                    Remove all invalid
+                                  </button>
+                                </div>
+                                {bulkInviteInvalidEmails?.length ? (
+                                  <div className="mt-2 space-y-1">
+                                    {bulkInviteInvalidEmails.slice(0, 12).map((em) => (
+                                      <div key={em} className="flex items-center justify-between gap-2">
+                                        <div className="break-all">{em}</div>
+                                        <button
+                                          type="button"
+                                          onClick={() => removeBulkInviteEmail(em)}
+                                          className="px-2 py-1 rounded border text-[11px] font-semibold"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    ))}
+                                    {bulkInviteInvalidEmails.length > 12 ? (
+                                      <div className="text-gray-600">…and {bulkInviteInvalidEmails.length - 12} more.</div>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null
+                          ) : null}
+
+                          {bulkInvitePrepared?.length ? (
+                            <div className="mt-2 text-xs bg-gray-50 border border-gray-200 rounded p-2">
+                              <div className="font-semibold text-gray-900 mb-1">Ready to invite (preview)</div>
+                              <div className="space-y-1">
+                                {bulkInvitePrepared.slice(0, 12).map((r) => (
+                                  <div key={r.email} className="flex items-center justify-between gap-2">
+                                    <div className="break-all">{r.email}</div>
+                                    <button
+                                      type="button"
+                                      onClick={() => removeBulkInviteEmail(r.email)}
+                                      className="px-2 py-1 rounded border text-[11px] font-semibold"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ))}
+                                {bulkInvitePrepared.length > 12 ? (
+                                  <div className="text-gray-600">…and {bulkInvitePrepared.length - 12} more.</div>
+                                ) : null}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          <div className="mt-2 flex items-center justify-between gap-3">
+                            <div className="text-xs text-gray-600">
                               {bulkInviteReport ? (
                                 <span>
                                   Total: <strong>{bulkInviteReport.total}</strong> • Sent: <strong>{bulkInviteReport.sent}</strong> • Assigned: <strong>{bulkInviteReport.assigned}</strong> • Failed: <strong>{bulkInviteReport.failed}</strong>
                                 </span>
                               ) : null}
-                            </div>
+                        </div>
                             <div className="flex gap-2">
                               <button
                                 type="button"
@@ -2624,6 +2825,9 @@ const AdminEventsManagement = () => {
                                   setBulkInviteRows([]);
                                   setBulkInviteFileName('');
                                   setBulkInviteReport(null);
+                                  setBulkInvitePrepared([]);
+                                  setBulkInviteStats(null);
+                                  setBulkInviteInvalidEmails([]);
                                 }}
                                 className="px-3 py-2 rounded-md border text-xs font-semibold"
                                 disabled={bulkInviting}
@@ -2634,7 +2838,7 @@ const AdminEventsManagement = () => {
                                 type="button"
                                 onClick={handleBulkInvite}
                                 className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold disabled:opacity-60"
-                                disabled={bulkInviting}
+                                disabled={bulkInviting || !bulkInvitePrepared.length}
                               >
                                 {bulkInviting ? 'Inviting...' : 'Send Bulk Invites'}
                               </button>
@@ -2657,12 +2861,23 @@ const AdminEventsManagement = () => {
                               ) : (
                                 <div className="text-green-700">All invites processed successfully.</div>
                               )}
+                              {bulkInviteReport?.rows?.length ? (
+                                <div className="mt-2">
+                                  <button
+                                    type="button"
+                                    onClick={downloadBulkInviteReportCsv}
+                                    className="px-3 py-2 rounded-md border text-xs font-semibold"
+                                  >
+                                    Download Report CSV
+                                  </button>
+                                </div>
+                              ) : null}
                             </div>
                           ) : null}
                         </div>
                       ) : null}
                     </div>
-
+                 
                     <div className="mt-4">
                       <div className="text-xs font-semibold text-indigo-900 mb-2">Invites</div>
                       {inchargeInvites.length === 0 ? (
@@ -2679,7 +2894,7 @@ const AdminEventsManagement = () => {
                                       POC
                                     </span>
                                   ) : null}
-                                </div>
+                </div>
                                 <div className="text-xs text-gray-600">
                                   Status:{' '}
                                   {inv.revokedAt ? 'REVOKED' : inv.usedAt ? 'USED' : inv.isExpired ? 'EXPIRED' : 'PENDING'} •
@@ -2742,6 +2957,9 @@ const AdminEventsManagement = () => {
                     setBulkInviteText('');
                     setBulkInviteRows([]);
                     setBulkInviteFileName('');
+                    setBulkInvitePrepared([]);
+                    setBulkInviteStats(null);
+                    setBulkInviteInvalidEmails([]);
                     setBulkInviting(false);
                     setBulkInviteReport(null);
                     setInchargeInviteForm({
@@ -2783,6 +3001,7 @@ const AdminEventsManagement = () => {
                     setPermissionEventIdSearch('');
                     setPermissionMsg('');
                     setPermissionErr('');
+                    setPermissionIncharges([]);
                   }}
                   className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-all"
                 >
@@ -2792,10 +3011,7 @@ const AdminEventsManagement = () => {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-6">
-                <form onSubmit={(e) => {
-                  e.preventDefault();
-                  handlePermissionSubmit(e);
-                }} className="space-y-3">
+                <div className="space-y-3">
             <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Event <span className="text-gray-500 text-xs">(or search by Event ID)</span>
@@ -2810,9 +3026,12 @@ const AdminEventsManagement = () => {
                       />
                       <select
                         value={permissionForm.eventId}
-                        onChange={(e) => {
-                          setPermissionForm(prev => ({ ...prev, eventId: e.target.value }));
+                        onChange={async (e) => {
+                          const eid = e.target.value;
+                          setPermissionForm(prev => ({ ...prev, eventId: eid }));
                           setPermissionEventIdSearch('');
+                          setPermissionIncharges([]);
+                          if (eid) await loadAllInchargePermissionsForEvent(eid);
                         }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       >
@@ -2830,63 +3049,47 @@ const AdminEventsManagement = () => {
                       )}
                     </div>
                 </div>
+                  {permissionErr ? (
+                    <div className="text-red-600 text-sm bg-red-50 p-2 rounded">{permissionErr}</div>
+                  ) : null}
+                  {permissionLoading ? (
+                    <div className="text-xs text-blue-600">Loading incharge permissions…</div>
+                  ) : null}
+
+                  {permissionForm.eventId ? (
+                    permissionIncharges.length === 0 && !permissionLoading ? (
+                      <div className="p-3 bg-gray-50 border rounded text-sm text-gray-700">
+                        No incharge assigned to this event yet.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {permissionIncharges.map((row) => (
+                          <div key={row.userId} className="p-3 border rounded-lg bg-white">
+                            <div className="flex items-start justify-between gap-3">
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Select Incharge</label>
-                    <select
-                      value={permissionForm.userId}
-                      onChange={async (e) => {
-                        const userId = e.target.value;
-                        setPermissionForm(prev => ({ ...prev, userId }));
-                        setPermissionMsg('');
-                        setPermissionErr('');
-                        if (!permissionForm.eventId || !userId) return;
-                        try {
-                          setPermissionLoading(true);
-                          const res = await getEventInchargePermissions(permissionForm.eventId, userId);
-                          if (res?.success) {
-                            const p = res.data?.permissions || {};
-                            setPermissionForm(prev => ({
-                              ...prev,
-                              resultUpload: !!p.resultUpload,
-                              studentManagement: !!p.studentManagement,
-                              certificateManagement: !!p.certificateManagement,
-                              feeManagement: !!p.feeManagement
-                            }));
-                          }
-                        } catch (err) {
-                          const msg = getErrorMessage(err, 'Failed to load incharge permissions.');
-                          setPermissionErr(msg);
-                          pushToast('error', 'Load failed', msg);
-                        } finally {
-                          setPermissionLoading(false);
-                        }
-                      }}
-                      className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      disabled={!permissionForm.eventId}
-                    >
-                      <option value="">{permissionForm.eventId ? 'Select incharge' : 'Select event first'}</option>
-                      {existingAssignments
-                        .filter(a => a.role === 'INCHARGE' && a.user?.role === 'EVENT_INCHARGE')
-                        .map(a => (
-                          <option key={a.userId} value={a.userId}>
-                            {a.user?.name || a.user?.email} {a.isPointOfContact ? '(POC)' : ''} {a.user?.uniqueId ? `[${a.user.uniqueId}]` : ''}
-                          </option>
-                        ))}
-                    </select>
-                    {permissionLoading ? (
-                      <div className="text-xs text-blue-600 mt-1">Loading current permissions...</div>
-                    ) : null}
-                    <div className="text-xs text-gray-500 mt-1">
-                      These permissions update the selected incharge only (per event).
-                    </div>
+                                <div className="text-sm font-semibold text-gray-900">
+                                  {row.label} {row.isPointOfContact ? <span className="ml-2 text-xs font-semibold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full">POC</span> : null}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {row.email ? row.email : null} {row.uniqueId ? <>• <span className="font-mono">{row.uniqueId}</span></> : null}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => saveInchargePermissionsRow(permissionForm.eventId, row.userId)}
+                                disabled={row.saving}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md text-xs font-semibold disabled:opacity-60"
+                              >
+                                {row.saving ? 'Saving…' : 'Save'}
+                              </button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                            <div className="mt-3 grid grid-cols-2 gap-3">
                   <label className="inline-flex items-center space-x-2 text-sm text-gray-700">
                     <input
                       type="checkbox"
-                      checked={permissionForm.resultUpload}
-                      onChange={(e) => setPermissionForm(prev => ({ ...prev, resultUpload: e.target.checked }))}
+                                  checked={!!row.permissions?.resultUpload}
+                                  onChange={(e) => togglePermission(row.userId, 'resultUpload', e.target.checked)}
                       className="h-4 w-4 text-indigo-600"
                     />
                     <span>Result Upload</span>
@@ -2894,8 +3097,8 @@ const AdminEventsManagement = () => {
                   <label className="inline-flex items-center space-x-2 text-sm text-gray-700">
                     <input
                       type="checkbox"
-                      checked={permissionForm.studentManagement}
-                      onChange={(e) => setPermissionForm(prev => ({ ...prev, studentManagement: e.target.checked }))}
+                                  checked={!!row.permissions?.studentManagement}
+                                  onChange={(e) => togglePermission(row.userId, 'studentManagement', e.target.checked)}
                       className="h-4 w-4 text-indigo-600"
                     />
                     <span>Student Management</span>
@@ -2903,8 +3106,8 @@ const AdminEventsManagement = () => {
                   <label className="inline-flex items-center space-x-2 text-sm text-gray-700">
                     <input
                       type="checkbox"
-                      checked={permissionForm.certificateManagement}
-                      onChange={(e) => setPermissionForm(prev => ({ ...prev, certificateManagement: e.target.checked }))}
+                                  checked={!!row.permissions?.certificateManagement}
+                                  onChange={(e) => togglePermission(row.userId, 'certificateManagement', e.target.checked)}
                       className="h-4 w-4 text-indigo-600"
                     />
                     <span>Certificate Management</span>
@@ -2912,41 +3115,34 @@ const AdminEventsManagement = () => {
                   <label className="inline-flex items-center space-x-2 text-sm text-gray-700">
                     <input
                       type="checkbox"
-                      checked={permissionForm.feeManagement}
-                      onChange={(e) => setPermissionForm(prev => ({ ...prev, feeManagement: e.target.checked }))}
+                                  checked={!!row.permissions?.feeManagement}
+                                  onChange={(e) => togglePermission(row.userId, 'feeManagement', e.target.checked)}
                       className="h-4 w-4 text-indigo-600"
                     />
                     <span>Fee Management</span>
                   </label>
                 </div>
 
-                <div className="flex items-center space-x-3 pt-1">
-                  <button
-                    type="submit"
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-60"
-                  >
-                    Save Permissions
-                  </button>
-                    {permissionMsg && (
-                      <div className="text-green-600 text-sm bg-green-50 p-2 rounded flex-1">
-                        {permissionMsg}
+                            {row.msg ? (
+                              <div className="mt-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">{row.msg}</div>
+                            ) : null}
+                            {row.error ? (
+                              <div className="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">{row.error}</div>
+                            ) : null}
                       </div>
-                    )}
-                    {permissionErr && (
-                      <div className="text-red-600 text-sm bg-red-50 p-2 rounded flex-1">
-                        {permissionErr}
+                        ))}
                       </div>
-                    )}
-                  </div>
+                    )
+                  ) : null}
                  
                   {/* Info Note */}
                   <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                     <p className="text-xs text-amber-800">
                       <strong>Important:</strong> These permissions are saved per <strong>incharge person</strong> for this event.
-                      Assign an incharge first, then select them here to view/update their permissions.
+                      Assign an incharge first, then edit each person’s permissions here.
                     </p>
-                  </div>
-              </form>
+                </div>
+                </div>
             </div>
               <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-xl flex justify-end flex-shrink-0">
                 <button
@@ -3228,29 +3424,15 @@ const AdminEventsManagement = () => {
                             {(() => {
                               const incharges = eventIncharges[event.id] || [];
                               if (!incharges.length) return null;
-                              if (incharges.length === 1) {
-                                const i = incharges[0];
-                                const label = i.name || i.email || 'Incharge';
-                                return (
-                                  <button
-                                    type="button"
-                                    onClick={() => handlePermissionClick(event.id, i.userId)}
-                                    className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-purple-700 transition-colors"
-                                    title={`Edit permissions for ${label}`}
-                                  >
-                                    Incharge Permissions: {label}
-                                  </button>
-                                );
-                              }
                               return (
-                                <button
-                                  type="button"
+                            <button
+                              type="button"
                                   onClick={() => handlePermissionClick(event.id)}
-                                  className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-purple-700 transition-colors"
-                                  title="Select an incharge to edit permissions"
-                                >
-                                  Incharge Permissions ({incharges.length})
-                                </button>
+                              className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-purple-700 transition-colors"
+                                  title="Edit permissions for assigned incharges"
+                            >
+                                  Incharge Permissions
+                            </button>
                               );
                             })()}
                           </div>
