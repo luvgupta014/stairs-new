@@ -1521,7 +1521,7 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
             e.id, e."uniqueId", e.name, e.description, e.sport, e.venue, e.address,
             e.city, e.state, e.latitude, e.longitude, e."startDate", e."endDate",
             e."maxParticipants", e."currentParticipants", e."eventFee", e.status,
-            e."adminNotes", e."createdAt", e."updatedAt", e."coachId",
+            e."adminNotes", e."createdAt", e."updatedAt", e."coachId", e.level,
             c.id as "coach_id", c.name as "coach_name", c."primarySport" as "coach_primarySport", c.city as "coach_city",
             u.id as "user_id", u."uniqueId" as "user_uniqueId", u.email as "user_email", u.phone as "user_phone", u.role as "user_role"
           FROM events e
@@ -1571,6 +1571,7 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
             address: row.address,
             city: row.city,
             state: row.state,
+            level: row.level || null,
             latitude: row.latitude ? parseFloat(row.latitude) : null,
             longitude: row.longitude ? parseFloat(row.longitude) : null,
             startDate: row.startDate,
