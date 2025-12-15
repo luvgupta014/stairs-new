@@ -151,6 +151,25 @@ export const updateEventPermissions = async (eventId, permissions) => {
   }
 };
 
+// Admin: Incharge (per-user) permissions
+export const getEventInchargePermissions = async (eventId, userId) => {
+  try {
+    const response = await api.get(`/api/admin/events/${eventId}/incharge-permissions/${userId}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const updateEventInchargePermissions = async (eventId, userId, permissions) => {
+  try {
+    const response = await api.put(`/api/admin/events/${eventId}/incharge-permissions/${userId}`, permissions);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 // Admin: Get single user details by uniqueId
 export const getUserByUniqueId = async (uniqueId) => {
   try {
@@ -1605,6 +1624,25 @@ export const getEventById = async (eventId) => {
     return response.data;
   } catch (error) {
     console.error('Get event by ID error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+// Event Fee Management (event-scoped; requires feeManagement permission)
+export const getEventFeeSettings = async (eventId) => {
+  try {
+    const response = await api.get(`/api/events/${eventId}/fees`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const updateEventFeeSettings = async (eventId, payload) => {
+  try {
+    const response = await api.put(`/api/events/${eventId}/fees`, payload);
+    return response.data;
+  } catch (error) {
     throw error.response?.data || error.message;
   }
 };

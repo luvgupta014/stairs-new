@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getStudentEventDetails, getEvents, registerForEvent, unregisterFromEvent, createStudentEventPaymentOrder } from '../../api';
+import { getStudentEventDetails, getEvents, registerForEvent, unregisterFromEvent, createStudentEventPaymentOrder, getEventFeeSettings, updateEventFeeSettings } from '../../api';
 import Spinner from '../../components/Spinner';
 import Button from '../../components/Button';
 import BackButton from '../../components/BackButton';
@@ -25,6 +25,20 @@ const EventDetails = () => {
   const [checkoutData, setCheckoutData] = useState(null);
   const [pendingEventId, setPendingEventId] = useState(null);
   const [payingEventId, setPayingEventId] = useState(null);
+
+  // Fee management (event-scoped permissions)
+  const [feePanelVisible, setFeePanelVisible] = useState(false);
+  const [feeLoading, setFeeLoading] = useState(false);
+  const [feeSaving, setFeeSaving] = useState(false);
+  const [feeError, setFeeError] = useState('');
+  const [feeMsg, setFeeMsg] = useState('');
+  const [feeForm, setFeeForm] = useState({
+    feeMode: 'GLOBAL',
+    eventFee: 0,
+    studentFeeEnabled: false,
+    studentFeeAmount: 0,
+    studentFeeUnit: 'PERSON'
+  });
 
   // Load Razorpay script
   const loadRazorpayScript = () => {
@@ -82,6 +96,43 @@ const EventDetails = () => {
       }
 
       console.log('✅ Event details loaded successfully');
+
+      // Fee settings: only show panel if user has feeManagement access (endpoint returns 403 otherwise)
+      // Skip for STUDENT (students should not manage event fees).
+      if (user?.role && user.role !== 'STUDENT') {
+        try {
+          setFeeLoading(true);
+          setFeeError('');
+          setFeeMsg('');
+          const feeRes = await getEventFeeSettings(eventId);
+          if (feeRes?.success && feeRes?.data) {
+            setFeePanelVisible(true);
+            const d = feeRes.data;
+            setFeeForm({
+              feeMode: d.feeMode || 'GLOBAL',
+              eventFee: Number(d.eventFee) || 0,
+              studentFeeEnabled: !!d.studentFeeEnabled,
+              studentFeeAmount: Number(d.studentFeeAmount) || 0,
+              studentFeeUnit: d.studentFeeUnit || 'PERSON'
+            });
+          } else {
+            setFeePanelVisible(false);
+          }
+        } catch (feeErr) {
+          // Hide panel on 403/401, show message for other errors
+          const status = feeErr?.statusCode || feeErr?.status || feeErr?.response?.status;
+          if (status === 401 || status === 403) {
+            setFeePanelVisible(false);
+          } else {
+            setFeePanelVisible(false);
+            setFeeError(feeErr?.message || 'Failed to load fee settings.');
+          }
+        } finally {
+          setFeeLoading(false);
+        }
+      } else {
+        setFeePanelVisible(false);
+      }
     } catch (err) {
       console.error('❌ Error loading event details:', err);
       console.error('❌ Error details:', {
@@ -92,6 +143,33 @@ const EventDetails = () => {
       setError(err.message || 'Failed to load event details');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const saveFeeSettings = async () => {
+    try {
+      setFeeSaving(true);
+      setFeeError('');
+      setFeeMsg('');
+      const payload = {
+        feeMode: feeForm.feeMode,
+        eventFee: Number(feeForm.eventFee) || 0,
+        studentFeeEnabled: !!feeForm.studentFeeEnabled,
+        studentFeeAmount: Number(feeForm.studentFeeAmount) || 0,
+        studentFeeUnit: feeForm.studentFeeUnit
+      };
+      const res = await updateEventFeeSettings(eventId, payload);
+      if (res?.success) {
+        setFeeMsg('Fee settings updated.');
+        await loadEventDetails();
+        setTimeout(() => setFeeMsg(''), 4000);
+      } else {
+        setFeeError(res?.message || 'Failed to update fee settings.');
+      }
+    } catch (e) {
+      setFeeError(e?.message || 'Failed to update fee settings.');
+    } finally {
+      setFeeSaving(false);
     }
   };
 
@@ -626,6 +704,104 @@ const EventDetails = () => {
                   )}
                 </dl>
               </div>
+
+              {/* Fee Management (Admin/Coach Owner/Incharge with feeManagement) */}
+              {feePanelVisible && (
+                <div className="px-6 py-4 border-t border-gray-200">
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Fee Settings</h3>
+                  <p className="text-sm text-gray-600">
+                    Visible only to users with <span className="font-semibold">Fee Management</span> permission for this event.
+                  </p>
+
+                  {feeError ? (
+                    <div className="mt-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                      {feeError}
+                    </div>
+                  ) : null}
+                  {feeMsg ? (
+                    <div className="mt-3 p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
+                      {feeMsg}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Fee Mode</label>
+                      <select
+                        value={feeForm.feeMode}
+                        onChange={(e) => setFeeForm((p) => ({ ...p, feeMode: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg"
+                      >
+                        <option value="GLOBAL">GLOBAL</option>
+                        <option value="EVENT">EVENT</option>
+                        <option value="DISABLED">DISABLED</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        EVENT requires a positive Event Fee.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Event Fee (₹)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={feeForm.eventFee}
+                        onChange={(e) => setFeeForm((p) => ({ ...p, eventFee: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg"
+                        disabled={feeForm.feeMode !== 'EVENT'}
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={!!feeForm.studentFeeEnabled}
+                          onChange={(e) => setFeeForm((p) => ({ ...p, studentFeeEnabled: e.target.checked }))}
+                        />
+                        Enable student participation fee (admin-created events)
+                      </label>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Student Fee Amount (₹)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={feeForm.studentFeeAmount}
+                        onChange={(e) => setFeeForm((p) => ({ ...p, studentFeeAmount: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg"
+                        disabled={!feeForm.studentFeeEnabled}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Student Fee Unit</label>
+                      <select
+                        value={feeForm.studentFeeUnit}
+                        onChange={(e) => setFeeForm((p) => ({ ...p, studentFeeUnit: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg"
+                        disabled={!feeForm.studentFeeEnabled}
+                      >
+                        <option value="PERSON">PERSON</option>
+                        <option value="TEAM">TEAM</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-end gap-2">
+                    <Button
+                      onClick={saveFeeSettings}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                      disabled={feeSaving || feeLoading}
+                    >
+                      {feeSaving ? 'Saving...' : 'Save Fee Settings'}
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Organizer Info */}
               <div className="px-6 py-4 border-t border-gray-200">

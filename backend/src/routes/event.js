@@ -1,8 +1,10 @@
 const express = require('express');
 const EventController = require('../controllers/eventController');
-const { authenticate, requireRole, requireStudent, requireCoach } = require('../utils/authMiddleware');
+const { authenticate, requireRole, requireStudent, requireCoach, checkEventPermission } = require('../utils/authMiddleware');
 const multer = require('multer');
 const path = require('path');
+const { successResponse, errorResponse } = require('../utils/helpers');
+const prisma = require('../utils/prismaClient');
 
 const router = express.Router();
 const eventController = new EventController();
@@ -106,6 +108,114 @@ router.get('/my-events',
 
 // Get specific event
 router.get('/:eventId', authenticate, eventController.getEventById.bind(eventController));
+
+/**
+ * Fee Management (event-scoped)
+ * Allows: Admin, coach who owns the event (via checkEventPermission coach bypass),
+ * or assigned user with per-user/role permissions including feeManagement.
+ */
+router.get('/:eventId/fees', authenticate, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    const has = await checkEventPermission({ user: req.user, eventId, permissionKey: 'feeManagement' });
+    if (!has) return res.status(403).json(errorResponse('Access denied. Fee management permission required.', 403));
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        name: true,
+        uniqueId: true,
+        feeMode: true,
+        eventFee: true,
+        coordinatorFee: true,
+        studentFeeEnabled: true,
+        studentFeeAmount: true,
+        studentFeeUnit: true,
+        createdByAdmin: true
+      }
+    });
+    if (!event) return res.status(404).json(errorResponse('Event not found.', 404));
+
+    res.json(successResponse(event, 'Event fee settings retrieved.'));
+  } catch (error) {
+    console.error('❌ Get event fee settings error:', error);
+    res.status(500).json(errorResponse('Failed to get event fee settings.', 500));
+  }
+});
+
+router.put('/:eventId/fees', authenticate, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    const has = await checkEventPermission({ user: req.user, eventId, permissionKey: 'feeManagement' });
+    if (!has) return res.status(403).json(errorResponse('Access denied. Fee management permission required.', 403));
+
+    const {
+      feeMode,
+      eventFee,
+      // NOTE: coordinatorFee is intentionally not editable here (business decision; keep admin-only)
+      studentFeeEnabled,
+      studentFeeAmount,
+      studentFeeUnit
+    } = req.body || {};
+
+    const updateData = {};
+    const validModes = ['GLOBAL', 'EVENT', 'DISABLED'];
+    if (feeMode !== undefined) {
+      const v = feeMode?.toString().toUpperCase();
+      if (!validModes.includes(v)) {
+        return res.status(400).json(errorResponse('feeMode must be one of GLOBAL, EVENT, DISABLED.', 400));
+      }
+      updateData.feeMode = v;
+    }
+
+    if (eventFee !== undefined) {
+      const n = Number(eventFee);
+      if (!Number.isFinite(n) || n < 0) return res.status(400).json(errorResponse('eventFee must be a non-negative number.', 400));
+      updateData.eventFee = n;
+    }
+
+    if (studentFeeEnabled !== undefined) {
+      updateData.studentFeeEnabled = !!studentFeeEnabled;
+    }
+
+    if (studentFeeAmount !== undefined) {
+      const n = Number(studentFeeAmount);
+      if (!Number.isFinite(n) || n < 0) return res.status(400).json(errorResponse('studentFeeAmount must be a non-negative number.', 400));
+      updateData.studentFeeAmount = n;
+    }
+
+    if (studentFeeUnit !== undefined) {
+      const unit = studentFeeUnit?.toString().toUpperCase();
+      const validUnits = ['PERSON', 'TEAM'];
+      if (!validUnits.includes(unit)) {
+        return res.status(400).json(errorResponse('studentFeeUnit must be PERSON or TEAM.', 400));
+      }
+      updateData.studentFeeUnit = unit;
+    }
+
+    // If feeMode is EVENT, ensure eventFee is present (either provided or already in DB)
+    if (updateData.feeMode === 'EVENT') {
+      const existing = await prisma.event.findUnique({ where: { id: eventId }, select: { eventFee: true } });
+      const effectiveFee = updateData.eventFee !== undefined ? updateData.eventFee : (existing?.eventFee || 0);
+      if (!effectiveFee || Number(effectiveFee) <= 0) {
+        return res.status(400).json(errorResponse('eventFee must be provided (> 0) when feeMode is EVENT.', 400));
+      }
+    }
+
+    const updated = await prisma.event.update({
+      where: { id: eventId },
+      data: updateData
+    });
+
+    res.json(successResponse(updated, 'Event fee settings updated.'));
+  } catch (error) {
+    console.error('❌ Update event fee settings error:', error);
+    res.status(500).json(errorResponse('Failed to update event fee settings.', 500));
+  }
+});
 
 // Create event (coaches, institutes, clubs only)
 router.post('/', 

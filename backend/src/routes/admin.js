@@ -5684,6 +5684,121 @@ router.get('/events/:eventId/verify-permission/:permissionKey', authenticate, as
 });
 
 /**
+ * Admin: Get per-incharge (per-user) permissions for an event.
+ * This is the "current flow" for EVENT_INCHARGE users.
+ */
+router.get('/events/:eventId/incharge-permissions/:userId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId, userId } = req.params;
+
+    const assigned = await prisma.eventAssignment.findFirst({
+      where: { eventId, userId, role: 'INCHARGE' },
+      select: { id: true, isPointOfContact: true }
+    });
+    if (!assigned) {
+      return res.status(404).json(errorResponse('User is not assigned as INCHARGE to this event.', 404));
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, role: true }
+    });
+    if (!user) return res.status(404).json(errorResponse('User not found.', 404));
+    if (user.role !== 'EVENT_INCHARGE') {
+      return res.status(400).json(errorResponse('INCHARGE permissions can be set only for EVENT_INCHARGE users.', 400));
+    }
+
+    const override = await prisma.eventUserPermission.findUnique({
+      where: { eventId_userId: { eventId, userId } }
+    });
+
+    res.json(successResponse({
+      eventId,
+      user,
+      assignment: assigned,
+      permissions: override ? {
+        resultUpload: override.resultUpload,
+        studentManagement: override.studentManagement,
+        certificateManagement: override.certificateManagement,
+        feeManagement: override.feeManagement
+      } : {
+        resultUpload: false,
+        studentManagement: false,
+        certificateManagement: false,
+        feeManagement: false
+      }
+    }, 'Incharge permissions retrieved.'));
+  } catch (error) {
+    console.error('❌ Get incharge permissions error:', error);
+    res.status(500).json(errorResponse('Failed to get incharge permissions.', 500));
+  }
+});
+
+/**
+ * Admin: Update per-incharge (per-user) permissions for an event (upsert).
+ */
+router.put('/events/:eventId/incharge-permissions/:userId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId, userId } = req.params;
+    const {
+      resultUpload = false,
+      studentManagement = false,
+      certificateManagement = false,
+      feeManagement = false
+    } = req.body || {};
+
+    const assigned = await prisma.eventAssignment.findFirst({
+      where: { eventId, userId, role: 'INCHARGE' },
+      select: { id: true }
+    });
+    if (!assigned) {
+      return res.status(404).json(errorResponse('User is not assigned as INCHARGE to this event.', 404));
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, email: true, name: true }
+    });
+    if (!user) return res.status(404).json(errorResponse('User not found.', 404));
+    if (user.role !== 'EVENT_INCHARGE') {
+      return res.status(400).json(errorResponse('INCHARGE permissions can be set only for EVENT_INCHARGE users.', 400));
+    }
+
+    const updated = await prisma.eventUserPermission.upsert({
+      where: { eventId_userId: { eventId, userId } },
+      update: {
+        resultUpload: !!resultUpload,
+        studentManagement: !!studentManagement,
+        certificateManagement: !!certificateManagement,
+        feeManagement: !!feeManagement
+      },
+      create: {
+        eventId,
+        userId,
+        resultUpload: !!resultUpload,
+        studentManagement: !!studentManagement,
+        certificateManagement: !!certificateManagement,
+        feeManagement: !!feeManagement
+      }
+    });
+
+    res.json(successResponse({
+      eventId,
+      userId,
+      permissions: {
+        resultUpload: updated.resultUpload,
+        studentManagement: updated.studentManagement,
+        certificateManagement: updated.certificateManagement,
+        feeManagement: updated.feeManagement
+      }
+    }, 'Incharge permissions updated.'));
+  } catch (error) {
+    console.error('❌ Update incharge permissions error:', error);
+    res.status(500).json(errorResponse('Failed to update incharge permissions.', 500));
+  }
+});
+
+/**
  * Admin: Create an invite for an Event Incharge (Event Vendor personnel) with per-user permissions.
  * If the email already belongs to an EVENT_INCHARGE user, we assign directly and set per-user overrides.
  */

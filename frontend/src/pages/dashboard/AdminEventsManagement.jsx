@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, getEventAssignments, updateEventPermissions, getAllUsers, createEventInchargeInvite, getEventInchargeInvites, revokeEventInchargeInvite, resendEventInchargeInvite } from '../../api';
+import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, getEventAssignments, updateEventPermissions, getEventInchargePermissions, updateEventInchargePermissions, getAllUsers, createEventInchargeInvite, getEventInchargeInvites, revokeEventInchargeInvite, resendEventInchargeInvite } from '../../api';
 import ParticipantsModal from '../../components/ParticipantsModal';
 import AdminCertificateIssuance from '../../components/AdminCertificateIssuance';
 
@@ -59,9 +59,12 @@ const AdminEventsManagement = () => {
   const [inviteMsg, setInviteMsg] = useState('');
   const [inviteErr, setInviteErr] = useState('');
   const [inviteDebugLink, setInviteDebugLink] = useState('');
+  const [permissionMode, setPermissionMode] = useState('INCHARGE_USER'); // INCHARGE_USER | ROLE
+  const [permissionLoading, setPermissionLoading] = useState(false);
   const [permissionForm, setPermissionForm] = useState({
     eventId: '',
-    role: 'INCHARGE',
+    role: 'COORDINATOR', // used only for ROLE mode
+    userId: '', // used only for INCHARGE_USER mode
     resultUpload: false,
     studentManagement: false,
     certificateManagement: false,
@@ -611,8 +614,12 @@ const AdminEventsManagement = () => {
     setPermissionEventIdSearch('');
     setPermissionMsg('');
     setPermissionErr('');
+    setPermissionMode('INCHARGE_USER');
+    setPermissionLoading(false);
     // Open the modal
     setShowPermissionModal(true);
+    // Load assignments so we can select an incharge
+    loadEventAssignments(eventId);
   };
 
   // Auto-select event by uniqueId search
@@ -678,6 +685,11 @@ const AdminEventsManagement = () => {
       setPermissionErr('Please select an event.');
       return;
     }
+
+    if (permissionMode === 'INCHARGE_USER' && !permissionForm.userId) {
+      setPermissionErr('Please select an Incharge.');
+      return;
+    }
     
     // Check if at least one permission is selected
     const hasAnyPermission = permissionForm.resultUpload || 
@@ -691,6 +703,37 @@ const AdminEventsManagement = () => {
     }
 
     try {
+      const permissionsList = [];
+      if (permissionForm.resultUpload) permissionsList.push('Result Upload');
+      if (permissionForm.studentManagement) permissionsList.push('Student Management');
+      if (permissionForm.certificateManagement) permissionsList.push('Certificate Management');
+      if (permissionForm.feeManagement) permissionsList.push('Fee Management');
+
+      if (permissionMode === 'INCHARGE_USER') {
+        const res = await updateEventInchargePermissions(permissionForm.eventId, permissionForm.userId, {
+          resultUpload: !!permissionForm.resultUpload,
+          studentManagement: !!permissionForm.studentManagement,
+          certificateManagement: !!permissionForm.certificateManagement,
+          feeManagement: !!permissionForm.feeManagement
+        });
+
+        if (res?.success) {
+          const selectedEvent = events.find(e => e.id === permissionForm.eventId);
+          const selectedUser = existingAssignments.find(a => a.userId === permissionForm.userId)?.user;
+          setPermissionMsg(
+            `✓ Incharge permissions saved for "${selectedEvent?.name || 'Event'}" • ${selectedUser?.name || selectedUser?.email || 'Incharge'}`
+          );
+          pushToast('success', 'Incharge permissions saved', `Granted: ${permissionsList.join(', ') || 'None'}`);
+          setTimeout(() => setPermissionMsg(''), 5000);
+          return;
+        }
+        const msg = res?.message || 'Failed to save incharge permissions.';
+        setPermissionErr(msg);
+        pushToast('error', 'Save failed', msg);
+        return;
+      }
+
+      // ROLE mode (for COORDINATOR/TEAM)
       const payload = [{
         role: permissionForm.role,
         resultUpload: !!permissionForm.resultUpload,
@@ -701,18 +744,11 @@ const AdminEventsManagement = () => {
       const res = await updateEventPermissions(permissionForm.eventId, payload);
       if (res?.success) {
         const selectedEvent = events.find(e => e.id === permissionForm.eventId);
-        const permissionsList = [];
-        if (permissionForm.resultUpload) permissionsList.push('Result Upload');
-        if (permissionForm.studentManagement) permissionsList.push('Student Management');
-        if (permissionForm.certificateManagement) permissionsList.push('Certificate Management');
-        if (permissionForm.feeManagement) permissionsList.push('Fee Management');
-        
         setPermissionMsg(
-          `✓ Permissions saved for ${permissionForm.role} role on "${selectedEvent?.name || 'Event'}". ` +
+          `✓ Role permissions saved for ${permissionForm.role} on "${selectedEvent?.name || 'Event'}". ` +
           `Granted: ${permissionsList.join(', ')}`
         );
         pushToast('success', 'Permissions saved', `Granted: ${permissionsList.join(', ')}`);
-        // Clear success message after 5 seconds
         setTimeout(() => setPermissionMsg(''), 5000);
       } else {
         const msg = res?.message || 'Failed to save permissions.';
@@ -2048,7 +2084,8 @@ const AdminEventsManagement = () => {
                 onClick={() => {
                   setPermissionForm({
                     eventId: '',
-                    role: 'INCHARGE',
+                    role: 'COORDINATOR',
+                    userId: '',
                     resultUpload: false,
                     studentManagement: false,
                     certificateManagement: false,
@@ -2062,7 +2099,7 @@ const AdminEventsManagement = () => {
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
               >
                 <span>🔐</span>
-                <span>Set Permissions</span>
+                <span>Incharge Permissions</span>
               </button>
             </div>
           </div>
@@ -2406,18 +2443,21 @@ const AdminEventsManagement = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col">
               <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-4 rounded-t-xl flex-shrink-0 flex items-center justify-between">
-                <h3 className="text-xl font-bold">Set Permissions</h3>
+                <h3 className="text-xl font-bold">Incharge Permissions</h3>
                 <button
                   onClick={() => {
                     setShowPermissionModal(false);
                     setPermissionForm({
                       eventId: '',
-                      role: 'INCHARGE',
+                      role: 'COORDINATOR',
+                      userId: '',
                       resultUpload: false,
                       studentManagement: false,
                       certificateManagement: false,
                       feeManagement: false
                     });
+                    setPermissionMode('INCHARGE_USER');
+                    setPermissionLoading(false);
                     setPermissionEventIdSearch('');
                     setPermissionMsg('');
                     setPermissionErr('');
@@ -2469,17 +2509,97 @@ const AdminEventsManagement = () => {
                     </div>
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Permission Type</label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPermissionMode('INCHARGE_USER')}
+                      className={`px-3 py-2 rounded-md border text-sm font-medium ${
+                        permissionMode === 'INCHARGE_USER'
+                          ? 'bg-indigo-50 border-indigo-300 text-indigo-900'
+                          : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      Incharge (per person)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPermissionMode('ROLE')}
+                      className={`px-3 py-2 rounded-md border text-sm font-medium ${
+                        permissionMode === 'ROLE'
+                          ? 'bg-indigo-50 border-indigo-300 text-indigo-900'
+                          : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      Role-based (Coordinator/Team)
+                    </button>
+                  </div>
+                </div>
+
+                {permissionMode === 'INCHARGE_USER' ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Select Incharge</label>
+                    <select
+                      value={permissionForm.userId}
+                      onChange={async (e) => {
+                        const userId = e.target.value;
+                        setPermissionForm(prev => ({ ...prev, userId }));
+                        setPermissionMsg('');
+                        setPermissionErr('');
+                        if (!permissionForm.eventId || !userId) return;
+                        try {
+                          setPermissionLoading(true);
+                          const res = await getEventInchargePermissions(permissionForm.eventId, userId);
+                          if (res?.success) {
+                            const p = res.data?.permissions || {};
+                            setPermissionForm(prev => ({
+                              ...prev,
+                              resultUpload: !!p.resultUpload,
+                              studentManagement: !!p.studentManagement,
+                              certificateManagement: !!p.certificateManagement,
+                              feeManagement: !!p.feeManagement
+                            }));
+                          }
+                        } catch (err) {
+                          const msg = getErrorMessage(err, 'Failed to load incharge permissions.');
+                          setPermissionErr(msg);
+                          pushToast('error', 'Load failed', msg);
+                        } finally {
+                          setPermissionLoading(false);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      disabled={!permissionForm.eventId}
+                    >
+                      <option value="">{permissionForm.eventId ? 'Select incharge' : 'Select event first'}</option>
+                      {existingAssignments
+                        .filter(a => a.role === 'INCHARGE' && a.user?.role === 'EVENT_INCHARGE')
+                        .map(a => (
+                          <option key={a.userId} value={a.userId}>
+                            {a.user?.name || a.user?.email} {a.isPointOfContact ? '(POC)' : ''} {a.user?.uniqueId ? `[${a.user.uniqueId}]` : ''}
+                          </option>
+                        ))}
+                    </select>
+                    {permissionLoading ? (
+                      <div className="text-xs text-blue-600 mt-1">Loading current permissions...</div>
+                    ) : null}
+                    <div className="text-xs text-gray-500 mt-1">
+                      These permissions update the selected incharge only (per event).
+                    </div>
+                  </div>
+                ) : (
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                   <select
                     value={permissionForm.role}
                     onChange={(e) => setPermissionForm(prev => ({ ...prev, role: e.target.value }))}
                     className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
-                    <option value="INCHARGE">INCHARGE</option>
                     <option value="COORDINATOR">COORDINATOR</option>
                     <option value="TEAM">TEAM</option>
                   </select>
                 </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <label className="inline-flex items-center space-x-2 text-sm text-gray-700">
@@ -2825,13 +2945,13 @@ const AdminEventsManagement = () => {
                             >
                               Assign
                             </button>
-                            {/* Quick Set Permissions button */}
+                            {/* Quick Incharge Permissions button */}
                             <button
                               type="button"
                               onClick={() => handlePermissionClick(event.id)}
                               className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-purple-700 transition-colors"
                             >
-                              Permissions
+                              Incharge Permissions
                             </button>
                           </div>
 
