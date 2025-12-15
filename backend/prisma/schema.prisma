@@ -32,6 +32,7 @@ model User {
   otpRecords      OTPRecord[]
   payments        Payment[]
   eventAssignments EventAssignment[]
+  eventUserPermissions EventUserPermission[]
 
   @@map("users")
 }
@@ -279,6 +280,8 @@ model Event {
   registrationItems   EventRegistrationOrderItem[]
   assignments         EventAssignment[]
   permissions         EventPermission[]
+  inchargeInvites     EventInchargeInvite[]
+  userPermissions     EventUserPermission[]
   coach               Coach               @relation(fields: [coachId], references: [id], onDelete: Cascade)
 
   @@map("events")
