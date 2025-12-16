@@ -6,6 +6,7 @@ import {
   updateEventOrder, 
   deleteEventOrder,
   createOrderPayment,
+  confirmEventOrder,
   verifyOrderPayment,
   verifyEventPermission
 } from '../../api';
@@ -280,6 +281,23 @@ const EventOrders = () => {
       } else {
         showMessage('error', msg);
       }
+      setPaymentLoading(false);
+    }
+  };
+
+  const handleConfirmOrder = async (order) => {
+    try {
+      setPaymentLoading(true);
+      const res = await confirmEventOrder(eventId, order.id);
+      if (!res?.success) {
+        throw new Error(res?.message || 'Failed to confirm order.');
+      }
+      showMessage('success', 'Order confirmed. You can proceed to payment.');
+      await loadOrders();
+    } catch (error) {
+      console.error('Order confirmation failed:', error);
+      showMessage('error', getApiErrorMessage(error, 'Failed to confirm order.'));
+    } finally {
       setPaymentLoading(false);
     }
   };
@@ -632,6 +650,28 @@ const EventOrders = () => {
                             <>
                               <FaClock className="mr-1" />
                               Awaiting Pricing
+                            </>
+                          )}
+                        </button>
+                      )}
+
+                      {/* Explicit confirmation required before payment (incharge with feeManagement only) */}
+                      {order.status === 'PENDING' && showMedalPricing && Number(order.totalAmount) > 0 && (
+                        <button
+                          onClick={() => handleConfirmOrder(order)}
+                          disabled={paymentLoading}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors inline-flex items-center disabled:opacity-50"
+                          title="Confirm this order so payment can be initiated"
+                        >
+                          {paymentLoading ? (
+                            <>
+                              <FaSpinner className="animate-spin mr-1" />
+                              Confirming...
+                            </>
+                          ) : (
+                            <>
+                              <FaCheck className="mr-1" />
+                              Confirm Order
                             </>
                           )}
                         </button>

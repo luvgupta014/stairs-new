@@ -195,13 +195,6 @@ const AdminOrders = () => {
         updatedPrices.trophyPrice
       );
       updatedPrices.totalAmount = calculatedTotal;
-
-      // Convenience: if admin is pricing and status is still PENDING, auto-move to CONFIRMED
-      // (does not override other statuses).
-      const totalNum = parseFloat(calculatedTotal || 0) || 0;
-      if (totalNum > 0 && updatedPrices.status === 'PENDING') {
-        updatedPrices.status = 'CONFIRMED';
-      }
     }
     
     setOrderUpdate(updatedPrices);

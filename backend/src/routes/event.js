@@ -822,7 +822,8 @@ router.post('/:eventId/orders', authenticate, async (req, res) => {
         specialInstructions,
         urgentDelivery,
         ...(canPrice && { certificatePrice: parsedCertificatePrice, medalPrice: parsedMedalPrice, trophyPrice: parsedTrophyPrice }),
-        status: canPrice && calculatedTotal > 0 ? 'CONFIRMED' : 'PENDING',
+        // Do NOT auto-confirm. Explicit confirmation is required.
+        status: 'PENDING',
         totalAmount: canPrice ? Number(calculatedTotal.toFixed(2)) : 0
       },
       include: {
@@ -833,7 +834,7 @@ router.post('/:eventId/orders', authenticate, async (req, res) => {
     return res.status(201).json(successResponse(
       order,
       canPrice && calculatedTotal > 0
-        ? 'Order created and priced successfully. You can proceed to payment.'
+        ? 'Order created and priced successfully. Please confirm the order to proceed to payment.'
         : 'Order created successfully. Admin will review and provide pricing.',
       201
     ));
@@ -945,8 +946,7 @@ router.put('/:eventId/orders/:orderId', authenticate, async (req, res) => {
           certificatePrice: nextCertificatePrice,
           medalPrice: nextMedalPrice,
           trophyPrice: nextTrophyPrice,
-          totalAmount: Number(recalculatedTotal.toFixed(2)),
-          status: recalculatedTotal > 0 ? 'CONFIRMED' : existing.status
+          totalAmount: Number(recalculatedTotal.toFixed(2))
         })
       }
     });
@@ -982,6 +982,45 @@ router.delete('/:eventId/orders/:orderId', authenticate, async (req, res) => {
   }
 });
 
+// Confirm order (explicit action; required before payment)
+router.post('/:eventId/orders/:orderId/confirm', authenticate, async (req, res) => {
+  try {
+    const { eventId, orderId } = req.params;
+    const { user } = req;
+
+    const { ok: canManage, ev } = await canManageEventOrders(user, eventId);
+    if (!ev) return res.status(404).json(errorResponse('Event not found.', 404));
+    if (!canManage) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
+
+    // Only allow incharge/admin/coach-bypass with feeManagement to confirm (pricing/payment-related)
+    const { ok: canPrice } = await canSetEventOrderPricing(user, ev.id);
+    if (!canPrice) {
+      return res.status(403).json(errorResponse('Access denied. Fee management permission required to confirm orders.', 403));
+    }
+
+    const order = await prisma.eventOrder.findFirst({
+      where: { id: orderId, eventId: ev.id, coachId: ev.coachId }
+    });
+    if (!order) return res.status(404).json(errorResponse('Order not found.', 404));
+    if (order.paymentStatus === 'SUCCESS') {
+      return res.status(400).json(errorResponse('Order is already paid.', 400));
+    }
+    if (!order.totalAmount || Number(order.totalAmount) <= 0) {
+      return res.status(400).json(errorResponse('Order must be priced (total amount > 0) before confirmation.', 400));
+    }
+
+    const updated = await prisma.eventOrder.update({
+      where: { id: orderId },
+      data: { status: 'CONFIRMED' }
+    });
+
+    return res.json(successResponse(updated, 'Order confirmed. You can proceed to payment.'));
+  } catch (error) {
+    console.error('Confirm event order error:', error);
+    return res.status(500).json(errorResponse('Failed to confirm order.', 500));
+  }
+});
+
 // Create payment order for event order (works for coach/admin/assigned event staff with permission)
 router.post('/orders/:orderId/create-payment', authenticate, async (req, res) => {
   try {
@@ -995,7 +1034,7 @@ router.post('/orders/:orderId/create-payment', authenticate, async (req, res) =>
     });
     if (!order) return res.status(404).json(errorResponse('Order not found.', 404));
 
-    const has = await canManageEventOrders(req.user, order.eventId);
+    const { ok: has } = await canManageEventOrders(req.user, order.eventId);
     if (!has) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
 
     // Idempotency: if already created and awaiting payment, return existing Razorpay order id.
@@ -1085,7 +1124,7 @@ router.post('/orders/:orderId/verify-payment', authenticate, async (req, res) =>
     });
     if (!order) return res.status(404).json(errorResponse('Order not found.', 404));
 
-    const has = await canManageEventOrders(req.user, order.eventId);
+    const { ok: has } = await canManageEventOrders(req.user, order.eventId);
     if (!has) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
 
     // Idempotency: already paid

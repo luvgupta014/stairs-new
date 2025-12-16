@@ -2761,16 +2761,6 @@ router.put('/orders/:orderId', authenticate, requireAdmin, async (req, res) => {
 
     const normalizedStatus = status ? status.toUpperCase() : null;
 
-    // If admin is pricing (or explicitly setting total), auto-confirm when priced and not already paid,
-    // unless caller explicitly sets a different status.
-    const shouldAutoConfirm =
-      !normalizedStatus &&
-      calculatedTotal !== null &&
-      !Number.isNaN(Number(calculatedTotal)) &&
-      Number(calculatedTotal) > 0 &&
-      order.paymentStatus !== 'SUCCESS' &&
-      (order.status === 'PENDING' || order.status === 'CONFIRMED');
-
     const safeTotalAmount =
       calculatedTotal !== null &&
       calculatedTotal !== undefined &&
@@ -2780,7 +2770,6 @@ router.put('/orders/:orderId', authenticate, requireAdmin, async (req, res) => {
 
     const updateData = {
       ...(normalizedStatus && { status: normalizedStatus }),
-      ...(shouldAutoConfirm && { status: 'CONFIRMED' }),
       ...(adminRemarks !== undefined && { adminRemarks }),
       ...(certificatePrice !== undefined && { certificatePrice: parseFloat(certificatePrice) }),
       ...(medalPrice !== undefined && { medalPrice: parseFloat(medalPrice) }),

@@ -1479,6 +1479,15 @@ export const createOrderPayment = async (orderId) => {
   }
 };
 
+export const confirmEventOrder = async (eventId, orderId) => {
+  try {
+    const response = await api.post(`/api/events/${eventId}/orders/${orderId}/confirm`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 export const verifyOrderPayment = async (orderId, paymentData) => {
   try {
     const response = await api.post(`/api/events/orders/${orderId}/verify-payment`, paymentData);
