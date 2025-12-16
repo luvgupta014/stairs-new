@@ -141,6 +141,46 @@ export const getMyAssignedEvents = async () => {
   }
 };
 
+/**
+ * Backwards-compatible helpers used by older dashboards.
+ * Normalizes `/api/admin/users/me/assigned-events` (array of assignments)
+ * into `{ data: { events: [...] } }`.
+ */
+export const getAssignedEvents = async (params = {}) => {
+  try {
+    // Endpoint does not paginate today, but accept params for compatibility.
+    const response = await api.get('/api/admin/users/me/assigned-events', { params });
+    const payload = response.data;
+    if (payload?.success && Array.isArray(payload?.data)) {
+      const events = payload.data
+        .map((a) => ({
+          ...(a.event || {}),
+          assignmentRole: a.role,
+          permissions: a.permissions || null,
+          hasPermissions: !!a.hasPermissions
+        }))
+        .filter((e) => e.id);
+      return { ...payload, data: { events } };
+    }
+    return payload;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Backwards-compatible fee updater (uses event fee settings endpoint)
+export const updateAssignedEventFee = async (eventId, eventFee) => {
+  try {
+    const response = await api.put(`/api/events/${eventId}/fees`, {
+      feeMode: 'EVENT',
+      eventFee: Number(eventFee) || 0
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 // Event permissions (Admin)
 export const updateEventPermissions = async (eventId, permissions) => {
   try {
