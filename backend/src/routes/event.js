@@ -1004,6 +1004,7 @@ router.post('/orders/:orderId/create-payment', authenticate, async (req, res) =>
         orderId: order.razorpayOrderId,
         amount: Math.round((order.totalAmount || 0) * 100),
         currency: 'INR',
+        razorpayKeyId: process.env.RAZORPAY_KEY_ID,
         orderDetails: {
           id: order.id,
           orderNumber: order.orderNumber,
@@ -1055,6 +1056,7 @@ router.post('/orders/:orderId/create-payment', authenticate, async (req, res) =>
       orderId: razorpayOrder.id,
       amount: razorpayOrder.amount,
       currency: razorpayOrder.currency,
+      razorpayKeyId: process.env.RAZORPAY_KEY_ID,
       orderDetails: {
         id: order.id,
         orderNumber: order.orderNumber,

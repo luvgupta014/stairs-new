@@ -294,6 +294,17 @@ const EventOrders = () => {
       const order = selectedOrderForPayment;
       const paymentData = razorpayOrderData;
 
+      const keyFromBackend = paymentData?.razorpayKeyId;
+      const keyFromEnv = import.meta.env.VITE_RAZORPAY_KEY_ID;
+      const razorpayKey = keyFromBackend || keyFromEnv;
+
+      // Validate key format early to avoid opaque Razorpay 400s
+      if (!razorpayKey || !/^rzp_(test|live)_[A-Za-z0-9]+$/.test(String(razorpayKey))) {
+        throw new Error(
+          `Razorpay key is misconfigured. Expected something like rzp_test_xxx / rzp_live_xxx, got: "${String(razorpayKey)}".`
+        );
+      }
+
       // Load Razorpay script if not already loaded
       if (!window.Razorpay) {
         const script = document.createElement('script');
@@ -308,7 +319,7 @@ const EventOrders = () => {
 
       // Configure Razorpay options
       const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        key: razorpayKey,
         amount: paymentData.amount,
         currency: paymentData.currency,
         name: 'Event Order Payment',
