@@ -2759,8 +2759,21 @@ router.put('/orders/:orderId', authenticate, requireAdmin, async (req, res) => {
       calculatedTotal = parseFloat(totalAmount);
     }
 
+    const normalizedStatus = status ? status.toUpperCase() : null;
+
+    // If admin is pricing (or explicitly setting total), auto-confirm when priced and not already paid,
+    // unless caller explicitly sets a different status.
+    const shouldAutoConfirm =
+      !normalizedStatus &&
+      calculatedTotal !== null &&
+      !Number.isNaN(Number(calculatedTotal)) &&
+      Number(calculatedTotal) > 0 &&
+      order.paymentStatus !== 'SUCCESS' &&
+      (order.status === 'PENDING' || order.status === 'CONFIRMED');
+
     const updateData = {
-      ...(status && { status: status.toUpperCase() }),
+      ...(normalizedStatus && { status: normalizedStatus }),
+      ...(shouldAutoConfirm && { status: 'CONFIRMED' }),
       ...(adminRemarks !== undefined && { adminRemarks }),
       ...(certificatePrice !== undefined && { certificatePrice: parseFloat(certificatePrice) }),
       ...(medalPrice !== undefined && { medalPrice: parseFloat(medalPrice) }),
@@ -2771,7 +2784,7 @@ router.put('/orders/:orderId', authenticate, requireAdmin, async (req, res) => {
     };
 
     // Set completion timestamp if status is COMPLETED
-    if (status && status.toUpperCase() === 'COMPLETED') {
+    if (normalizedStatus && normalizedStatus === 'COMPLETED') {
       updateData.completedAt = new Date();
     }
 
