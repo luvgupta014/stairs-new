@@ -701,12 +701,23 @@ const AdminOrders = () => {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {order.totalAmount ? `₹${order.totalAmount.toLocaleString()}` : 'Not set'}
-                        </div>
+                        {Number(order.totalAmount) > 0 ? (
+                          <div className="text-sm font-medium text-gray-900">
+                            ₹{Number(order.totalAmount).toLocaleString()}
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-800 border border-yellow-200">
+                            Not priced
+                          </div>
+                        )}
                         {order.paymentDate && (
                           <div className="text-xs text-green-600">
                             Paid: {new Date(order.paymentDate).toLocaleDateString()}
+                          </div>
+                        )}
+                        {order.status === 'CONFIRMED' && !(Number(order.totalAmount) > 0) && (
+                          <div className="text-xs text-red-600 mt-1">
+                            Confirmed but total is missing — set pricing and update.
                           </div>
                         )}
                       </td>
