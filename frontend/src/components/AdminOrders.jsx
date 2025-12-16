@@ -53,6 +53,13 @@ const AdminOrders = () => {
 
   const [submitting, setSubmitting] = useState(false);
 
+  const getSuggestedMedalPrice = (level) => {
+    const lvl = String(level || '').toUpperCase().trim();
+    if (lvl === 'DISTRICT') return 30;
+    if (lvl === 'STATE') return 55;
+    return null;
+  };
+
   useEffect(() => {
     loadOrders();
     loadStats();
@@ -109,6 +116,14 @@ const AdminOrders = () => {
     setTimeout(() => setMessage({ type: '', text: '' }), 8000); // Extended for payment notifications
   };
 
+  const getApiErrorMessage = (err, fallback = 'Something went wrong.') => {
+    const apiMsg = err?.response?.data?.message || err?.response?.data?.error;
+    if (apiMsg) return apiMsg;
+    if (err?.message) return err.message;
+    if (typeof err === 'string') return err;
+    return fallback;
+  };
+
   const dismissPaidOrderNotification = (orderId) => {
     setPaidOrders(prev => prev.filter(order => order.id !== orderId));
   };
@@ -163,6 +178,13 @@ const AdminOrders = () => {
         updatedPrices.trophyPrice
       );
       updatedPrices.totalAmount = calculatedTotal;
+
+      // Convenience: if admin is pricing and status is still PENDING, auto-move to CONFIRMED
+      // (does not override other statuses).
+      const totalNum = parseFloat(calculatedTotal || 0) || 0;
+      if (totalNum > 0 && updatedPrices.status === 'PENDING') {
+        updatedPrices.status = 'CONFIRMED';
+      }
     }
     
     setOrderUpdate(updatedPrices);
@@ -180,7 +202,7 @@ const AdminOrders = () => {
       loadStats();
     } catch (error) {
       console.error('Update order failed:', error);
-      showMessage('error', error.message || 'Failed to update order');
+      showMessage('error', getApiErrorMessage(error, 'Failed to update order.'));
     } finally {
       setSubmitting(false);
     }
@@ -546,6 +568,9 @@ const AdminOrders = () => {
                       Event & Coach
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Level
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Items
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -602,6 +627,11 @@ const AdminOrders = () => {
                           <div className="text-xs text-gray-400">
                             {order.event.sport}
                           </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {order.event?.level || '—'}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -719,6 +749,16 @@ const AdminOrders = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Medal Price (₹)
                   </label>
+                  {editingOrder?.event?.level ? (
+                    <div className="mb-2 text-xs text-gray-600">
+                      Event level: <strong>{editingOrder.event.level}</strong>
+                      {getSuggestedMedalPrice(editingOrder.event.level) !== null ? (
+                        <span className="ml-2">
+                          Suggested: <strong>₹{getSuggestedMedalPrice(editingOrder.event.level)}</strong> / medal
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <input
                     type="number"
                     step="0.01"
@@ -727,6 +767,15 @@ const AdminOrders = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Enter price per medal"
                   />
+                  {getSuggestedMedalPrice(editingOrder?.event?.level) !== null ? (
+                    <button
+                      type="button"
+                      onClick={() => handlePriceChange('medalPrice', String(getSuggestedMedalPrice(editingOrder.event.level)))}
+                      className="mt-2 px-3 py-2 text-xs font-semibold border border-gray-300 rounded-lg hover:bg-gray-50"
+                    >
+                      Apply suggested medal rate (₹{getSuggestedMedalPrice(editingOrder.event.level)})
+                    </button>
+                  ) : null}
                 </div>
 
                 <div>
@@ -751,6 +800,11 @@ const AdminOrders = () => {
                 <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-medium">
                   ₹{orderUpdate.totalAmount || '0.00'}
                 </div>
+                {parseFloat(orderUpdate.totalAmount || 0) > 0 && (
+                  <div className="mt-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">
+                    Payable amount is set. Coach/Coordinator can proceed to payment once status is <strong>CONFIRMED</strong>.
+                  </div>
+                )}
                 {editingOrder && (orderUpdate.certificatePrice || orderUpdate.medalPrice || orderUpdate.trophyPrice) && (
                   <div className="mt-2 text-xs text-gray-600">
                     Calculation: {editingOrder.certificates} × ₹{orderUpdate.certificatePrice || '0'} + {editingOrder.medals} × ₹{orderUpdate.medalPrice || '0'} + {editingOrder.trophies} × ₹{orderUpdate.trophyPrice || '0'}
@@ -778,6 +832,12 @@ const AdminOrders = () => {
                   <div>Medals: {editingOrder.medals}</div>
                   <div>Trophies: {editingOrder.trophies}</div>
                 </div>
+                {(editingOrder.medalGold || editingOrder.medalSilver || editingOrder.medalBronze) ? (
+                  <div className="mt-2 text-sm text-gray-700">
+                    <strong>Medal breakdown:</strong> Gold {editingOrder.medalGold || 0}, Silver {editingOrder.medalSilver || 0}, Bronze {editingOrder.medalBronze || 0}
+                    <span className="ml-2 text-xs text-gray-500">(pricing is on total medals, not color)</span>
+                  </div>
+                ) : null}
                 {editingOrder.specialInstructions && (
                   <div className="mt-2 text-sm">
                     <strong>Special Instructions:</strong> {editingOrder.specialInstructions}

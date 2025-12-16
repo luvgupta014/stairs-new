@@ -387,10 +387,15 @@ const CoachRegister = () => {
       }
     } catch (error) {
       console.error("Registration error:", error);
-      setError(
+      const msg =
         error.response?.data?.message ||
-          "Registration failed. Please try again."
-      );
+        "Registration failed. Please try again.";
+      setError(msg);
+      // Helpful guidance for common edge case: user already exists
+      if (String(msg).toLowerCase().includes("already exists")) {
+        // Scroll to top so the user sees the CTA quickly
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     } finally {
       setLoading(false);
     }
@@ -1062,9 +1067,29 @@ const CoachRegister = () => {
             <div className="p-8">
               {/* Show error if exists */}
               {error && (
-                <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-start space-x-2">
-                  <span>⚠️</span>
-                  <span>{error}</span>
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                  <div className="flex items-start space-x-2">
+                    <span>⚠️</span>
+                    <span>{error}</span>
+                  </div>
+                  {String(error).toLowerCase().includes("already exists") ? (
+                    <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate('/login/coordinator')}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold"
+                      >
+                        Go to Login
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/forgot-password')}
+                        className="px-4 py-2 bg-white hover:bg-gray-50 border border-red-200 text-red-700 rounded-lg text-sm font-semibold"
+                      >
+                        Reset Password
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               )}
 

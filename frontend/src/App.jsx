@@ -65,6 +65,8 @@ import AdminRevenue from "./pages/AdminRevenue";
 import BrowseCoaches from "./pages/student/BrowseCoaches";
 import EventInchargeDashboard from "./pages/dashboard/EventInchargeDashboard";
 import AdminGlobalPayments from "./pages/dashboard/AdminGlobalPayments";
+import CoordinatorLogin from "./pages/auth/CoordinatorLogin";
+import CoordinatorDashboard from "./pages/dashboard/CoordinatorDashboard";
 
 function App() {
   return (
@@ -81,6 +83,7 @@ function App() {
             <Route path="/login/institute" element={<InstituteLogin />} />
             <Route path="/login/admin" element={<AdminLogin />} />
             <Route path="/login/incharge" element={<EventInchargeLogin />} />
+            <Route path="/login/coordinator" element={<CoordinatorLogin />} />
             <Route path="/register/incharge" element={<EventInchargeRegister />} />
             
             {/* Registration Routes (no header/footer) */}
@@ -138,6 +141,20 @@ function App() {
                   <main className="flex-grow">
                     <ProtectedRoute role="COACH">
                       <CoachDashboard />
+                    </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            <Route
+              path="/dashboard/coordinator"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <ProtectedRoute allowedRoles={["COACH"]}>
+                      <CoordinatorDashboard />
                     </ProtectedRoute>
                   </main>
                   <Footer />

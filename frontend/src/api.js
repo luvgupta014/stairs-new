@@ -1244,7 +1244,7 @@ export const downloadEventResultFile = async (fileId, isAdmin = false) => {
 // Event Orders API
 export const createEventOrder = async (eventId, orderData) => {
   try {
-    const response = await api.post(`/api/coach/events/${eventId}/orders`, orderData);
+    const response = await api.post(`/api/events/${eventId}/orders`, orderData);
     return response.data;
   } catch (error) {
     console.error('Create event order error:', error);
@@ -1254,7 +1254,7 @@ export const createEventOrder = async (eventId, orderData) => {
 
 export const getEventOrders = async (eventId, params = {}) => {
   try {
-    const response = await api.get(`/api/coach/events/${eventId}/orders`, { params });
+    const response = await api.get(`/api/events/${eventId}/orders`, { params });
     return response.data;
   } catch (error) {
     console.error('Get event orders error:', error);
@@ -1264,7 +1264,7 @@ export const getEventOrders = async (eventId, params = {}) => {
 
 export const updateEventOrder = async (eventId, orderId, orderData) => {
   try {
-    const response = await api.put(`/api/coach/events/${eventId}/orders/${orderId}`, orderData);
+    const response = await api.put(`/api/events/${eventId}/orders/${orderId}`, orderData);
     return response.data;
   } catch (error) {
     console.error('Update event order error:', error);
@@ -1274,7 +1274,7 @@ export const updateEventOrder = async (eventId, orderId, orderData) => {
 
 export const deleteEventOrder = async (eventId, orderId) => {
   try {
-    const response = await api.delete(`/api/coach/events/${eventId}/orders/${orderId}`);
+    const response = await api.delete(`/api/events/${eventId}/orders/${orderId}`);
     return response.data;
   } catch (error) {
     console.error('Delete event order error:', error);
@@ -1422,7 +1422,7 @@ export const bulkUpdateOrders = async (orderIds, status, adminRemarks) => {
 // Order Payment APIs
 export const createOrderPayment = async (orderId) => {
   try {
-    const response = await api.post(`/api/coach/orders/${orderId}/create-payment`);
+    const response = await api.post(`/api/events/orders/${orderId}/create-payment`);
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;
@@ -1431,7 +1431,7 @@ export const createOrderPayment = async (orderId) => {
 
 export const verifyOrderPayment = async (orderId, paymentData) => {
   try {
-    const response = await api.post(`/api/coach/orders/${orderId}/verify-payment`, paymentData);
+    const response = await api.post(`/api/events/orders/${orderId}/verify-payment`, paymentData);
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;

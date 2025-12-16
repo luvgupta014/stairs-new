@@ -1280,8 +1280,13 @@ router.post('/login', async (req, res) => {
       isActive: user.isActive
     });
 
-    // Check role if specified
-    if (role && user.role !== role) {
+    // Check role if specified (with aliases for legacy portals)
+    const roleAliases = {
+      // Coordinator portal uses EVENT_COORDINATOR, but accounts are stored as COACH.
+      EVENT_COORDINATOR: 'COACH'
+    };
+    const normalizedRequestedRole = roleAliases[role] || role;
+    if (role && user.role !== normalizedRequestedRole) {
       console.log('❌ Role mismatch:', { requestedRole: role, userRole: user.role });
       const roleNames = {
         'STUDENT': 'Student',
@@ -1291,7 +1296,7 @@ router.post('/login', async (req, res) => {
         'ADMIN': 'Administrator',
         'EVENT_INCHARGE': 'Event Incharge'
       };
-      const expectedRole = roleNames[role] || role;
+      const expectedRole = roleNames[normalizedRequestedRole] || normalizedRequestedRole;
       const actualRole = roleNames[user.role] || user.role;
       return res.status(401).json(errorResponse(`This account is registered as ${actualRole}, not ${expectedRole}. Please use the correct login portal.`, 401));
     }

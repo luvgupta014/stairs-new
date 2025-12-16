@@ -1746,9 +1746,35 @@ router.get('/events/:eventId/registrations', authenticate, requireCoach, async (
 router.post('/events/:eventId/orders', authenticate, requireCoach, async (req, res) => {
   try {
     const { eventId } = req.params;
-    const { certificates = 0, medals = 0, trophies = 0, specialInstructions = '', urgentDelivery = false } = req.body;
+    const {
+      certificates = 0,
+      medals = 0,
+      medalGold = 0,
+      medalSilver = 0,
+      medalBronze = 0,
+      trophies = 0,
+      specialInstructions = '',
+      urgentDelivery = false
+    } = req.body;
 
-    console.log(`📦 Creating order for event ${eventId}:`, { certificates, medals, trophies, urgentDelivery });
+    const parsedCertificates = Math.max(0, parseInt(certificates) || 0);
+    const parsedTrophies = Math.max(0, parseInt(trophies) || 0);
+    const parsedMedalGold = Math.max(0, parseInt(medalGold) || 0);
+    const parsedMedalSilver = Math.max(0, parseInt(medalSilver) || 0);
+    const parsedMedalBronze = Math.max(0, parseInt(medalBronze) || 0);
+    const medalsFromBreakdown = parsedMedalGold + parsedMedalSilver + parsedMedalBronze;
+    const parsedMedals = Math.max(0, parseInt(medals) || 0);
+    const finalMedals = medalsFromBreakdown > 0 ? medalsFromBreakdown : parsedMedals;
+
+    console.log(`📦 Creating order for event ${eventId}:`, {
+      certificates: parsedCertificates,
+      medals: finalMedals,
+      medalGold: parsedMedalGold,
+      medalSilver: parsedMedalSilver,
+      medalBronze: parsedMedalBronze,
+      trophies: parsedTrophies,
+      urgentDelivery
+    });
 
     // Resolve event ID (supports both database ID and uniqueId formats)
     let event;
@@ -1774,7 +1800,7 @@ router.post('/events/:eventId/orders', authenticate, requireCoach, async (req, r
     const resolvedEventId = event.id;
 
     // Validate quantities
-    const totalQuantity = parseInt(certificates) + parseInt(medals) + parseInt(trophies);
+    const totalQuantity = parsedCertificates + finalMedals + parsedTrophies;
     if (totalQuantity === 0) {
       return res.status(400).json(errorResponse('At least one item must be ordered.', 400));
     }
@@ -1801,9 +1827,12 @@ router.post('/events/:eventId/orders', authenticate, requireCoach, async (req, r
         orderNumber,
         eventId: resolvedEventId,
         coachId: req.coach.id,
-        certificates: parseInt(certificates),
-        medals: parseInt(medals),
-        trophies: parseInt(trophies),
+        certificates: parsedCertificates,
+        medals: finalMedals,
+        medalGold: parsedMedalGold,
+        medalSilver: parsedMedalSilver,
+        medalBronze: parsedMedalBronze,
+        trophies: parsedTrophies,
         specialInstructions,
         urgentDelivery,
         status: 'PENDING',
@@ -1911,7 +1940,25 @@ router.get('/events/:eventId/orders', authenticate, requireCoach, async (req, re
 router.put('/events/:eventId/orders/:orderId', authenticate, requireCoach, async (req, res) => {
   try {
     const { eventId, orderId } = req.params;
-    const { certificates = 0, medals = 0, trophies = 0, specialInstructions = '', urgentDelivery = false } = req.body;
+    const {
+      certificates = 0,
+      medals = 0,
+      medalGold = 0,
+      medalSilver = 0,
+      medalBronze = 0,
+      trophies = 0,
+      specialInstructions = '',
+      urgentDelivery = false
+    } = req.body;
+
+    const parsedCertificates = Math.max(0, parseInt(certificates) || 0);
+    const parsedTrophies = Math.max(0, parseInt(trophies) || 0);
+    const parsedMedalGold = Math.max(0, parseInt(medalGold) || 0);
+    const parsedMedalSilver = Math.max(0, parseInt(medalSilver) || 0);
+    const parsedMedalBronze = Math.max(0, parseInt(medalBronze) || 0);
+    const medalsFromBreakdown = parsedMedalGold + parsedMedalSilver + parsedMedalBronze;
+    const parsedMedals = Math.max(0, parseInt(medals) || 0);
+    const finalMedals = medalsFromBreakdown > 0 ? medalsFromBreakdown : parsedMedals;
 
     // Resolve event ID (supports both database ID and uniqueId formats)
     let event;
@@ -1949,7 +1996,7 @@ router.put('/events/:eventId/orders/:orderId', authenticate, requireCoach, async
     }
 
     // Validate quantities
-    const totalQuantity = parseInt(certificates) + parseInt(medals) + parseInt(trophies);
+    const totalQuantity = parsedCertificates + finalMedals + parsedTrophies;
     if (totalQuantity === 0) {
       return res.status(400).json(errorResponse('At least one item must be ordered.', 400));
     }
@@ -1958,9 +2005,12 @@ router.put('/events/:eventId/orders/:orderId', authenticate, requireCoach, async
     const updatedOrder = await prisma.eventOrder.update({
       where: { id: orderId },
       data: {
-        certificates: parseInt(certificates),
-        medals: parseInt(medals),
-        trophies: parseInt(trophies),
+        certificates: parsedCertificates,
+        medals: finalMedals,
+        medalGold: parsedMedalGold,
+        medalSilver: parsedMedalSilver,
+        medalBronze: parsedMedalBronze,
+        trophies: parsedTrophies,
         specialInstructions,
         urgentDelivery
       },
@@ -2016,7 +2066,7 @@ router.delete('/events/:eventId/orders/:orderId', authenticate, requireCoach, as
       where: {
         id: orderId,
         eventId: resolvedEventId,
-        status: { in: ['PENDING', 'QUOTED'] } // Can only delete pending or quoted orders
+        status: 'PENDING' // Can only delete pending orders
       }
     });
 

@@ -42,7 +42,7 @@ const CoordinatorLogin = () => {
         subtitle="Access assigned events and manage results"
         icon="🎯"
         color="indigo"
-        registerPath="/register/coach-premium"
+        registerPath="/register/coach"
         onSubmit={handleLogin}
         loading={loading}
         error=""

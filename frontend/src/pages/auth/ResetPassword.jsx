@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { resetPassword } from '../../api';
 import Spinner from '../../components/Spinner';
 import Modal from '../../components/Modal';
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
@@ -21,10 +22,8 @@ const ResetPassword = () => {
   });
 
   useEffect(() => {
-    // Redirect if no email provided
-    if (!formData.email) {
-      navigate('/forgot-password');
-    }
+    // If user refreshed the page, location.state may be lost. Allow manual email entry.
+    // (No redirect here — keeps the flow resilient.)
   }, [formData.email, navigate]);
 
   const handleChange = (e) => {
@@ -45,6 +44,11 @@ const ResetPassword = () => {
     e.preventDefault();
 
     // Validation
+    if (!formData.email) {
+      setModalMessage('Please enter your registered email.');
+      setShowModal(true);
+      return;
+    }
     if (!formData.resetToken) {
       setModalMessage('Please enter the reset code');
       setShowModal(true);
@@ -92,7 +96,8 @@ const ResetPassword = () => {
         setShowModal(true);
 
         setTimeout(() => {
-          navigate('/login/student');
+          // Coordinators are stored as COACH in backend; coach login covers coordinators too.
+          navigate('/login/coach');
         }, 2000);
       } else {
         setModalMessage(result.message || 'Failed to reset password');
@@ -100,7 +105,7 @@ const ResetPassword = () => {
       }
     } catch (error) {
       console.error('Reset password error:', error);
-      setModalMessage(error.message || 'An error occurred. Please try again.');
+      setModalMessage(error?.response?.data?.message || error.message || 'An error occurred. Please try again.');
       setShowModal(true);
     } finally {
       setLoading(false);
@@ -118,13 +123,33 @@ const ResetPassword = () => {
           Reset Your Password
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
-          Enter the code sent to {formData.email}
+          Enter the code sent to your email
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
           <form className="space-y-6" onSubmit={handleSubmit}>
+            {!formData.email ? (
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                  Email
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    required
+                    value={formData.email}
+                    onChange={handleChange}
+                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    placeholder="Enter your registered email"
+                  />
+                </div>
+              </div>
+            ) : null}
+
             <div>
               <label htmlFor="resetToken" className="block text-sm font-medium text-gray-700">
                 Reset Code

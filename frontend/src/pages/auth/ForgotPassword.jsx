@@ -37,23 +37,18 @@ const ForgotPassword = () => {
       console.log('📧 Forgot password result:', result);
 
       if (result.success) {
-        setMessage('Reset code has been sent to your email. Please check your inbox.');
+        setMessage('Reset code has been sent to your email. Please check your inbox/spam.');
         
-        // Navigate to OTP verification page after 2 seconds
+        // Navigate to Reset Password page after 2 seconds
         setTimeout(() => {
-          navigate('/verify-reset-otp', { 
-            state: { 
-              email: email,
-              fromForgotPassword: true 
-            } 
-          });
+          navigate('/reset-password', { state: { email } });
         }, 2000);
       } else {
-        setError(result.message || 'User with this email does not exist');
+        setError(result.message || 'Unable to send reset code. Please try again.');
       }
     } catch (err) {
       console.error('❌ Forgot password error:', err);
-      setError(err.message || 'User with this email does not exist');
+      setError(err?.response?.data?.message || err.message || 'Unable to send reset code. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -171,7 +166,7 @@ const ForgotPassword = () => {
           <div className="mt-6 text-center">
             <p className="text-gray-600 text-sm">
               Remember your password?{' '}
-              <Link to="/login/student" className="text-blue-600 hover:text-blue-500 font-semibold transition-opacity">
+              <Link to="/login/coach" className="text-blue-600 hover:text-blue-500 font-semibold transition-opacity">
                 Back to Login
               </Link>
             </p>

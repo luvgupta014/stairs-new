@@ -37,6 +37,7 @@ const EventOrders = () => {
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [dismissedMessageAt, setDismissedMessageAt] = useState(0);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [selectedOrderForPayment, setSelectedOrderForPayment] = useState(null);
@@ -45,16 +46,54 @@ const EventOrders = () => {
   // Order form state
   const [orderForm, setOrderForm] = useState({
     certificates: 0,
-    medals: 0,
+    medals: 0, // computed total (Gold+Silver+Bronze); kept for backwards compatibility
+    medalGold: 0,
+    medalSilver: 0,
+    medalBronze: 0,
     trophies: 0,
+    medalPrice: '', // ₹ per medal (based on dimension, not color)
     specialInstructions: '',
     urgentDelivery: false
   });
   const [submitting, setSubmitting] = useState(false);
 
+  const getSuggestedMedalPrice = (level) => {
+    const lvl = String(level || '').toUpperCase().trim();
+    if (lvl === 'DISTRICT') return 30;
+    if (lvl === 'STATE') return 55;
+    return '';
+  };
+
+  const medalsTotal =
+    (parseInt(orderForm.medalGold) || 0) +
+    (parseInt(orderForm.medalSilver) || 0) +
+    (parseInt(orderForm.medalBronze) || 0);
+
+  const computedTotalAmount = (() => {
+    const cert = parseInt(orderForm.certificates) || 0;
+    const trop = parseInt(orderForm.trophies) || 0;
+    const medalUnit = parseFloat(orderForm.medalPrice || 0) || 0;
+    // Right now only medals are priced via coordinator/event staff; other items remain admin-priced.
+    const total = (medalsTotal * medalUnit);
+    // keep stable number formatting
+    return { total, cert, trop, medalUnit };
+  })();
+
   useEffect(() => {
     loadOrders();
   }, [eventId]);
+
+  const getApiErrorMessage = (err, fallback = 'Something went wrong. Please try again.') => {
+    // We sometimes throw error.response.data (object) or error.message (string)
+    const raw = err?.response?.data || err;
+    if (typeof raw === 'string') return raw;
+    const msg =
+      raw?.message ||
+      raw?.error ||
+      raw?.details ||
+      err?.message;
+    return msg || fallback;
+  };
 
   const loadOrders = async () => {
     try {
@@ -71,7 +110,7 @@ const EventOrders = () => {
       }
     } catch (error) {
       console.error('❌ Failed to load orders:', error);
-      showMessage('error', 'Failed to load orders');
+      showMessage('error', getApiErrorMessage(error, 'Failed to load orders.'));
     } finally {
       setLoading(false);
     }
@@ -79,16 +118,27 @@ const EventOrders = () => {
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
-    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    setDismissedMessageAt(0);
+    window.clearTimeout(showMessage._t);
+    showMessage._t = window.setTimeout(() => setMessage({ type: '', text: '' }), type === 'error' ? 8000 : 5000);
   };
 
   const openOrderModal = (order = null) => {
     if (order) {
       setEditingOrder(order);
+      const mg = parseInt(order.medalGold ?? 0) || 0;
+      const ms = parseInt(order.medalSilver ?? 0) || 0;
+      const mb = parseInt(order.medalBronze ?? 0) || 0;
+      const hasBreakdown = (mg + ms + mb) > 0;
+      const fallbackGold = hasBreakdown ? mg : (parseInt(order.medals ?? 0) || 0);
       setOrderForm({
         certificates: order.certificates,
         medals: order.medals,
+        medalGold: hasBreakdown ? mg : fallbackGold,
+        medalSilver: hasBreakdown ? ms : 0,
+        medalBronze: hasBreakdown ? mb : 0,
         trophies: order.trophies,
+        medalPrice: order.medalPrice !== null && order.medalPrice !== undefined ? String(order.medalPrice) : '',
         specialInstructions: order.specialInstructions || '',
         urgentDelivery: order.urgentDelivery
       });
@@ -97,7 +147,11 @@ const EventOrders = () => {
       setOrderForm({
         certificates: 0,
         medals: 0,
+        medalGold: 0,
+        medalSilver: 0,
+        medalBronze: 0,
         trophies: 0,
+        medalPrice: String(getSuggestedMedalPrice(eventData?.level) || ''),
         specialInstructions: '',
         urgentDelivery: false
       });
@@ -112,8 +166,15 @@ const EventOrders = () => {
 
   const handleSubmitOrder = async (e) => {
     e.preventDefault();
-    
-    if (orderForm.certificates === 0 && orderForm.medals === 0 && orderForm.trophies === 0) {
+
+    const payload = {
+      ...orderForm,
+      medals: medalsTotal,
+      // Send medalPrice if provided; backend will recalculate totalAmount server-side (permission-gated).
+      medalPrice: orderForm.medalPrice
+    };
+
+    if (payload.certificates === 0 && payload.medals === 0 && payload.trophies === 0) {
       showMessage('error', 'Please specify at least one item to order');
       return;
     }
@@ -122,12 +183,12 @@ const EventOrders = () => {
       setSubmitting(true);
       
       if (editingOrder) {
-        console.log('🔄 Updating order:', editingOrder.id, orderForm);
-        await updateEventOrder(eventId, editingOrder.id, orderForm);
+        console.log('🔄 Updating order:', editingOrder.id, payload);
+        await updateEventOrder(eventId, editingOrder.id, payload);
         showMessage('success', 'Order updated successfully');
       } else {
-        console.log('🔄 Creating new order:', orderForm);
-        const result = await createEventOrder(eventId, orderForm);
+        console.log('🔄 Creating new order:', payload);
+        const result = await createEventOrder(eventId, payload);
         console.log('✅ Order created:', result);
         showMessage('success', 'Order created successfully');
       }
@@ -136,7 +197,15 @@ const EventOrders = () => {
       loadOrders();
     } catch (error) {
       console.error('Submit order failed:', error);
-      showMessage('error', error.message || 'Failed to submit order');
+      const msg = getApiErrorMessage(error, 'Failed to submit order.');
+      // Add permission/pricing hints for common cases
+      if (String(msg).toLowerCase().includes('fee management')) {
+        showMessage('error', `${msg} (Ask admin to enable Fee Management for your event assignment.)`);
+      } else if (String(msg).toLowerCase().includes('certificate management')) {
+        showMessage('error', `${msg} (Ask admin to enable Certificate Management for your event assignment.)`);
+      } else {
+        showMessage('error', msg);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -153,7 +222,7 @@ const EventOrders = () => {
       loadOrders();
     } catch (error) {
       console.error('Delete failed:', error);
-      showMessage('error', error.message || 'Failed to delete order');
+      showMessage('error', getApiErrorMessage(error, 'Failed to delete order.'));
     }
   };
 
@@ -182,7 +251,12 @@ const EventOrders = () => {
       setPaymentLoading(false);
     } catch (error) {
       console.error('Payment initiation failed:', error);
-      showMessage('error', error.message || 'Failed to initiate payment');
+      const msg = getApiErrorMessage(error, 'Failed to initiate payment.');
+      if (String(msg).toLowerCase().includes('confirmed') || String(msg).toLowerCase().includes('priced')) {
+        showMessage('error', `${msg} (Set medal price / wait for admin to price, then try again.)`);
+      } else {
+        showMessage('error', msg);
+      }
       setPaymentLoading(false);
     }
   };
@@ -345,11 +419,26 @@ const EventOrders = () => {
             message.type === 'error' ? 'bg-red-50 border border-red-200 text-red-800' :
             'bg-yellow-50 border border-yellow-200 text-yellow-800'
           }`}>
-            <div className="flex items-center justify-between">
-              <span>{message.text}</span>
-              <button 
-                onClick={() => setMessage({ type: '', text: '' })}
-                className="text-current opacity-70 hover:opacity-100"
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5">
+                  {message.type === 'success' ? '✅' : message.type === 'error' ? '⚠️' : 'ℹ️'}
+                </span>
+                <div>
+                  <div className="font-semibold">
+                    {message.type === 'success' ? 'Success' : message.type === 'error' ? 'Action needed' : 'Heads up'}
+                  </div>
+                  <div className="text-sm mt-1">{message.text}</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDismissedMessageAt(Date.now());
+                  setMessage({ type: '', text: '' });
+                }}
+                className="text-current opacity-70 hover:opacity-100 font-semibold px-2"
+                aria-label="Dismiss"
               >
                 ×
               </button>
@@ -423,6 +512,11 @@ const EventOrders = () => {
                           <div className="flex items-center">
                             <FaMedal className="text-yellow-500 mr-1" />
                             {order.medals} Medals
+                            {(order.medalGold || order.medalSilver || order.medalBronze) ? (
+                              <span className="ml-2 text-xs text-gray-500">
+                                (G:{order.medalGold || 0} / S:{order.medalSilver || 0} / B:{order.medalBronze || 0})
+                              </span>
+                            ) : null}
                           </div>
                         )}
                         {order.trophies > 0 && (
@@ -435,7 +529,12 @@ const EventOrders = () => {
 
                       {order.totalAmount && (
                         <div className="text-sm font-medium text-green-600 mb-2">
-                          Total: ₹{order.totalAmount.toLocaleString()}
+                          Total Payable: ₹{Number(order.totalAmount).toLocaleString()}
+                          {order.medalPrice ? (
+                            <span className="ml-2 text-xs text-gray-600 font-normal">
+                              (₹{order.medalPrice}/medal × {order.medals || 0} medals)
+                            </span>
+                          ) : null}
                           {order.paymentStatus && (
                             <span className={`ml-2 px-2 py-1 rounded-full text-xs ${
                               order.paymentStatus === 'SUCCESS' ? 'bg-green-100 text-green-800' :
@@ -547,15 +646,83 @@ const EventOrders = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Medals
+                  Medals (Gold / Silver / Bronze)
                 </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={orderForm.medals}
-                  onChange={(e) => setOrderForm(prev => ({ ...prev, medals: parseInt(e.target.value) || 0 }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <div className="text-xs text-gray-500 mb-1">Gold</div>
+                    <input
+                      type="number"
+                      min="0"
+                      value={orderForm.medalGold}
+                      onChange={(e) => setOrderForm(prev => ({ ...prev, medalGold: parseInt(e.target.value) || 0 }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 mb-1">Silver</div>
+                    <input
+                      type="number"
+                      min="0"
+                      value={orderForm.medalSilver}
+                      onChange={(e) => setOrderForm(prev => ({ ...prev, medalSilver: parseInt(e.target.value) || 0 }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 mb-1">Bronze</div>
+                    <input
+                      type="number"
+                      min="0"
+                      value={orderForm.medalBronze}
+                      onChange={(e) => setOrderForm(prev => ({ ...prev, medalBronze: parseInt(e.target.value) || 0 }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <div className="mt-2 text-xs text-gray-600">
+                  Total medals: <strong>{medalsTotal}</strong> (price is calculated on total medals, not color)
+                </div>
+
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Medal Price (₹ per medal)
+                    {eventData?.level ? (
+                      <span className="ml-2 text-xs text-gray-500">
+                        Suggested for {eventData.level}: ₹{getSuggestedMedalPrice(eventData.level) || '—'}
+                      </span>
+                    ) : null}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={orderForm.medalPrice}
+                      onChange={(e) => setOrderForm(prev => ({ ...prev, medalPrice: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder={getSuggestedMedalPrice(eventData?.level) ? String(getSuggestedMedalPrice(eventData?.level)) : 'e.g. 30'}
+                    />
+                    {getSuggestedMedalPrice(eventData?.level) ? (
+                      <button
+                        type="button"
+                        onClick={() => setOrderForm(prev => ({ ...prev, medalPrice: String(getSuggestedMedalPrice(eventData?.level)) }))}
+                        className="px-3 py-2 text-xs font-semibold border border-gray-300 rounded-lg hover:bg-gray-50 whitespace-nowrap"
+                      >
+                        Use ₹{getSuggestedMedalPrice(eventData?.level)}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded p-2">
+                    Payable (medals only): <strong>₹{computedTotalAmount.total.toFixed(2)}</strong>
+                    <div className="mt-1 text-gray-500">
+                      Example: 100 Gold + 120 Silver + 140 Bronze = 360 medals × ₹{computedTotalAmount.medalUnit || 0} = ₹{(medalsTotal * (computedTotalAmount.medalUnit || 0)).toFixed(2)}
+                    </div>
+                    <div className="mt-1 text-gray-500">
+                      Note: Pricing will be applied only if you have <strong>Fee Management</strong> permission for this event; otherwise admin will price the order.
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div>

@@ -3,11 +3,19 @@ const EventController = require('../controllers/eventController');
 const { authenticate, requireRole, requireStudent, requireCoach, checkEventPermission } = require('../utils/authMiddleware');
 const multer = require('multer');
 const path = require('path');
+const Razorpay = require('razorpay');
+const crypto = require('crypto');
 const { successResponse, errorResponse } = require('../utils/helpers');
 const prisma = require('../utils/prismaClient');
 
 const router = express.Router();
 const eventController = new EventController();
+
+// Razorpay instance (used for Event Orders payments)
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET
+});
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -464,7 +472,7 @@ router.post('/test-upload',
 // - COACH: allowed (legacy behavior)
 // - EVENT_INCHARGE: allowed only when resultUpload permission is granted for this event
 router.post('/:eventId/results', 
-  authenticate,
+  authenticate, 
   async (req, res, next) => {
     if (req.user?.role === 'COACH') return requireCoach(req, res, next);
     if (req.user?.role === 'EVENT_INCHARGE') {
@@ -689,5 +697,434 @@ router.delete('/:eventId/results/:fileId',
   },
   eventController.deleteResultFile.bind(eventController)
 );
+
+/**
+ * Event Orders (certificates/medals/trophies) - event-scoped
+ * Allows:
+ * - ADMIN (bypass)
+ * - COACH who owns event (via checkEventPermission bypass)
+ * - Assigned user (INCHARGE/COORDINATOR/TEAM) with certificateManagement permission
+ *
+ * Notes:
+ * - EventOrder requires coachId; for non-coach creators we use the event's coachId.
+ * - Medals pricing is based on total medals (Gold+Silver+Bronze) — not on color.
+ */
+
+const canManageEventOrders = async (user, eventId) => {
+  // Use an existing permission key that admins can assign to event staff.
+  // We treat "certificateManagement" as the umbrella permission for orders.
+  return await checkEventPermission({ user, eventId, permissionKey: 'certificateManagement' });
+};
+
+const canSetEventOrderPricing = async (user, eventId) => {
+  // Pricing impacts payments; keep it behind feeManagement (or admin/coach bypass via checkEventPermission).
+  return await checkEventPermission({ user, eventId, permissionKey: 'feeManagement' });
+};
+
+const getDefaultMedalPriceByLevel = (level) => {
+  const lvl = String(level || '').toUpperCase().trim();
+  // Defaults requested:
+  // District: ₹30, State: ₹55
+  if (lvl === 'DISTRICT') return 30;
+  if (lvl === 'STATE') return 55;
+  return null;
+};
+
+const getEventForOrders = async (eventId) => {
+  const ev = await prisma.event.findFirst({
+    where: { OR: [{ id: eventId }, { uniqueId: eventId }] },
+    select: { id: true, uniqueId: true, name: true, level: true, startDate: true, endDate: true, coachId: true }
+  });
+  return ev;
+};
+
+// Create order for event
+router.post('/:eventId/orders', authenticate, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { user } = req;
+
+    const has = await canManageEventOrders(user, eventId);
+    if (!has) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
+
+    const ev = await getEventForOrders(eventId);
+    if (!ev) return res.status(404).json(errorResponse('Event not found.', 404));
+    if (!ev.coachId) return res.status(400).json(errorResponse('Event is missing coach association. Cannot create orders.', 400));
+
+    const {
+      certificates = 0,
+      medals = 0,
+      medalGold = 0,
+      medalSilver = 0,
+      medalBronze = 0,
+      trophies = 0,
+      medalPrice,
+      certificatePrice,
+      trophyPrice,
+      specialInstructions = '',
+      urgentDelivery = false
+    } = req.body || {};
+
+    const parsedCertificates = Math.max(0, parseInt(certificates) || 0);
+    const parsedTrophies = Math.max(0, parseInt(trophies) || 0);
+    const parsedMedalGold = Math.max(0, parseInt(medalGold) || 0);
+    const parsedMedalSilver = Math.max(0, parseInt(medalSilver) || 0);
+    const parsedMedalBronze = Math.max(0, parseInt(medalBronze) || 0);
+    const medalsFromBreakdown = parsedMedalGold + parsedMedalSilver + parsedMedalBronze;
+    const parsedMedals = Math.max(0, parseInt(medals) || 0);
+    const finalMedals = medalsFromBreakdown > 0 ? medalsFromBreakdown : parsedMedals;
+
+    const totalQuantity = parsedCertificates + finalMedals + parsedTrophies;
+    if (totalQuantity === 0) {
+      return res.status(400).json(errorResponse('At least one item must be ordered.', 400));
+    }
+
+    // Pricing (optional, permission-gated)
+    const canPrice = await canSetEventOrderPricing(user, eventId);
+    const defaultMedalPrice = getDefaultMedalPriceByLevel(ev.level);
+    const parsedMedalPrice = canPrice
+      ? (medalPrice !== undefined && medalPrice !== null && medalPrice !== '' ? Math.max(0, parseFloat(medalPrice) || 0) : (defaultMedalPrice || 0))
+      : 0;
+    const parsedCertificatePrice = canPrice
+      ? (certificatePrice !== undefined && certificatePrice !== null && certificatePrice !== '' ? Math.max(0, parseFloat(certificatePrice) || 0) : 0)
+      : 0;
+    const parsedTrophyPrice = canPrice
+      ? (trophyPrice !== undefined && trophyPrice !== null && trophyPrice !== '' ? Math.max(0, parseFloat(trophyPrice) || 0) : 0)
+      : 0;
+    const calculatedTotal = canPrice
+      ? ((parsedCertificates * parsedCertificatePrice) + (finalMedals * parsedMedalPrice) + (parsedTrophies * parsedTrophyPrice))
+      : 0;
+
+    // One order per event (stored against the event owner coachId)
+    const existingOrder = await prisma.eventOrder.findFirst({
+      where: { eventId: ev.id, coachId: ev.coachId }
+    });
+    if (existingOrder) {
+      return res.status(400).json(errorResponse('An order already exists for this event. Please edit the existing order.', 400));
+    }
+
+    const orderCount = await prisma.eventOrder.count();
+    const orderNumber = `ORD-${Date.now()}-${String(orderCount + 1).padStart(4, '0')}`;
+
+    const order = await prisma.eventOrder.create({
+      data: {
+        orderNumber,
+        eventId: ev.id,
+        coachId: ev.coachId,
+        certificates: parsedCertificates,
+        medals: finalMedals,
+        medalGold: parsedMedalGold,
+        medalSilver: parsedMedalSilver,
+        medalBronze: parsedMedalBronze,
+        trophies: parsedTrophies,
+        specialInstructions,
+        urgentDelivery,
+        ...(canPrice && { certificatePrice: parsedCertificatePrice, medalPrice: parsedMedalPrice, trophyPrice: parsedTrophyPrice }),
+        status: canPrice && calculatedTotal > 0 ? 'CONFIRMED' : 'PENDING',
+        totalAmount: canPrice ? Number(calculatedTotal.toFixed(2)) : 0
+      },
+      include: {
+        event: { select: { id: true, uniqueId: true, name: true, level: true, startDate: true, endDate: true } }
+      }
+    });
+
+    return res.status(201).json(successResponse(
+      order,
+      canPrice && calculatedTotal > 0
+        ? 'Order created and priced successfully. You can proceed to payment.'
+        : 'Order created successfully. Admin will review and provide pricing.',
+      201
+    ));
+  } catch (error) {
+    console.error('Create event order error:', error);
+    return res.status(500).json(errorResponse('Failed to create order.', 500));
+  }
+});
+
+// Get orders for event
+router.get('/:eventId/orders', authenticate, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { user } = req;
+
+    const has = await canManageEventOrders(user, eventId);
+    if (!has) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
+
+    const ev = await getEventForOrders(eventId);
+    if (!ev) return res.status(404).json(errorResponse('Event not found.', 404));
+    if (!ev.coachId) return res.status(400).json(errorResponse('Event is missing coach association. Cannot load orders.', 400));
+
+    const orders = await prisma.eventOrder.findMany({
+      where: { eventId: ev.id, coachId: ev.coachId },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    return res.json(successResponse({
+      event: { id: ev.id, uniqueId: ev.uniqueId, name: ev.name, level: ev.level, startDate: ev.startDate, endDate: ev.endDate },
+      orders
+    }, 'Orders retrieved successfully.'));
+  } catch (error) {
+    console.error('Get event orders error:', error);
+    return res.status(500).json(errorResponse('Failed to retrieve orders.', 500));
+  }
+});
+
+// Update order (before admin pricing)
+router.put('/:eventId/orders/:orderId', authenticate, async (req, res) => {
+  try {
+    const { eventId, orderId } = req.params;
+    const { user } = req;
+
+    const has = await canManageEventOrders(user, eventId);
+    if (!has) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
+
+    const ev = await getEventForOrders(eventId);
+    if (!ev) return res.status(404).json(errorResponse('Event not found.', 404));
+    if (!ev.coachId) return res.status(400).json(errorResponse('Event is missing coach association. Cannot update orders.', 400));
+
+    // Verify order exists and is still modifiable (allow before payment)
+    const existing = await prisma.eventOrder.findFirst({
+      where: { id: orderId, eventId: ev.id, coachId: ev.coachId, status: { in: ['PENDING', 'CONFIRMED'] }, paymentStatus: { not: 'SUCCESS' } }
+    });
+    if (!existing) return res.status(404).json(errorResponse('Order not found or cannot be modified.', 404));
+
+    const {
+      certificates = 0,
+      medals = 0,
+      medalGold = 0,
+      medalSilver = 0,
+      medalBronze = 0,
+      trophies = 0,
+      medalPrice,
+      certificatePrice,
+      trophyPrice,
+      specialInstructions = '',
+      urgentDelivery = false
+    } = req.body || {};
+
+    const parsedCertificates = Math.max(0, parseInt(certificates) || 0);
+    const parsedTrophies = Math.max(0, parseInt(trophies) || 0);
+    const parsedMedalGold = Math.max(0, parseInt(medalGold) || 0);
+    const parsedMedalSilver = Math.max(0, parseInt(medalSilver) || 0);
+    const parsedMedalBronze = Math.max(0, parseInt(medalBronze) || 0);
+    const medalsFromBreakdown = parsedMedalGold + parsedMedalSilver + parsedMedalBronze;
+    const parsedMedals = Math.max(0, parseInt(medals) || 0);
+    const finalMedals = medalsFromBreakdown > 0 ? medalsFromBreakdown : parsedMedals;
+
+    const totalQuantity = parsedCertificates + finalMedals + parsedTrophies;
+    if (totalQuantity === 0) {
+      return res.status(400).json(errorResponse('At least one item must be ordered.', 400));
+    }
+
+    const canPrice = await canSetEventOrderPricing(user, eventId);
+    const defaultMedalPrice = getDefaultMedalPriceByLevel(ev.level);
+    const nextMedalPrice = canPrice
+      ? (medalPrice !== undefined && medalPrice !== null && medalPrice !== '' ? Math.max(0, parseFloat(medalPrice) || 0) : (existing.medalPrice ?? defaultMedalPrice ?? 0))
+      : (existing.medalPrice || 0);
+    const nextCertificatePrice = canPrice
+      ? (certificatePrice !== undefined && certificatePrice !== null && certificatePrice !== '' ? Math.max(0, parseFloat(certificatePrice) || 0) : (existing.certificatePrice || 0))
+      : (existing.certificatePrice || 0);
+    const nextTrophyPrice = canPrice
+      ? (trophyPrice !== undefined && trophyPrice !== null && trophyPrice !== '' ? Math.max(0, parseFloat(trophyPrice) || 0) : (existing.trophyPrice || 0))
+      : (existing.trophyPrice || 0);
+
+    const recalculatedTotal = canPrice
+      ? ((parsedCertificates * nextCertificatePrice) + (finalMedals * nextMedalPrice) + (parsedTrophies * nextTrophyPrice))
+      : (existing.totalAmount || 0);
+
+    const updatedOrder = await prisma.eventOrder.update({
+      where: { id: orderId },
+      data: {
+        certificates: parsedCertificates,
+        medals: finalMedals,
+        medalGold: parsedMedalGold,
+        medalSilver: parsedMedalSilver,
+        medalBronze: parsedMedalBronze,
+        trophies: parsedTrophies,
+        specialInstructions,
+        urgentDelivery,
+        ...(canPrice && {
+          certificatePrice: nextCertificatePrice,
+          medalPrice: nextMedalPrice,
+          trophyPrice: nextTrophyPrice,
+          totalAmount: Number(recalculatedTotal.toFixed(2)),
+          status: recalculatedTotal > 0 ? 'CONFIRMED' : existing.status
+        })
+      }
+    });
+
+    return res.json(successResponse(updatedOrder, 'Order updated successfully.'));
+  } catch (error) {
+    console.error('Update event order error:', error);
+    return res.status(500).json(errorResponse('Failed to update order.', 500));
+  }
+});
+
+// Delete order (before admin pricing)
+router.delete('/:eventId/orders/:orderId', authenticate, async (req, res) => {
+  try {
+    const { eventId, orderId } = req.params;
+    const { user } = req;
+
+    const has = await canManageEventOrders(user, eventId);
+    if (!has) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
+
+    const ev = await getEventForOrders(eventId);
+    if (!ev) return res.status(404).json(errorResponse('Event not found.', 404));
+    if (!ev.coachId) return res.status(400).json(errorResponse('Event is missing coach association. Cannot delete orders.', 400));
+
+    const existing = await prisma.eventOrder.findFirst({
+      where: { id: orderId, eventId: ev.id, coachId: ev.coachId, status: 'PENDING', paymentStatus: { not: 'SUCCESS' } }
+    });
+    if (!existing) return res.status(404).json(errorResponse('Order not found or cannot be deleted.', 404));
+
+    await prisma.eventOrder.delete({ where: { id: orderId } });
+    return res.json(successResponse({ id: orderId }, 'Order deleted successfully.'));
+  } catch (error) {
+    console.error('Delete event order error:', error);
+    return res.status(500).json(errorResponse('Failed to delete order.', 500));
+  }
+});
+
+// Create payment order for event order (works for coach/admin/assigned event staff with permission)
+router.post('/orders/:orderId/create-payment', authenticate, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await prisma.eventOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        event: { select: { id: true, name: true } }
+      }
+    });
+    if (!order) return res.status(404).json(errorResponse('Order not found.', 404));
+
+    const has = await canManageEventOrders(req.user, order.eventId);
+    if (!has) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
+
+    // Idempotency: if already created and awaiting payment, return existing Razorpay order id.
+    if (order.status === 'PAYMENT_PENDING' && order.razorpayOrderId && order.paymentStatus !== 'SUCCESS') {
+      return res.json(successResponse({
+        orderId: order.razorpayOrderId,
+        amount: Math.round((order.totalAmount || 0) * 100),
+        currency: 'INR',
+        orderDetails: {
+          id: order.id,
+          orderNumber: order.orderNumber,
+          eventName: order.event?.name,
+          totalAmount: order.totalAmount,
+          certificates: order.certificates,
+          medals: order.medals,
+          trophies: order.trophies
+        }
+      }, 'Payment order already created. Continue payment.'));
+    }
+
+    if (order.status !== 'CONFIRMED') {
+      return res.status(400).json(errorResponse('Order must be confirmed/priced before payment.', 400));
+    }
+    if (!order.totalAmount || order.totalAmount <= 0) {
+      return res.status(400).json(errorResponse('Order total amount is required.', 400));
+    }
+    if (order.paymentStatus === 'SUCCESS') {
+      return res.status(400).json(errorResponse('Order payment already completed.', 400));
+    }
+
+    const options = {
+      amount: Math.round(order.totalAmount * 100),
+      currency: 'INR',
+      receipt: `order_${orderId}_${Date.now()}`.slice(0, 40),
+      payment_capture: 1,
+      notes: {
+        orderId,
+        eventName: order.event?.name || '',
+        payerUserId: req.user?.id || '',
+        payerRole: req.user?.role || '',
+        type: 'EVENT_ORDER'
+      }
+    };
+
+    const razorpayOrder = await razorpay.orders.create(options);
+
+    await prisma.eventOrder.update({
+      where: { id: orderId },
+      data: {
+        razorpayOrderId: razorpayOrder.id,
+        paymentStatus: 'PENDING',
+        status: 'PAYMENT_PENDING'
+      }
+    });
+
+    return res.json(successResponse({
+      orderId: razorpayOrder.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      orderDetails: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        eventName: order.event?.name,
+        totalAmount: order.totalAmount,
+        certificates: order.certificates,
+        medals: order.medals,
+        trophies: order.trophies
+      }
+    }, 'Payment order created successfully.'));
+  } catch (error) {
+    console.error('Create event order payment error:', error);
+    return res.status(500).json(errorResponse('Failed to create payment order.', 500));
+  }
+});
+
+// Verify order payment (works for coach/admin/assigned event staff with permission)
+router.post('/orders/:orderId/verify-payment', authenticate, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+
+    const order = await prisma.eventOrder.findUnique({
+      where: { id: orderId },
+      include: { event: { select: { id: true, name: true } } }
+    });
+    if (!order) return res.status(404).json(errorResponse('Order not found.', 404));
+
+    const has = await canManageEventOrders(req.user, order.eventId);
+    if (!has) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
+
+    // Idempotency: already paid
+    if (order.paymentStatus === 'SUCCESS') {
+      return res.json(successResponse(order, 'Payment already verified.'));
+    }
+
+    if (order.razorpayOrderId !== razorpay_order_id) {
+      return res.status(400).json(errorResponse('Invalid order ID.', 400));
+    }
+
+    const body = razorpay_order_id + '|' + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json(errorResponse('Invalid payment signature.', 400));
+    }
+
+    const updatedOrder = await prisma.eventOrder.update({
+      where: { id: orderId },
+      data: {
+        razorpayPaymentId: razorpay_payment_id,
+        paymentStatus: 'SUCCESS',
+        status: 'PAID',
+        paymentDate: new Date(),
+        paymentMethod: 'razorpay'
+      }
+    });
+
+    return res.json(successResponse(updatedOrder, 'Payment verified successfully.'));
+  } catch (error) {
+    console.error('Verify event order payment error:', error);
+    return res.status(500).json(errorResponse('Payment verification failed.', 500));
+  }
+});
 
 module.exports = router;

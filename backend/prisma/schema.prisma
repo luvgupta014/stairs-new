@@ -520,6 +520,9 @@ model EventOrder {
   orderNumber         String        @unique
   certificates        Int           @default(0)
   medals              Int           @default(0)
+  medalGold           Int           @default(0)
+  medalSilver         Int           @default(0)
+  medalBronze         Int           @default(0)
   trophies            Int           @default(0)
   specialInstructions String?
   urgentDelivery      Boolean       @default(false)

@@ -2641,6 +2641,7 @@ router.get('/orders', authenticate, requireAdmin, async (req, res) => {
               id: true, 
               name: true, 
               sport: true, 
+              level: true,
               startDate: true,
               venue: true,
               city: true
@@ -5273,7 +5274,8 @@ router.get('/events/:eventId/results/analytics', authenticate, requireAdmin, asy
 });
 
 // GET /api/admin/orders - Get all event orders with filters
-router.get('/orders', authenticate, requireAdmin, async (req, res) => {
+// Legacy/alternate implementation kept for reference; primary endpoint is the earlier /orders route.
+router.get('/orders-v2', authenticate, requireAdmin, async (req, res) => {
   try {
     const { status, paymentStatus, eventId, coachId, page = 1, limit = 20 } = req.query;
     const { skip, take } = getPaginationParams(parseInt(page), parseInt(limit));
@@ -5293,7 +5295,8 @@ router.get('/orders', authenticate, requireAdmin, async (req, res) => {
               id: true,
               name: true,
               sport: true,
-              uniqueId: true
+              uniqueId: true,
+              level: true
             }
           },
           coach: {

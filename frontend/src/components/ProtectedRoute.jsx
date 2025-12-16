@@ -22,12 +22,16 @@ const ProtectedRoute = ({ children, role, allowedRoles }) => {
 
     if (currentPath.includes('/coach')) {
       loginPath = '/login/coach';
+    } else if (currentPath.includes('/coordinator')) {
+      loginPath = '/login/coordinator';
     } else if (currentPath.includes('/institute')) {
       loginPath = '/login/institute';
     } else if (currentPath.includes('/club')) {
       loginPath = '/login/club';
     } else if (currentPath.includes('/admin')) {
       loginPath = '/login/admin';
+    } else if (currentPath.includes('/incharge')) {
+      loginPath = '/login/incharge';
     }
 
     return <Navigate to={loginPath} state={{ from: location }} replace />;
