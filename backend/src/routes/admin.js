@@ -2771,6 +2771,13 @@ router.put('/orders/:orderId', authenticate, requireAdmin, async (req, res) => {
       order.paymentStatus !== 'SUCCESS' &&
       (order.status === 'PENDING' || order.status === 'CONFIRMED');
 
+    const safeTotalAmount =
+      calculatedTotal !== null &&
+      calculatedTotal !== undefined &&
+      Number.isFinite(Number(calculatedTotal))
+        ? Number.parseFloat(calculatedTotal)
+        : undefined;
+
     const updateData = {
       ...(normalizedStatus && { status: normalizedStatus }),
       ...(shouldAutoConfirm && { status: 'CONFIRMED' }),
@@ -2778,7 +2785,7 @@ router.put('/orders/:orderId', authenticate, requireAdmin, async (req, res) => {
       ...(certificatePrice !== undefined && { certificatePrice: parseFloat(certificatePrice) }),
       ...(medalPrice !== undefined && { medalPrice: parseFloat(medalPrice) }),
       ...(trophyPrice !== undefined && { trophyPrice: parseFloat(trophyPrice) }),
-      ...(calculatedTotal !== undefined && { totalAmount: parseFloat(calculatedTotal) }),
+      ...(safeTotalAmount !== undefined && { totalAmount: safeTotalAmount }),
       processedBy: req.admin.id,
       processedAt: new Date()
     };

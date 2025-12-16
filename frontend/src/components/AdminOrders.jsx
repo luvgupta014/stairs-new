@@ -134,13 +134,30 @@ const AdminOrders = () => {
 
   const openOrderModal = (order) => {
     setEditingOrder(order);
-    setOrderUpdate({
+    const initialUpdate = {
       status: order.status,
       adminRemarks: order.adminRemarks || '',
       certificatePrice: order.certificatePrice || '',
       medalPrice: order.medalPrice || '',
       trophyPrice: order.trophyPrice || '',
       totalAmount: order.totalAmount || ''
+    };
+
+    // Ensure totalAmount is always populated on modal open (even if prices were prefilled)
+    const computedTotal = (() => {
+      const certPrice = parseFloat(initialUpdate.certificatePrice || 0);
+      const medPrice = parseFloat(initialUpdate.medalPrice || 0);
+      const tropPrice = parseFloat(initialUpdate.trophyPrice || 0);
+      const total =
+        (Number(order.certificates || 0) * certPrice) +
+        (Number(order.medals || 0) * medPrice) +
+        (Number(order.trophies || 0) * tropPrice);
+      return total.toFixed(2);
+    })();
+
+    setOrderUpdate({
+      ...initialUpdate,
+      totalAmount: computedTotal
     });
     setShowOrderModal(true);
   };
@@ -189,6 +206,19 @@ const AdminOrders = () => {
     
     setOrderUpdate(updatedPrices);
   };
+
+  // Safety: if prices are prefilled (no onChange fired), keep totalAmount in sync while modal is open.
+  useEffect(() => {
+    if (!showOrderModal || !editingOrder) return;
+    const calculatedTotal = calculateTotalAmount(
+      orderUpdate.certificatePrice,
+      orderUpdate.medalPrice,
+      orderUpdate.trophyPrice
+    );
+    if (String(orderUpdate.totalAmount || '') !== String(calculatedTotal || '')) {
+      setOrderUpdate(prev => ({ ...prev, totalAmount: calculatedTotal }));
+    }
+  }, [showOrderModal, editingOrder, orderUpdate.certificatePrice, orderUpdate.medalPrice, orderUpdate.trophyPrice]);
 
   const handleUpdateOrder = async (e) => {
     e.preventDefault();

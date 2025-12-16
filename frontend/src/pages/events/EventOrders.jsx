@@ -598,21 +598,29 @@ const EventOrders = () => {
                     </div>
                     
                     <div className="flex items-center space-x-2">
-                      {['CONFIRMED', 'PAYMENT_PENDING'].includes(order.status) && order.totalAmount > 0 && order.paymentStatus !== 'SUCCESS' && (
+                      {['CONFIRMED', 'PAYMENT_PENDING'].includes(order.status) && order.paymentStatus !== 'SUCCESS' && (
                         <button
                           onClick={() => handlePayment(order)}
-                          disabled={paymentLoading}
-                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors inline-flex items-center disabled:opacity-50"
+                          disabled={paymentLoading || !(Number(order.totalAmount) > 0)}
+                          className={`px-3 py-1 rounded text-sm font-medium transition-colors inline-flex items-center disabled:opacity-50 ${
+                            Number(order.totalAmount) > 0 ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-700'
+                          }`}
+                          title={Number(order.totalAmount) > 0 ? 'Pay this order via Razorpay' : 'Awaiting pricing: admin must set total amount'}
                         >
                           {paymentLoading ? (
                             <>
                               <FaSpinner className="animate-spin mr-1" />
                               Processing...
                             </>
-                          ) : (
+                          ) : Number(order.totalAmount) > 0 ? (
                             <>
                               <FaCreditCard className="mr-1" />
                               Pay Now
+                            </>
+                          ) : (
+                            <>
+                              <FaClock className="mr-1" />
+                              Awaiting Pricing
                             </>
                           )}
                         </button>
