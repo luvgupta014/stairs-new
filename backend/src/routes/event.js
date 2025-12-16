@@ -710,17 +710,6 @@ router.delete('/:eventId/results/:fileId',
  * - Medals pricing is based on total medals (Gold+Silver+Bronze) — not on color.
  */
 
-const canManageEventOrders = async (user, eventId) => {
-  // Use an existing permission key that admins can assign to event staff.
-  // We treat "certificateManagement" as the umbrella permission for orders.
-  return await checkEventPermission({ user, eventId, permissionKey: 'certificateManagement' });
-};
-
-const canSetEventOrderPricing = async (user, eventId) => {
-  // Pricing impacts payments; keep it behind feeManagement (or admin/coach bypass via checkEventPermission).
-  return await checkEventPermission({ user, eventId, permissionKey: 'feeManagement' });
-};
-
 const getDefaultMedalPriceByLevel = (level) => {
   const lvl = String(level || '').toUpperCase().trim();
   // Defaults requested:
@@ -738,17 +727,30 @@ const getEventForOrders = async (eventId) => {
   return ev;
 };
 
+const canManageEventOrders = async (user, eventKey) => {
+  // IMPORTANT: eventKey can be DB id OR uniqueId; resolve first for correct permission checks.
+  const ev = await getEventForOrders(eventKey);
+  if (!ev) return { ok: false, ev: null };
+  const ok = await checkEventPermission({ user, eventId: ev.id, permissionKey: 'certificateManagement' });
+  return { ok, ev };
+};
+
+const canSetEventOrderPricing = async (user, eventKey) => {
+  const ev = await getEventForOrders(eventKey);
+  if (!ev) return { ok: false, ev: null };
+  const ok = await checkEventPermission({ user, eventId: ev.id, permissionKey: 'feeManagement' });
+  return { ok, ev };
+};
+
 // Create order for event
 router.post('/:eventId/orders', authenticate, async (req, res) => {
   try {
     const { eventId } = req.params;
     const { user } = req;
 
-    const has = await canManageEventOrders(user, eventId);
-    if (!has) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
-
-    const ev = await getEventForOrders(eventId);
+    const { ok: canManage, ev } = await canManageEventOrders(user, eventId);
     if (!ev) return res.status(404).json(errorResponse('Event not found.', 404));
+    if (!canManage) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
     if (!ev.coachId) return res.status(400).json(errorResponse('Event is missing coach association. Cannot create orders.', 400));
 
     const {
@@ -780,7 +782,7 @@ router.post('/:eventId/orders', authenticate, async (req, res) => {
     }
 
     // Pricing (optional, permission-gated)
-    const canPrice = await canSetEventOrderPricing(user, eventId);
+    const { ok: canPrice } = await canSetEventOrderPricing(user, ev.id);
     const defaultMedalPrice = getDefaultMedalPriceByLevel(ev.level);
     const parsedMedalPrice = canPrice
       ? (medalPrice !== undefined && medalPrice !== null && medalPrice !== '' ? Math.max(0, parseFloat(medalPrice) || 0) : (defaultMedalPrice || 0))
@@ -847,11 +849,9 @@ router.get('/:eventId/orders', authenticate, async (req, res) => {
     const { eventId } = req.params;
     const { user } = req;
 
-    const has = await canManageEventOrders(user, eventId);
-    if (!has) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
-
-    const ev = await getEventForOrders(eventId);
+    const { ok: canManage, ev } = await canManageEventOrders(user, eventId);
     if (!ev) return res.status(404).json(errorResponse('Event not found.', 404));
+    if (!canManage) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
     if (!ev.coachId) return res.status(400).json(errorResponse('Event is missing coach association. Cannot load orders.', 400));
 
     const orders = await prisma.eventOrder.findMany({
@@ -875,11 +875,9 @@ router.put('/:eventId/orders/:orderId', authenticate, async (req, res) => {
     const { eventId, orderId } = req.params;
     const { user } = req;
 
-    const has = await canManageEventOrders(user, eventId);
-    if (!has) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
-
-    const ev = await getEventForOrders(eventId);
+    const { ok: canManage, ev } = await canManageEventOrders(user, eventId);
     if (!ev) return res.status(404).json(errorResponse('Event not found.', 404));
+    if (!canManage) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
     if (!ev.coachId) return res.status(400).json(errorResponse('Event is missing coach association. Cannot update orders.', 400));
 
     // Verify order exists and is still modifiable (allow before payment)
@@ -916,7 +914,7 @@ router.put('/:eventId/orders/:orderId', authenticate, async (req, res) => {
       return res.status(400).json(errorResponse('At least one item must be ordered.', 400));
     }
 
-    const canPrice = await canSetEventOrderPricing(user, eventId);
+    const { ok: canPrice } = await canSetEventOrderPricing(user, ev.id);
     const defaultMedalPrice = getDefaultMedalPriceByLevel(ev.level);
     const nextMedalPrice = canPrice
       ? (medalPrice !== undefined && medalPrice !== null && medalPrice !== '' ? Math.max(0, parseFloat(medalPrice) || 0) : (existing.medalPrice ?? defaultMedalPrice ?? 0))
@@ -966,11 +964,9 @@ router.delete('/:eventId/orders/:orderId', authenticate, async (req, res) => {
     const { eventId, orderId } = req.params;
     const { user } = req;
 
-    const has = await canManageEventOrders(user, eventId);
-    if (!has) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
-
-    const ev = await getEventForOrders(eventId);
+    const { ok: canManage, ev } = await canManageEventOrders(user, eventId);
     if (!ev) return res.status(404).json(errorResponse('Event not found.', 404));
+    if (!canManage) return res.status(403).json(errorResponse('Access denied. Certificate management permission required.', 403));
     if (!ev.coachId) return res.status(400).json(errorResponse('Event is missing coach association. Cannot delete orders.', 400));
 
     const existing = await prisma.eventOrder.findFirst({

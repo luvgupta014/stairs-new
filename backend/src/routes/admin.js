@@ -5635,9 +5635,18 @@ router.get('/events/:eventId/verify-permission/:permissionKey', authenticate, as
       return res.status(400).json(errorResponse(`Invalid permission key. Must be one of: ${validPermissionKeys.join(', ')}`, 400));
     }
     
+    // eventId can be DB id or uniqueId; resolve first
+    const ev = await prisma.event.findFirst({
+      where: { OR: [{ id: eventId }, { uniqueId: eventId }] },
+      select: { id: true }
+    });
+    if (!ev) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
     const hasPermission = await checkEventPermission({
       user: req.user,
-      eventId,
+      eventId: ev.id,
       permissionKey
     });
 
