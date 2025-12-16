@@ -6,7 +6,8 @@ import {
   updateEventOrder, 
   deleteEventOrder,
   createOrderPayment,
-  verifyOrderPayment
+  verifyOrderPayment,
+  verifyEventPermission
 } from '../../api';
 import { 
   FaPlus, 
@@ -26,10 +27,12 @@ import {
 import Spinner from '../../components/Spinner';
 import BackButton from '../../components/BackButton';
 import CheckoutModal from '../../components/CheckoutModal';
+import { useAuth } from '../../contexts/AuthContext';
 
 const EventOrders = () => {
   const { eventId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   
   const [eventData, setEventData] = useState(null);
   const [orders, setOrders] = useState([]);
@@ -42,6 +45,7 @@ const EventOrders = () => {
   const [showCheckout, setShowCheckout] = useState(false);
   const [selectedOrderForPayment, setSelectedOrderForPayment] = useState(null);
   const [razorpayOrderData, setRazorpayOrderData] = useState(null);
+  const [canSetMedalPricing, setCanSetMedalPricing] = useState(false);
   
   // Order form state
   const [orderForm, setOrderForm] = useState({
@@ -69,12 +73,15 @@ const EventOrders = () => {
     (parseInt(orderForm.medalSilver) || 0) +
     (parseInt(orderForm.medalBronze) || 0);
 
+  // Requirement: do NOT show medal pricing to coordinator/coach; only show to EVENT_INCHARGE with feeManagement permission
+  const showMedalPricing = user?.role === 'EVENT_INCHARGE' && !!canSetMedalPricing;
+
   const computedTotalAmount = (() => {
     const cert = parseInt(orderForm.certificates) || 0;
     const trop = parseInt(orderForm.trophies) || 0;
-    const medalUnit = parseFloat(orderForm.medalPrice || 0) || 0;
-    // Right now only medals are priced via coordinator/event staff; other items remain admin-priced.
-    const total = (medalsTotal * medalUnit);
+    const medalUnit = showMedalPricing ? (parseFloat(orderForm.medalPrice || 0) || 0) : 0;
+    // Only compute/show medal pricing for permitted incharges.
+    const total = medalsTotal * medalUnit;
     // keep stable number formatting
     return { total, cert, trop, medalUnit };
   })();
@@ -82,6 +89,23 @@ const EventOrders = () => {
   useEffect(() => {
     loadOrders();
   }, [eventId]);
+
+  useEffect(() => {
+    const loadPricingPermission = async () => {
+      try {
+        if (user?.role !== 'EVENT_INCHARGE') {
+          setCanSetMedalPricing(false);
+          return;
+        }
+        const res = await verifyEventPermission(eventId, 'feeManagement');
+        setCanSetMedalPricing(!!res?.data?.hasPermission);
+      } catch {
+        // fail closed
+        setCanSetMedalPricing(false);
+      }
+    };
+    if (eventId && user?.role) loadPricingPermission();
+  }, [eventId, user?.role]);
 
   const getApiErrorMessage = (err, fallback = 'Something went wrong. Please try again.') => {
     // We sometimes throw error.response.data (object) or error.message (string)
@@ -138,7 +162,7 @@ const EventOrders = () => {
         medalSilver: hasBreakdown ? ms : 0,
         medalBronze: hasBreakdown ? mb : 0,
         trophies: order.trophies,
-        medalPrice: order.medalPrice !== null && order.medalPrice !== undefined ? String(order.medalPrice) : '',
+        medalPrice: showMedalPricing && order.medalPrice !== null && order.medalPrice !== undefined ? String(order.medalPrice) : '',
         specialInstructions: order.specialInstructions || '',
         urgentDelivery: order.urgentDelivery
       });
@@ -151,7 +175,7 @@ const EventOrders = () => {
         medalSilver: 0,
         medalBronze: 0,
         trophies: 0,
-        medalPrice: String(getSuggestedMedalPrice(eventData?.level) || ''),
+        medalPrice: showMedalPricing ? String(getSuggestedMedalPrice(eventData?.level) || '') : '',
         specialInstructions: '',
         urgentDelivery: false
       });
@@ -170,8 +194,7 @@ const EventOrders = () => {
     const payload = {
       ...orderForm,
       medals: medalsTotal,
-      // Send medalPrice if provided; backend will recalculate totalAmount server-side (permission-gated).
-      medalPrice: orderForm.medalPrice
+      ...(showMedalPricing ? { medalPrice: orderForm.medalPrice } : {})
     };
 
     if (payload.certificates === 0 && payload.medals === 0 && payload.trophies === 0) {
@@ -530,7 +553,7 @@ const EventOrders = () => {
                       {order.totalAmount && (
                         <div className="text-sm font-medium text-green-600 mb-2">
                           Total Payable: ₹{Number(order.totalAmount).toLocaleString()}
-                          {order.medalPrice ? (
+                          {showMedalPricing && order.medalPrice ? (
                             <span className="ml-2 text-xs text-gray-600 font-normal">
                               (₹{order.medalPrice}/medal × {order.medals || 0} medals)
                             </span>
@@ -575,7 +598,7 @@ const EventOrders = () => {
                     </div>
                     
                     <div className="flex items-center space-x-2">
-                      {order.status === 'CONFIRMED' && order.totalAmount > 0 && order.paymentStatus !== 'SUCCESS' && (
+                      {['CONFIRMED', 'PAYMENT_PENDING'].includes(order.status) && order.totalAmount > 0 && order.paymentStatus !== 'SUCCESS' && (
                         <button
                           onClick={() => handlePayment(order)}
                           disabled={paymentLoading}
@@ -684,45 +707,44 @@ const EventOrders = () => {
                   Total medals: <strong>{medalsTotal}</strong> (price is calculated on total medals, not color)
                 </div>
 
-                <div className="mt-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Medal Price (₹ per medal)
-                    {eventData?.level ? (
-                      <span className="ml-2 text-xs text-gray-500">
-                        Suggested for {eventData.level}: ₹{getSuggestedMedalPrice(eventData.level) || '—'}
-                      </span>
-                    ) : null}
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={orderForm.medalPrice}
-                      onChange={(e) => setOrderForm(prev => ({ ...prev, medalPrice: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder={getSuggestedMedalPrice(eventData?.level) ? String(getSuggestedMedalPrice(eventData?.level)) : 'e.g. 30'}
-                    />
-                    {getSuggestedMedalPrice(eventData?.level) ? (
-                      <button
-                        type="button"
-                        onClick={() => setOrderForm(prev => ({ ...prev, medalPrice: String(getSuggestedMedalPrice(eventData?.level)) }))}
-                        className="px-3 py-2 text-xs font-semibold border border-gray-300 rounded-lg hover:bg-gray-50 whitespace-nowrap"
-                      >
-                        Use ₹{getSuggestedMedalPrice(eventData?.level)}
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="mt-2 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded p-2">
-                    Payable (medals only): <strong>₹{computedTotalAmount.total.toFixed(2)}</strong>
-                    <div className="mt-1 text-gray-500">
-                      Example: 100 Gold + 120 Silver + 140 Bronze = 360 medals × ₹{computedTotalAmount.medalUnit || 0} = ₹{(medalsTotal * (computedTotalAmount.medalUnit || 0)).toFixed(2)}
+                {showMedalPricing ? (
+                  <div className="mt-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Medal Price (₹ per medal)
+                      {eventData?.level ? (
+                        <span className="ml-2 text-xs text-gray-500">
+                          Suggested for {eventData.level}: ₹{getSuggestedMedalPrice(eventData.level) || '—'}
+                        </span>
+                      ) : null}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={orderForm.medalPrice}
+                        onChange={(e) => setOrderForm(prev => ({ ...prev, medalPrice: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder={getSuggestedMedalPrice(eventData?.level) ? String(getSuggestedMedalPrice(eventData?.level)) : 'e.g. 30'}
+                      />
+                      {getSuggestedMedalPrice(eventData?.level) ? (
+                        <button
+                          type="button"
+                          onClick={() => setOrderForm(prev => ({ ...prev, medalPrice: String(getSuggestedMedalPrice(eventData?.level)) }))}
+                          className="px-3 py-2 text-xs font-semibold border border-gray-300 rounded-lg hover:bg-gray-50 whitespace-nowrap"
+                        >
+                          Use ₹{getSuggestedMedalPrice(eventData?.level)}
+                        </button>
+                      ) : null}
                     </div>
-                    <div className="mt-1 text-gray-500">
-                      Note: Pricing will be applied only if you have <strong>Fee Management</strong> permission for this event; otherwise admin will price the order.
+                    <div className="mt-2 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded p-2">
+                      Payable (medals only): <strong>₹{computedTotalAmount.total.toFixed(2)}</strong>
+                      <div className="mt-1 text-gray-500">
+                        Example: 100 Gold + 120 Silver + 140 Bronze = 360 medals × ₹{computedTotalAmount.medalUnit || 0} = ₹{(medalsTotal * (computedTotalAmount.medalUnit || 0)).toFixed(2)}
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : null}
               </div>
 
               <div>

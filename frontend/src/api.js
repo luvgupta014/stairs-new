@@ -191,6 +191,16 @@ export const updateEventPermissions = async (eventId, permissions) => {
   }
 };
 
+// Verify the logged-in user's permission for a specific event (works for any authenticated user)
+export const verifyEventPermission = async (eventId, permissionKey) => {
+  try {
+    const response = await api.get(`/api/admin/events/${eventId}/verify-permission/${permissionKey}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 // Admin: Incharge (per-user) permissions
 export const getEventInchargePermissions = async (eventId, userId) => {
   try {

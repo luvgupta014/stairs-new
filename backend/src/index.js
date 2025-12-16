@@ -211,6 +211,24 @@ app.use((error, req, res, next) => {
     return res.status(409).json(errorResponse('A record with this data already exists.', 409));
   }
 
+  // Prisma schema/db mismatch (migration missing)
+  if (error.code === 'P2022') {
+    const col = error?.meta?.column || 'unknown column';
+    return res.status(500).json(errorResponse(
+      `Database migration pending: missing column (${col}). Please apply the latest Prisma migrations to this database.`,
+      500
+    ));
+  }
+
+  // Prisma missing table
+  if (error.code === 'P2021') {
+    const tbl = error?.meta?.table || 'unknown table';
+    return res.status(500).json(errorResponse(
+      `Database migration pending: missing table (${tbl}). Please apply the latest Prisma migrations to this database.`,
+      500
+    ));
+  }
+
   if (error.code === 'P2025') {
     return res.status(404).json(errorResponse('Record not found.', 404));
   }
