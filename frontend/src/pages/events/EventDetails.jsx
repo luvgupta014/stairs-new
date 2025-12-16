@@ -987,7 +987,11 @@ const EventDetails = () => {
                       {/* Embedded Google Map */}
                       <div className="bg-gray-100 rounded-md overflow-hidden mb-3">
                         <iframe
-                          src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&q=${event.latitude},${event.longitude}&zoom=15`}
+                          src={
+                            import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+                              ? `https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&q=${event.latitude},${event.longitude}&zoom=15`
+                              : `https://www.google.com/maps?q=${event.latitude},${event.longitude}&z=15&output=embed`
+                          }
                           width="100%"
                           height="200"
                           style={{ border: 0 }}
@@ -1033,7 +1037,11 @@ const EventDetails = () => {
                       {/* Fallback: Search-based map */}
                       <div className="bg-gray-100 rounded-md overflow-hidden mb-3">
                         <iframe
-                          src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&q=${encodeURIComponent((event.address || event.venue) + ', ' + event.city + ', ' + event.state)}`}
+                          src={
+                            import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+                              ? `https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&q=${encodeURIComponent((event.address || event.venue) + ', ' + event.city + ', ' + event.state)}`
+                              : `https://www.google.com/maps?q=${encodeURIComponent((event.address || event.venue) + ', ' + event.city + ', ' + event.state)}&output=embed`
+                          }
                           width="100%"
                           height="200"
                           style={{ border: 0 }}

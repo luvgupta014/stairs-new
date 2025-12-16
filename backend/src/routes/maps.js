@@ -12,6 +12,13 @@ router.get('/places/autocomplete', async (req, res) => {
     if (!input) {
       return res.status(400).json({ error: 'Input parameter required' });
     }
+    if (!GOOGLE_MAPS_API_KEY) {
+      return res.status(503).json({
+        error: 'Google Maps API key not configured on server.',
+        code: 'MAPS_KEY_MISSING',
+        fallback: true
+      });
+    }
 
     const response = await axios.get('https://maps.googleapis.com/maps/api/place/autocomplete/json', {
       params: {
@@ -21,6 +28,16 @@ router.get('/places/autocomplete', async (req, res) => {
         language: 'en'
       }
     });
+
+    if (response?.data?.status && response.data.status !== 'OK' && response.data.status !== 'ZERO_RESULTS') {
+      console.error('Google Places Autocomplete returned:', response.data.status, response.data.error_message || '');
+      return res.status(502).json({
+        error: 'Google Places API returned an error.',
+        status: response.data.status,
+        error_message: response.data.error_message,
+        fallback: true
+      });
+    }
 
     res.json(response.data);
   } catch (error) {
@@ -40,6 +57,13 @@ router.get('/places/details', async (req, res) => {
     if (!place_id) {
       return res.status(400).json({ error: 'place_id parameter required' });
     }
+    if (!GOOGLE_MAPS_API_KEY) {
+      return res.status(503).json({
+        error: 'Google Maps API key not configured on server.',
+        code: 'MAPS_KEY_MISSING',
+        fallback: true
+      });
+    }
 
     const response = await axios.get('https://maps.googleapis.com/maps/api/place/details/json', {
       params: {
@@ -48,6 +72,16 @@ router.get('/places/details', async (req, res) => {
         key: GOOGLE_MAPS_API_KEY
       }
     });
+
+    if (response?.data?.status && response.data.status !== 'OK') {
+      console.error('Google Places Details returned:', response.data.status, response.data.error_message || '');
+      return res.status(502).json({
+        error: 'Google Place Details API returned an error.',
+        status: response.data.status,
+        error_message: response.data.error_message,
+        fallback: true
+      });
+    }
 
     res.json(response.data);
   } catch (error) {

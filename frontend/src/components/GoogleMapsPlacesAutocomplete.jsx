@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { FaMapMarkerAlt, FaExclamationTriangle } from "react-icons/fa";
+import FallbackVenueSearch from "./FallbackVenueSearch";
 
 const GoogleMapsPlacesAutocomplete = ({
   onPlaceSelect,
@@ -255,7 +256,30 @@ const GoogleMapsPlacesAutocomplete = ({
     );
   }
 
-  // Show actual input once API is ready (or failed)
+  // If Google Maps JS/Places fails (or key missing), fallback to backend-proxy search UI
+  if (isManualMode && loadError) {
+    return (
+      <div>
+        <FallbackVenueSearch
+          onPlaceSelect={onPlaceSelect}
+          placeholder={placeholder}
+          value={value}
+          onChange={onChange}
+          className={className}
+          disabled={disabled}
+        />
+        <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+          <div className="font-semibold">⚠️ Google Maps JS unavailable</div>
+          <div className="mt-1">{loadError}</div>
+          <div className="mt-1 text-gray-600">
+            Using server-based venue suggestions (no browser Maps key required).
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show actual input once API is ready
   return (
     <div className="relative">
       <input
@@ -264,43 +288,22 @@ const GoogleMapsPlacesAutocomplete = ({
         name="venue"
         value={value || ""}
         onChange={handleInputChange}
-        placeholder={
-          isManualMode ? `${placeholder} (Manual entry)` : placeholder
-        }
+        placeholder={placeholder}
         className={className}
         disabled={disabled}
         autoComplete="off"
       />
 
       <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-        {isManualMode ? (
-          <FaExclamationTriangle
-            className="text-amber-500 w-4 h-4"
-            title="Manual input mode - Google Maps unavailable"
-          />
-        ) : (
-          <FaMapMarkerAlt
-            className="text-green-500 w-4 h-4"
-            title="Google Maps search enabled"
-          />
-        )}
+        <FaMapMarkerAlt
+          className="text-green-500 w-4 h-4"
+          title="Google Maps search enabled"
+        />
       </div>
 
-      {isManualMode && loadError && (
-        <div className="mt-1 text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
-          <div className="font-semibold">⚠️ Google Maps Unavailable</div>
-          <div className="mt-1">{loadError}</div>
-          <div className="mt-1 text-gray-600">
-            Please enter venue details manually
-          </div>
-        </div>
-      )}
-
-      {!isManualMode && (
-        <div className="mt-1 text-xs text-green-600">
-          ✓ Start typing to search venues on Google Maps
-        </div>
-      )}
+      <div className="mt-1 text-xs text-green-600">
+        ✓ Start typing to search venues on Google Maps
+      </div>
     </div>
   );
 };
