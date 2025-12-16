@@ -124,6 +124,17 @@ const GoogleMapsPlacesAutocomplete = ({
       return;
     }
 
+    // If auth fails (bad key, billing disabled, referrer not allowed), Google triggers this callback.
+    // We can then gracefully fall back to server-proxy suggestions instead of leaving a broken UI.
+    window.gm_authFailure = () => {
+      console.error("❌ Google Maps authentication failed (gm_authFailure).");
+      setLoadError(
+        "Google Maps authentication failed (key/billing/referrer). Using fallback venue search."
+      );
+      setIsManualMode(true);
+      setIsApiReady(true);
+    };
+
     // Check if already loaded
     if (checkGoogleMapsAvailability()) {
       console.log("✅ Google Maps already available");
@@ -195,7 +206,7 @@ const GoogleMapsPlacesAutocomplete = ({
       console.error("2. Domain restrictions in Google Cloud Console");
       console.error("3. Billing enabled");
       clearTimeout(timeoutRef.current);
-      setLoadError("Failed to load Google Maps API");
+      setLoadError("Failed to load Google Maps API. Using fallback venue search.");
       setIsManualMode(true);
       setIsApiReady(true); // Show input anyway
       delete window[callbackName];
