@@ -6578,8 +6578,10 @@ router.get('/events/fees-overview', authenticate, requireAdmin, async (req, res)
     const events = await prisma.event.findMany({
       select: {
         id: true,
+        uniqueId: true,
         name: true,
         sport: true,
+        level: true,
         feeMode: true,
         eventFee: true,
         coordinatorFee: true,
@@ -6591,6 +6593,9 @@ router.get('/events/fees-overview', authenticate, requireAdmin, async (req, res)
         currentParticipants: true,
         status: true,
         createdAt: true,
+        venue: true,
+        city: true,
+        state: true,
         coach: {
           select: {
             name: true
