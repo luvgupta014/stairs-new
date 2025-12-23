@@ -6479,6 +6479,11 @@ router.get('/events/fees-overview', authenticate, requireAdmin, async (req, res)
         feeMode: true,
         eventFee: true,
         coordinatorFee: true,
+        // Student-fee specific fields (admin-created events)
+        studentFeeEnabled: true,
+        studentFeeAmount: true,
+        studentFeeUnit: true,
+        createdByAdmin: true,
         currentParticipants: true,
         status: true,
         createdAt: true,
@@ -6498,7 +6503,7 @@ router.get('/events/fees-overview', authenticate, requireAdmin, async (req, res)
     const perStudentBaseCharge = globalSettings?.perStudentBaseCharge || 0;
     const defaultEventFee = globalSettings?.defaultEventFee || 0;
 
-    // Calculate effective fee for each event
+    // Calculate effective organizer/coordinator fee for each event
     const eventsWithFees = events.map(event => {
       let calculatedFee = 0;
       if (event.feeMode === 'GLOBAL') {
@@ -6511,10 +6516,22 @@ router.get('/events/fees-overview', authenticate, requireAdmin, async (req, res)
         calculatedFee = (event.eventFee || 0) + (event.coordinatorFee || 0);
       }
 
+      // For admin-created events, student participation fees are handled per student,
+      // not as a lump-sum. We surface the configured per-unit fee here for clarity.
+      const isAdminCreated = !!event.createdByAdmin;
+      const studentFeeEnabled = !!event.studentFeeEnabled && isAdminCreated;
+      const studentFeeAmount = studentFeeEnabled ? (event.studentFeeAmount || 0) : 0;
+      const studentFeeUnit = studentFeeEnabled ? (event.studentFeeUnit || 'PERSON') : 'PERSON';
+
       return {
         ...event,
         calculatedFee,
-        perStudentFee: event.feeMode === 'GLOBAL' ? perStudentBaseCharge : (event.eventFee || 0)
+        perStudentFee: event.feeMode === 'GLOBAL' ? perStudentBaseCharge : (event.eventFee || 0),
+        // Explicit student fee info (admin-created events only)
+        isAdminCreated,
+        studentFeeEnabled,
+        studentFeeAmount,
+        studentFeeUnit
       };
     });
 

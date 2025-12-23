@@ -102,9 +102,14 @@ const AdminGlobalPayments = () => {
   const startEditEvent = (event) => {
     setEditingEventId(event.id);
     setEventEditForm({
+      feeMode: event.feeMode || 'GLOBAL',
       eventFee: event.eventFee || 0,
       coordinatorFee: event.coordinatorFee || 0,
-      feeMode: event.feeMode || 'GLOBAL'
+      // Student-fee configuration (admin-created events only)
+      createdByAdmin: !!event.isAdminCreated || !!event.createdByAdmin,
+      studentFeeEnabled: !!event.studentFeeEnabled,
+      studentFeeAmount: event.studentFeeAmount || 0,
+      studentFeeUnit: event.studentFeeUnit || 'PERSON'
     });
   };
 
@@ -121,7 +126,19 @@ const AdminGlobalPayments = () => {
   const saveEventFee = async (eventId) => {
     try {
       setSavingEventId(eventId);
-      const res = await updateEventFee(eventId, eventEditForm);
+      const isAdminEvent = !!eventEditForm.createdByAdmin;
+      const payload = {
+        feeMode: eventEditForm.feeMode,
+        eventFee: Number(eventEditForm.eventFee) || 0,
+        coordinatorFee: Number(eventEditForm.coordinatorFee) || 0,
+        // Only allow configuring student fees for admin-created events
+        ...(isAdminEvent && {
+          studentFeeEnabled: !!eventEditForm.studentFeeEnabled,
+          studentFeeAmount: Number(eventEditForm.studentFeeAmount) || 0,
+          studentFeeUnit: eventEditForm.studentFeeUnit || 'PERSON'
+        })
+      };
+      const res = await updateEventFee(eventId, payload);
       if (res?.success) {
         setMessage(`Event fee updated successfully.`);
         setEditingEventId(null);
@@ -306,22 +323,31 @@ const AdminGlobalPayments = () => {
                     Event Name
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Event Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Sport
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Participants
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fee Mode
+                    Fee Mode (Organizer)
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Event Fee (₹)
+                    Organizer Event Fee (₹)
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Coordinator Fee (₹)
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Calculated Total (₹)
+                    Organizer Total (₹)
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Student Fee Enabled
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Student Fee (₹ / unit)
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
@@ -334,6 +360,17 @@ const AdminGlobalPayments = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{event.name}</div>
                       <div className="text-xs text-gray-500">{event.coach?.name || 'N/A'}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {event.isAdminCreated || event.createdByAdmin ? (
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                          Admin-created (Student Fee)
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
+                          Coordinator-created
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {event.sport}
@@ -381,9 +418,11 @@ const AdminGlobalPayments = () => {
                             name="coordinatorFee"
                             value={eventEditForm.coordinatorFee}
                             onChange={handleEventFeeChange}
-                            className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                            className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
                             min="0"
                             step="0.01"
+                            // Coordinator fee only applies to non-admin (coordinator-created) events
+                            disabled={!!eventEditForm.createdByAdmin}
                           />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -391,6 +430,45 @@ const AdminGlobalPayments = () => {
                             ? `₹${(Number(form.perStudentBaseCharge) * (event.currentParticipants || 0)).toFixed(2)}`
                             : `₹${(Number(eventEditForm.eventFee || 0) + Number(eventEditForm.coordinatorFee || 0)).toFixed(2)}`
                           }
+                        </td>
+                        {/* Student fee controls (admin-created events only) */}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <input
+                            type="checkbox"
+                            name="studentFeeEnabled"
+                            checked={!!eventEditForm.studentFeeEnabled}
+                            onChange={(e) =>
+                              setEventEditForm((prev) => ({
+                                ...prev,
+                                studentFeeEnabled: e.target.checked
+                              }))
+                            }
+                            disabled={!eventEditForm.createdByAdmin}
+                          />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="number"
+                              name="studentFeeAmount"
+                              value={eventEditForm.studentFeeAmount}
+                              onChange={handleEventFeeChange}
+                              className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
+                              min="0"
+                              step="0.01"
+                              disabled={!eventEditForm.createdByAdmin || !eventEditForm.studentFeeEnabled}
+                            />
+                            <select
+                              name="studentFeeUnit"
+                              value={eventEditForm.studentFeeUnit}
+                              onChange={handleEventFeeChange}
+                              className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
+                              disabled={!eventEditForm.createdByAdmin || !eventEditForm.studentFeeEnabled}
+                            >
+                              <option value="PERSON">PERSON</option>
+                              <option value="TEAM">TEAM</option>
+                            </select>
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <div className="flex items-center space-x-2">
@@ -422,6 +500,20 @@ const AdminGlobalPayments = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           ₹{event.calculatedFee?.toFixed(2) || '0.00'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {event.isAdminCreated || event.createdByAdmin ? (
+                            <span className="text-xs font-medium">
+                              {event.studentFeeEnabled ? 'Yes' : 'No'}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">N/A</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {event.isAdminCreated || event.createdByAdmin
+                            ? `${event.studentFeeAmount || 0} / ${(event.studentFeeUnit || 'PERSON')}`
+                            : 'N/A'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <button
