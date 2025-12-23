@@ -479,7 +479,7 @@ const AdminGlobalPayments = () => {
         {/* Filters */}
         <div className="mb-5 bg-gray-50 border border-gray-200 rounded-lg p-4">
           <div className="flex flex-col lg:flex-row lg:items-end gap-3">
-            <div className="flex-1">
+            <div className="flex-1 lg:flex-[2] min-w-[260px] lg:min-w-[420px]">
               <label className="block text-xs font-semibold text-gray-600 mb-1">Search</label>
               <input
                 value={eventFilters.search}
