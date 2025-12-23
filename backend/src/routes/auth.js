@@ -87,8 +87,15 @@ router.post('/student/register', async (req, res) => {
       coachName,
       coachMobile,
       level,
-      password
+      password,
+      termsAccepted,
+      termsVersion
     } = req.body;
+
+    // Terms acceptance is mandatory
+    if (!termsAccepted) {
+      return res.status(400).json(errorResponse('You must accept the Terms & Conditions to create an account.', 400));
+    }
 
     console.log('📋 Extracted fields validation:', {
       name: { provided: !!name, value: name },
@@ -640,8 +647,14 @@ router.post('/coach/register', async (req, res) => {
   experience,
   certifications,
   bio,
-  location
+  location,
+  termsAccepted,
+  termsVersion
     } = req.body;
+
+    if (!termsAccepted) {
+      return res.status(400).json(errorResponse('You must accept the Terms & Conditions to create an account.', 400));
+    }
 
     console.log('📋 Extracted coach fields:', {
       name: { provided: !!name, value: name },
@@ -878,8 +891,14 @@ router.post('/institute/register', async (req, res) => {
       description,
       sportsOffered,
       contactPerson,
-      licenseNumber
+      licenseNumber,
+      termsAccepted,
+      termsVersion
     } = req.body;
+
+    if (!termsAccepted) {
+      return res.status(400).json(errorResponse('You must accept the Terms & Conditions to create an account.', 400));
+    }
 
     console.log('📋 Extracted institute fields:', {
       name: { provided: !!name, value: name },
@@ -1061,8 +1080,14 @@ router.post('/club/register', async (req, res) => {
       description,
       sportsOffered,
       contactPerson,
-      establishedYear
+      establishedYear,
+      termsAccepted,
+      termsVersion
     } = req.body;
+
+    if (!termsAccepted) {
+      return res.status(400).json(errorResponse('You must accept the Terms & Conditions to create an account.', 400));
+    }
 
     console.log('📋 Extracted club fields:', {
       name: { provided: !!name, value: name },

@@ -67,6 +67,7 @@ import EventInchargeDashboard from "./pages/dashboard/EventInchargeDashboard";
 import AdminGlobalPayments from "./pages/dashboard/AdminGlobalPayments";
 import CoordinatorLogin from "./pages/auth/CoordinatorLogin";
 import CoordinatorDashboard from "./pages/dashboard/CoordinatorDashboard";
+import Terms from "./pages/Terms";
 
 function App() {
   return (
@@ -76,6 +77,19 @@ function App() {
           <Routes>
             {/* Landing Page Route (no header/footer) */}
             <Route path="/" element={<Landing />} />
+            {/* Public policy routes */}
+            <Route
+              path="/terms"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <Terms />
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
             {/* Auth Routes (no header/footer) */}
             <Route path="/login/student" element={<StudentLogin />} />
             <Route path="/login/coach" element={<CoachLogin />} />

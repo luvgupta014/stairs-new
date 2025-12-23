@@ -1060,6 +1060,16 @@ export const updateEvent = async (eventId, data) => {
   }
 };
 
+// Admin: Update event details (uses shared /api/events/:eventId route, admin role allowed)
+export const adminUpdateEvent = async (eventId, data) => {
+  try {
+    const response = await api.put(`/api/events/${eventId}`, data);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 export const deleteEvent = async (eventId) => {
   try {
     const response = await api.delete(`/api/coach/events/${eventId}`);

@@ -28,11 +28,13 @@ const FallbackVenueSearch = ({
     setIsLoading(true);
     
     try {
-      const response = await api.get(`/maps/places/autocomplete?input=${encodeURIComponent(query)}`);
+      // NOTE: backend mounts this router at /api/maps (see backend/src/index.js)
+      const response = await api.get(`/api/maps/places/autocomplete?input=${encodeURIComponent(query)}`);
       
       if (response.data.predictions) {
         setSuggestions(response.data.predictions);
         setShowSuggestions(true);
+        // This is still "smart" search, just server-powered.
         setIsUsingFallback(false);
       } else {
         setSuggestions([]);
@@ -79,7 +81,7 @@ const FallbackVenueSearch = ({
       setIsLoading(true);
       
       // Get place details
-      const response = await api.get(`/maps/places/details?place_id=${suggestion.place_id}`);
+      const response = await api.get(`/api/maps/places/details?place_id=${suggestion.place_id}`);
       
       if (response.data.result) {
         const place = response.data.result;
@@ -229,12 +231,14 @@ const FallbackVenueSearch = ({
 
       {/* Status messages */}
       {isUsingFallback && (
-        <div className="mt-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2">
+        <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
           <div className="flex items-start">
             <FaExclamationTriangle className="w-3 h-3 mt-0.5 mr-2 flex-shrink-0" />
             <div>
-              <p className="font-medium">Smart search temporarily unavailable</p>
-              <p className="mt-1">You can still enter venue details manually.</p>
+              <p className="font-medium">Venue suggestions unavailable</p>
+              <p className="mt-1">
+                Type the venue manually, or check backend `/api/maps/*` configuration (server key/billing).
+              </p>
             </div>
           </div>
         </div>

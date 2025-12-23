@@ -23,6 +23,13 @@ const AdminGlobalPayments = () => {
   const [eventEditForm, setEventEditForm] = useState({});
   const [savingEventId, setSavingEventId] = useState(null);
 
+  // UI label helper: keep backend values (GLOBAL/EVENT/DISABLED) but display clearer labels.
+  const displayOrganizerFeeMode = (mode) => {
+    const m = String(mode || '').toUpperCase();
+    if (m === 'GLOBAL') return 'COORDINATOR_FEE';
+    return m || 'GLOBAL';
+  };
+
   const loadSettings = async () => {
     try {
       setLoading(true);
@@ -332,7 +339,16 @@ const AdminGlobalPayments = () => {
                     Participants
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fee Mode (Organizer)
+                    <div className="flex items-center gap-2">
+                      <span>Fee Mode (Organizer)</span>
+                      <span
+                        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gray-200 text-gray-700 text-[10px] font-bold cursor-help"
+                        title="COORDINATOR_FEE uses Global Payment Settings (per-student base charge / default event fee). EVENT uses this event’s organizer fees. DISABLED blocks organizer payments."
+                        aria-label="Fee mode help"
+                      >
+                        i
+                      </span>
+                    </div>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Organizer Event Fee (₹)
@@ -390,7 +406,7 @@ const AdminGlobalPayments = () => {
                           (eventEditForm.feeMode === 'EVENT') ? 'bg-green-100 text-green-800' :
                           'bg-gray-100 text-gray-800'
                         }`}>
-                          {eventEditForm.feeMode}
+                          {displayOrganizerFeeMode(eventEditForm.feeMode)}
                         </span>
                       ) : (
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
@@ -398,7 +414,7 @@ const AdminGlobalPayments = () => {
                           event.feeMode === 'EVENT' ? 'bg-green-100 text-green-800' :
                           'bg-gray-100 text-gray-800'
                         }`}>
-                          {event.feeMode}
+                          {displayOrganizerFeeMode(event.feeMode)}
                         </span>
                       )}
                     </td>
@@ -410,16 +426,21 @@ const AdminGlobalPayments = () => {
                               Student fee only
                             </span>
                           ) : (
-                            <select
-                              name="feeMode"
-                              value={eventEditForm.feeMode}
-                              onChange={handleEventFeeChange}
-                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
-                            >
-                              <option value="GLOBAL">GLOBAL</option>
-                              <option value="EVENT">EVENT</option>
-                              <option value="DISABLED">DISABLED</option>
-                            </select>
+                            <div>
+                              <select
+                                name="feeMode"
+                                value={eventEditForm.feeMode}
+                                onChange={handleEventFeeChange}
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                              >
+                                <option value="GLOBAL">COORDINATOR_FEE</option>
+                                <option value="EVENT">EVENT</option>
+                                <option value="DISABLED">DISABLED</option>
+                              </select>
+                              <div className="mt-1 text-[11px] text-gray-500">
+                                COORDINATOR_FEE = global settings, EVENT = per-event override
+                              </div>
+                            </div>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -531,7 +552,11 @@ const AdminGlobalPayments = () => {
                     ) : (
                       <>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {event.eventFee || 0}
+                          {(event.isAdminCreated || event.createdByAdmin) ? (
+                            <span className="text-xs text-gray-400">N/A</span>
+                          ) : (
+                            event.eventFee || 0
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {event.isAdminCreated || event.createdByAdmin
@@ -539,7 +564,9 @@ const AdminGlobalPayments = () => {
                             : (event.coordinatorFee || 0)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          ₹{event.calculatedFee?.toFixed(2) || '0.00'}
+                          {(event.isAdminCreated || event.createdByAdmin)
+                            ? <span className="text-xs text-gray-400">N/A</span>
+                            : `₹${event.calculatedFee?.toFixed(2) || '0.00'}`}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           {event.isAdminCreated || event.createdByAdmin ? (

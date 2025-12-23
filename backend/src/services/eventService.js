@@ -536,8 +536,9 @@ class EventService {
         throw new Error('You do not have permission to update this event');
       }
 
-      // Don't allow updates to past events
-      if (new Date(existingEvent.startDate) <= new Date()) {
+      // Don't allow updates to past events for non-admins.
+      // Admins may need to correct metadata (level/name/venue) even after the event has started.
+      if (userRole !== 'ADMIN' && new Date(existingEvent.startDate) <= new Date()) {
         throw new Error('Cannot modify past events');
       }
 

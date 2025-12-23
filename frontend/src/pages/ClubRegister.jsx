@@ -16,6 +16,8 @@ import {
 } from 'react-icons/fa';
 import RegistrationSuccessModal from '../components/RegistrationSuccessModal';
 import api from '../api';
+import TermsAgreementStep from '../components/TermsAgreementStep';
+import { TERMS, TERMS_VERSION } from '../content/terms';
 
 const ClubRegister = () => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -24,6 +26,8 @@ const ClubRegister = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsScrolled, setTermsScrolled] = useState(false);
   const [formData, setFormData] = useState({
     // Step 1: Club Info
     clubName: '',
@@ -178,6 +182,13 @@ const ClubRegister = () => {
       subtitle: 'What you offer',
       icon: FaTrophy,
       color: 'purple'
+    },
+    {
+      id: 4,
+      title: 'Terms & Conditions',
+      subtitle: 'Scroll & agree to continue',
+      icon: FaCheck,
+      color: 'green'
     }
   ];
 
@@ -245,11 +256,18 @@ const ClubRegister = () => {
       }
     }
     
-    if (!hasErrors && currentStep < 3) {
+    if (!hasErrors && currentStep < steps.length) {
       setError('');
       setCurrentStep(currentStep + 1);
-    } else if (!hasErrors && currentStep === 3) {
-      // Final step - submit the form
+    } else if (!hasErrors && currentStep === steps.length) {
+      if (!termsScrolled) {
+        setError('Please scroll through the Terms & Conditions.');
+        return;
+      }
+      if (!termsAccepted) {
+        setError('You must agree to the Terms & Conditions to complete registration.');
+        return;
+      }
       await handleSubmit();
     }
   };
@@ -293,7 +311,9 @@ const ClubRegister = () => {
         website: formData.website,
         sportsOffered: formData.primarySports,
         contactPerson: formData.presidentName,
-        establishedYear: formData.foundedYear
+        establishedYear: formData.foundedYear,
+        termsAccepted: true,
+        termsVersion: TERMS_VERSION
       };
 
       const response = await api.post('/api/auth/club/register', registrationData);
@@ -387,6 +407,7 @@ const ClubRegister = () => {
                 currentStep === 1 ? 'from-indigo-500 to-indigo-600' :
                 currentStep === 2 ? 'from-blue-500 to-blue-600' :
                 currentStep === 3 ? 'from-purple-500 to-purple-600' :
+                currentStep === 4 ? 'from-green-600 to-emerald-600' :
                 'from-yellow-400 to-orange-500'
               } p-8 text-white`}>
                 <div className="flex items-center justify-between">
@@ -763,6 +784,22 @@ const ClubRegister = () => {
                   </div>
                 )}
 
+                {/* Step 4: Terms */}
+                {currentStep === 4 && (
+                  <div className="space-y-6">
+                    <TermsAgreementStep
+                      title={TERMS.INSTITUTION.title}
+                      sections={TERMS.INSTITUTION.sections}
+                      checkboxText={TERMS.INSTITUTION.checkboxText}
+                      version={TERMS_VERSION}
+                      accepted={termsAccepted}
+                      onAcceptedChange={setTermsAccepted}
+                      hasScrolledToBottom={termsScrolled}
+                      onScrolledToBottom={setTermsScrolled}
+                    />
+                  </div>
+                )}
+
                 {/* Navigation Buttons */}
                 <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
                   <button
@@ -778,7 +815,7 @@ const ClubRegister = () => {
                     <span>Previous</span>
                   </button>
 
-                  {currentStep < 3 ? (
+                  {currentStep < steps.length ? (
                     <button
                       onClick={nextStep}
                       className="flex items-center space-x-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-8 py-3 rounded-lg font-medium hover:from-indigo-700 hover:to-purple-700 transition-all transform hover:scale-105"
@@ -788,7 +825,7 @@ const ClubRegister = () => {
                     </button>
                   ) : (
                     <button
-                      onClick={handleSubmit}
+                      onClick={nextStep}
                       disabled={loading}
                       className="flex items-center space-x-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white px-8 py-3 rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                     >

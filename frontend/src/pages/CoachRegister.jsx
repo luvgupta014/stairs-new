@@ -1,12 +1,16 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
+import TermsAgreementStep from "../components/TermsAgreementStep";
+import { TERMS, TERMS_VERSION } from "../content/terms";
 
 const CoachRegister = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [fieldErrors, setFieldErrors] = useState({});
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsScrolled, setTermsScrolled] = useState(false);
   const [formData, setFormData] = useState({
     fullName: "",
     fatherName: "",
@@ -30,7 +34,7 @@ const CoachRegister = () => {
   });
 
   const navigate = useNavigate();
-  const totalSteps = 6;
+  const totalSteps = 7;
 
   // Validator functions
   const validateEmail = (email) =>
@@ -299,6 +303,16 @@ const CoachRegister = () => {
         //   return false;
         // }
         break;
+      case 7: // Terms
+        if (!termsScrolled) {
+          setError("Please scroll through the Terms & Conditions.");
+          return false;
+        }
+        if (!termsAccepted) {
+          setError("You must agree to the Terms & Conditions to complete registration.");
+          return false;
+        }
+        break;
     }
 
     // Clear error if validation passes
@@ -314,6 +328,7 @@ const CoachRegister = () => {
       4: "Contact & Documentation 📋",
       5: "Payment & Security 💳",
       6: "Review & Confirm ✅",
+      7: "Terms & Conditions ✅",
     };
     return titles[currentStep];
   };
@@ -326,6 +341,7 @@ const CoachRegister = () => {
       4: "Your contact details and necessary documents for verification.",
       5: "Secure your account and complete the membership payment process.",
       6: "Almost there! Review your information before submitting.",
+      7: "Please scroll and accept the Terms & Conditions to complete registration.",
     };
     return subtitles[currentStep];
   };
@@ -363,7 +379,9 @@ const CoachRegister = () => {
         experience: "0-1",
         certifications: "",
         bio: "",
-        location: formData.address
+        location: formData.address,
+        termsAccepted: true,
+        termsVersion: TERMS_VERSION
       };
 
       console.log("Registering coach:", registrationData);
@@ -1015,6 +1033,22 @@ const CoachRegister = () => {
                 </div>
               </div>
             </div>
+          </div>
+        );
+
+      case 7:
+        return (
+          <div className="space-y-6 animate-slide-in-right">
+            <TermsAgreementStep
+              title={TERMS.COORDINATOR.title}
+              sections={TERMS.COORDINATOR.sections}
+              checkboxText={TERMS.COORDINATOR.checkboxText}
+              version={TERMS_VERSION}
+              accepted={termsAccepted}
+              onAcceptedChange={setTermsAccepted}
+              hasScrolledToBottom={termsScrolled}
+              onScrolledToBottom={setTermsScrolled}
+            />
           </div>
         );
 

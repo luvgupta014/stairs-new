@@ -10,25 +10,88 @@ const AdminRevenue = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [error, setError] = useState('');
   const [chartType, setChartType] = useState('bar'); // 'bar' or 'line'
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [source, setSource] = useState('ALL'); // ALL | PAYMENTS | ORDERS
+  const [paymentBucket, setPaymentBucket] = useState('ALL'); // ALL | SUBSCRIPTIONS | COORDINATOR_EVENT_FEES | STUDENT_EVENT_FEES | OTHER
+  const [userType, setUserType] = useState('ALL'); // ALL | STUDENT | COACH | INSTITUTE | CLUB | ADMIN
+  const [query, setQuery] = useState('');
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
 
   useEffect(() => {
     fetchRevenueDashboard();
   }, [dateRange]);
 
-  const fetchRevenueDashboard = async () => {
+  // Real-time refresh (polling). Keeps dashboard accurate without manual reload.
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = window.setInterval(() => {
+      fetchRevenueDashboard(true);
+    }, 30000); // 30s
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefresh, dateRange]);
+
+  const fetchRevenueDashboard = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError('');
-      const response = await api.get(`/api/admin/revenue/dashboard?dateRange=${dateRange}`);
+      const bucketToPaymentTypes = (bucket) => {
+        const b = String(bucket || '').toUpperCase();
+        if (b === 'SUBSCRIPTIONS') return ['REGISTRATION', 'SUBSCRIPTION', 'SUBSCRIPTION_MONTHLY', 'SUBSCRIPTION_ANNUAL'];
+        if (b === 'COORDINATOR_EVENT_FEES') return ['EVENT_REGISTRATION', 'EVENT_FEE'];
+        if (b === 'STUDENT_EVENT_FEES') return ['EVENT_STUDENT_FEE'];
+        return null; // ALL/OTHER handled by backend via q or no filter
+      };
+
+      const params = new URLSearchParams();
+      params.set('dateRange', String(dateRange));
+      if (source && source !== 'ALL') params.set('source', source);
+
+      const types = bucketToPaymentTypes(paymentBucket);
+      if (types && types.length) params.set('paymentTypes', types.join(','));
+      if (userType && userType !== 'ALL') params.set('userTypes', userType);
+      if (query && query.trim()) params.set('q', query.trim());
+      if (minAmount !== '') params.set('minAmount', String(minAmount));
+      if (maxAmount !== '') params.set('maxAmount', String(maxAmount));
+
+      const response = await api.get(`/api/admin/revenue/dashboard?${params.toString()}`);
       console.log('📊 Revenue Dashboard Data:', response.data.data);
       console.log('📈 Daily Revenue:', response.data.data?.dailyRevenue);
       setDashboardData(response.data.data);
+      setLastUpdatedAt(response.data.data?.lastUpdatedAt || new Date().toISOString());
     } catch (err) {
       console.error('Error fetching revenue dashboard:', err);
       setError(err.response?.data?.message || 'Failed to load revenue data');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
+  };
+
+  const activeFilterChips = () => {
+    const chips = [];
+    if (source && source !== 'ALL') chips.push({ key: 'source', label: `Source: ${source}` });
+    if (paymentBucket && paymentBucket !== 'ALL') chips.push({ key: 'paymentBucket', label: `Bucket: ${paymentBucket}` });
+    if (userType && userType !== 'ALL') chips.push({ key: 'userType', label: `User: ${userType}` });
+    if (query && query.trim()) chips.push({ key: 'query', label: `Search: ${query.trim()}` });
+    if (minAmount !== '' || maxAmount !== '') {
+      const min = minAmount !== '' ? `₹${minAmount}` : '—';
+      const max = maxAmount !== '' ? `₹${maxAmount}` : '—';
+      chips.push({ key: 'amount', label: `Amount: ${min}–${max}` });
+    }
+    return chips;
+  };
+
+  const clearFilterChip = (key) => {
+    if (key === 'source') setSource('ALL');
+    if (key === 'paymentBucket') setPaymentBucket('ALL');
+    if (key === 'userType') setUserType('ALL');
+    if (key === 'query') setQuery('');
+    if (key === 'amount') { setMinAmount(''); setMaxAmount(''); }
+    // Fetch immediately so the dashboard stays in sync with chips
+    setTimeout(() => fetchRevenueDashboard(false), 0);
   };
 
   const formatCurrency = (amount) => {
@@ -142,8 +205,168 @@ const AdminRevenue = () => {
                 <FaDownload />
                 Export
               </button>
+              <button
+                onClick={() => fetchRevenueDashboard(false)}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
+                title="Refresh now"
+              >
+                Refresh
+              </button>
+              <button
+                onClick={() => setShowFilters((v) => !v)}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-800 rounded-lg hover:bg-gray-50"
+                title="Filters"
+              >
+                <FaFilter />
+                Filters
+              </button>
             </div>
           </div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+            <div>
+              Last updated: <span className="font-medium text-gray-700">{lastUpdatedAt ? formatDate(lastUpdatedAt) : '—'}</span>
+            </div>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+              />
+              Auto-refresh (30s)
+            </label>
+          </div>
+
+          {/* Active filters chips */}
+          {activeFilterChips().length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <div className="text-xs text-gray-500 mr-1">Active filters:</div>
+              {activeFilterChips().map((c) => (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => clearFilterChip(c.key)}
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200 hover:bg-gray-200"
+                  title="Click to remove this filter"
+                >
+                  <span>{c.label}</span>
+                  <span className="text-gray-500">×</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setSource('ALL');
+                  setPaymentBucket('ALL');
+                  setUserType('ALL');
+                  setQuery('');
+                  setMinAmount('');
+                  setMaxAmount('');
+                  fetchRevenueDashboard(false);
+                }}
+                className="ml-1 text-xs font-semibold text-blue-700 hover:underline"
+                title="Clear all filters"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+
+          {showFilters && (
+            <div className="mt-4 bg-white border border-gray-200 rounded-lg p-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Source</label>
+                  <select
+                    value={source}
+                    onChange={(e) => setSource(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="ALL">ALL</option>
+                    <option value="PAYMENTS">PAYMENTS</option>
+                    <option value="ORDERS">ORDERS</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Payment Bucket</label>
+                  <select
+                    value={paymentBucket}
+                    onChange={(e) => setPaymentBucket(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="ALL">ALL</option>
+                    <option value="SUBSCRIPTIONS">SUBSCRIPTIONS</option>
+                    <option value="COORDINATOR_EVENT_FEES">COORDINATOR_EVENT_FEES</option>
+                    <option value="STUDENT_EVENT_FEES">STUDENT_EVENT_FEES</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">User Type</label>
+                  <select
+                    value={userType}
+                    onChange={(e) => setUserType(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="ALL">ALL</option>
+                    <option value="STUDENT">STUDENT</option>
+                    <option value="COACH">COACH</option>
+                    <option value="INSTITUTE">INSTITUTE</option>
+                    <option value="CLUB">CLUB</option>
+                    <option value="ADMIN">ADMIN</option>
+                  </select>
+                </div>
+                <div className="lg:col-span-2">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Search</label>
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    placeholder="order#, description, metadata..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Min / Max (₹)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={minAmount}
+                      onChange={(e) => setMinAmount(e.target.value)}
+                      className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm"
+                      placeholder="min"
+                    />
+                    <input
+                      type="number"
+                      value={maxAmount}
+                      onChange={(e) => setMaxAmount(e.target.value)}
+                      className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm"
+                      placeholder="max"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setSource('ALL');
+                    setPaymentBucket('ALL');
+                    setUserType('ALL');
+                    setQuery('');
+                    setMinAmount('');
+                    setMaxAmount('');
+                    fetchRevenueDashboard(false);
+                  }}
+                  className="px-3 py-2 text-sm bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200"
+                >
+                  Reset
+                </button>
+                <button
+                  onClick={() => fetchRevenueDashboard(false)}
+                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Summary Cards */}
@@ -211,6 +434,22 @@ const AdminRevenue = () => {
                 <FaChartLine className="text-purple-600 text-xl" />
               </div>
             </div>
+            {summary?.paymentBuckets && (
+              <div className="mt-3 text-xs text-gray-600 space-y-1">
+                <div className="flex justify-between">
+                  <span>Subscriptions</span>
+                  <span className="font-medium">{formatCurrency(summary.paymentBuckets.subscriptions?.amount || 0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Coordinator event fees</span>
+                  <span className="font-medium">{formatCurrency(summary.paymentBuckets.coordinatorEventFees?.amount || 0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Student event fees</span>
+                  <span className="font-medium">{formatCurrency(summary.paymentBuckets.studentEventFees?.amount || 0)}</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

@@ -3485,9 +3485,34 @@ router.get('/notifications/count', authenticate, async (req, res) => {
 // Revenue Dashboard - Get comprehensive financial insights
 router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { dateRange = '30' } = req.query; // Days to look back
+    const {
+      dateRange = '30', // Days to look back
+      // Filters
+      source = 'ALL', // ALL | PAYMENTS | ORDERS
+      paymentTypes,   // comma-separated list of Payment.type
+      userTypes,      // comma-separated list of Payment.userType
+      minAmount,
+      maxAmount,
+      q
+    } = req.query;
     let daysBack;
     let startDate = new Date();
+    const endDate = new Date();
+
+    const sourceFilter = ['ALL', 'PAYMENTS', 'ORDERS'].includes(String(source || '').toUpperCase())
+      ? String(source || '').toUpperCase()
+      : 'ALL';
+    const qStr = (q ? String(q).trim() : '').toLowerCase();
+    const typesFilter = paymentTypes
+      ? String(paymentTypes).split(',').map(s => s.trim()).filter(Boolean).map(s => s.toUpperCase())
+      : null;
+    const userTypesFilter = userTypes
+      ? String(userTypes).split(',').map(s => s.trim()).filter(Boolean).map(s => s.toUpperCase())
+      : null;
+    const minAmt = (minAmount !== undefined && minAmount !== null && minAmount !== '') ? Number(minAmount) : null;
+    const maxAmt = (maxAmount !== undefined && maxAmount !== null && maxAmount !== '') ? Number(maxAmount) : null;
+    const minAmountFilter = Number.isFinite(minAmt) ? minAmt : null;
+    const maxAmountFilter = Number.isFinite(maxAmt) ? maxAmt : null;
     if (dateRange === 'ytd') {
       // Year to Date: from Jan 1st of current year
       startDate = new Date(startDate.getFullYear(), 0, 1);
@@ -3593,7 +3618,7 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
       prisma.eventOrder.findMany({
         where: {
           paymentStatus: 'SUCCESS',
-          createdAt: { gte: startDate }
+          createdAt: { gte: startDate, lte: endDate }
         },
         include: {
           coach: {
@@ -3620,22 +3645,18 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
         orderBy: { createdAt: 'desc' }
       }),
 
-      // Event Payments
+      // Event Payments table (legacy; can duplicate entries also present in `payments` table)
       prisma.eventPayment.findMany({
         where: {
           status: 'SUCCESS',
-          createdAt: { gte: startDate }
+          createdAt: { gte: startDate, lte: endDate }
         },
         include: {
           event: {
             select: {
               name: true,
               sport: true,
-              coach: {
-                select: {
-                  name: true
-                }
-              }
+              coach: { select: { id: true, userId: true, name: true, user: { select: { uniqueId: true, email: true, phone: true } } } }
             }
           }
         }
@@ -3650,10 +3671,32 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
         FROM payments p
         WHERE p.status::text = 'SUCCESS'
         AND p."createdAt" >= ${startDate}
+        AND p."createdAt" <= ${endDate}
         ORDER BY p."createdAt" DESC
       `.then(async (payments) => {
+        let filtered = payments || [];
+        if (typesFilter && typesFilter.length) {
+          filtered = filtered.filter(p => typesFilter.includes(String(p.type || '').toUpperCase()));
+        }
+        if (userTypesFilter && userTypesFilter.length) {
+          filtered = filtered.filter(p => userTypesFilter.includes(String(p.userType || '').toUpperCase()));
+        }
+        if (minAmountFilter !== null) {
+          filtered = filtered.filter(p => Number(p.amount || 0) >= minAmountFilter);
+        }
+        if (maxAmountFilter !== null) {
+          filtered = filtered.filter(p => Number(p.amount || 0) <= maxAmountFilter);
+        }
+        if (qStr) {
+          filtered = filtered.filter(p =>
+            String(p.description || '').toLowerCase().includes(qStr) ||
+            String(p.metadata || '').toLowerCase().includes(qStr) ||
+            String(p.razorpayOrderId || '').toLowerCase().includes(qStr) ||
+            String(p.razorpayPaymentId || '').toLowerCase().includes(qStr)
+          );
+        }
         // Fetch related user and coach data for each payment
-        return Promise.all(payments.map(async (payment) => {
+        return Promise.all(filtered.map(async (payment) => {
           const user = payment.userId ? await prisma.user.findUnique({
             where: { id: payment.userId },
             select: {
@@ -3752,6 +3795,21 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
       })
     ]);
 
+    // Apply filters to orders (in-memory) + source filter (affects totals/charts/transactions)
+    let filteredEventOrders = eventOrders || [];
+    if (minAmountFilter !== null) filteredEventOrders = filteredEventOrders.filter(o => Number(o.totalAmount || 0) >= minAmountFilter);
+    if (maxAmountFilter !== null) filteredEventOrders = filteredEventOrders.filter(o => Number(o.totalAmount || 0) <= maxAmountFilter);
+    if (qStr) {
+      filteredEventOrders = filteredEventOrders.filter(o =>
+        String(o.orderNumber || '').toLowerCase().includes(qStr) ||
+        String(o.event?.name || '').toLowerCase().includes(qStr) ||
+        String(o.coach?.name || '').toLowerCase().includes(qStr)
+      );
+    }
+    if (sourceFilter === 'PAYMENTS') filteredEventOrders = [];
+
+    const filteredPayments = sourceFilter === 'ORDERS' ? [] : (allPayments || []);
+
     // Calculate revenue totals
     const membershipRevenue = {
       coaches: coachSubscriptions.length,
@@ -3761,26 +3819,26 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
     };
 
     const orderRevenue = {
-      totalOrders: eventOrders.length,
-      totalAmount: eventOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0),
-      certificates: eventOrders.reduce((sum, order) => sum + (order.certificates || 0), 0),
-      medals: eventOrders.reduce((sum, order) => sum + (order.medals || 0), 0),
-      trophies: eventOrders.reduce((sum, order) => sum + (order.trophies || 0), 0)
+      totalOrders: filteredEventOrders.length,
+      totalAmount: filteredEventOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0),
+      certificates: filteredEventOrders.reduce((sum, order) => sum + (order.certificates || 0), 0),
+      medals: filteredEventOrders.reduce((sum, order) => sum + (order.medals || 0), 0),
+      trophies: filteredEventOrders.reduce((sum, order) => sum + (order.trophies || 0), 0)
     };
 
     const eventPaymentRevenue = {
       totalPayments: eventPayments.length,
-      totalAmount: eventPayments.reduce((sum, payment) => sum + payment.amount, 0)
+      totalAmount: eventPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0)
     };
 
     const paymentRevenue = {
-      total: allPayments.length,
-      totalAmount: allPayments.reduce((sum, payment) => sum + payment.amount, 0),
+      total: filteredPayments.length,
+      totalAmount: filteredPayments.reduce((sum, payment) => sum + payment.amount, 0),
       byType: {}
     };
 
     // Group payments by type
-    allPayments.forEach(payment => {
+    filteredPayments.forEach(payment => {
       const type = payment.type || 'OTHER';
       if (!paymentRevenue.byType[type]) {
         paymentRevenue.byType[type] = {
@@ -3792,10 +3850,12 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
       paymentRevenue.byType[type].amount += payment.amount;
     });
 
-    // Calculate total revenue
-    const totalRevenue = 
-      orderRevenue.totalAmount + 
-      eventPaymentRevenue.totalAmount + 
+    // Calculate total revenue (source of truth):
+    // - `event_orders` are NOT necessarily represented in `payments` table, so include them.
+    // - `payments` table includes subscriptions, student event fees, coordinator event fees, etc.
+    // - `event_payments` may DUPLICATE `payments` for event fees, so do NOT add it into total.
+    const totalRevenue =
+      orderRevenue.totalAmount +
       paymentRevenue.totalAmount;
 
     // Process top spending coaches
@@ -3841,8 +3901,9 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
     }));
 
     // Recent transactions (last 20)
+    // NOTE: We intentionally do NOT include `eventPayments` here because those may duplicate `payments`.
     const recentTransactions = [
-      ...eventOrders.map(order => ({
+      ...filteredEventOrders.map(order => ({
         id: order.id,
         type: 'ORDER',
         description: `Order #${order.orderNumber || ''} - ${(order.certificates || 0)} certificates, ${(order.medals || 0)} medals, ${(order.trophies || 0)} trophies`,
@@ -3858,21 +3919,7 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
         eventName: order.event?.name || '',
         sport: order.event?.sport || ''
       })),
-      ...eventPayments.map(payment => ({
-        id: payment.id,
-        type: 'EVENT_PAYMENT',
-        description: `Event Fee - ${payment.event?.name}`,
-        amount: payment.amount,
-        status: payment.status,
-        date: payment.createdAt,
-        customer: {
-          name: payment.event?.coach?.name,
-          type: 'EVENT'
-        },
-        eventName: payment.event?.name,
-        sport: payment.event?.sport
-      })),
-      ...allPayments.map(payment => ({
+      ...filteredPayments.map(payment => ({
         id: payment.id,
         type: payment.type,
         description: payment.description || `${payment.type} Payment`,
@@ -3893,6 +3940,42 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
     ]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 20);
+
+    // Break down payment revenue into clear buckets (no double-counting)
+    const paymentBuckets = {
+      subscriptions: { count: 0, amount: 0 },
+      coordinatorEventFees: { count: 0, amount: 0 },
+      studentEventFees: { count: 0, amount: 0 },
+      other: { count: 0, amount: 0 }
+    };
+
+    const isSubscriptionType = (t) => {
+      const s = String(t || '').toUpperCase();
+      return s === 'REGISTRATION' || s.startsWith('SUBSCRIPTION');
+    };
+    const isStudentEventFee = (t) => String(t || '').toUpperCase() === 'EVENT_STUDENT_FEE';
+    const isCoordinatorEventFee = (t) => {
+      const s = String(t || '').toUpperCase();
+      return s === 'EVENT_REGISTRATION' || s === 'EVENT_FEE';
+    };
+
+    filteredPayments.forEach((p) => {
+      const amt = Number(p.amount) || 0;
+      const t = p.type;
+      if (isStudentEventFee(t)) {
+        paymentBuckets.studentEventFees.count++;
+        paymentBuckets.studentEventFees.amount += amt;
+      } else if (isCoordinatorEventFee(t)) {
+        paymentBuckets.coordinatorEventFees.count++;
+        paymentBuckets.coordinatorEventFees.amount += amt;
+      } else if (isSubscriptionType(t)) {
+        paymentBuckets.subscriptions.count++;
+        paymentBuckets.subscriptions.amount += amt;
+      } else {
+        paymentBuckets.other.count++;
+        paymentBuckets.other.amount += amt;
+      }
+    });
 
     // Revenue trend with appropriate granularity
     const dailyRevenue = [];
@@ -3922,12 +4005,12 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
         const hourEnd = new Date(today);
         hourEnd.setHours(hour + 1);
 
-        const hourOrders = eventOrders.filter(o => {
+        const hourOrders = filteredEventOrders.filter(o => {
           const orderDate = new Date(o.paymentDate || o.createdAt);
           return orderDate >= hourStart && orderDate < hourEnd;
         });
 
-        const hourPayments = allPayments.filter(p => {
+        const hourPayments = filteredPayments.filter(p => {
           const paymentDate = new Date(p.createdAt);
           return paymentDate >= hourStart && paymentDate < hourEnd;
         });
@@ -3951,12 +4034,12 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
         const nextDate = new Date(date);
         nextDate.setDate(nextDate.getDate() + 1);
 
-        const dayOrders = eventOrders.filter(o => {
+        const dayOrders = filteredEventOrders.filter(o => {
           const orderDate = new Date(o.paymentDate || o.createdAt);
           return orderDate >= date && orderDate < nextDate;
         });
 
-        const dayPayments = allPayments.filter(p => {
+        const dayPayments = filteredPayments.filter(p => {
           const paymentDate = new Date(p.createdAt);
           return paymentDate >= date && paymentDate < nextDate;
         });
@@ -3982,12 +4065,12 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
         weekStart.setDate(weekStart.getDate() - 6);
         weekStart.setHours(0, 0, 0, 0);
 
-        const weekOrders = eventOrders.filter(o => {
+        const weekOrders = filteredEventOrders.filter(o => {
           const orderDate = new Date(o.paymentDate || o.createdAt);
           return orderDate >= weekStart && orderDate <= weekEnd;
         });
 
-        const weekPayments = allPayments.filter(p => {
+        const weekPayments = filteredPayments.filter(p => {
           const paymentDate = new Date(p.createdAt);
           return paymentDate >= weekStart && paymentDate <= weekEnd;
         });
@@ -4020,12 +4103,12 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
         const monthStart = new Date(year, month - 1, 1);
         const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
 
-        const monthOrders = eventOrders.filter(o => {
+        const monthOrders = filteredEventOrders.filter(o => {
           const orderDate = new Date(o.paymentDate || o.createdAt);
           return orderDate >= monthStart && orderDate <= monthEnd;
         });
 
-        const monthPayments = allPayments.filter(p => {
+        const monthPayments = filteredPayments.filter(p => {
           const paymentDate = new Date(p.createdAt);
           return paymentDate >= monthStart && paymentDate <= monthEnd;
         });
@@ -4046,7 +4129,9 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
         totalRevenue,
         orderRevenue: orderRevenue.totalAmount,
         paymentRevenue: paymentRevenue.totalAmount,
+        // informational only (not part of total)
         eventPaymentRevenue: eventPaymentRevenue.totalAmount,
+        paymentBuckets,
         premiumMemberCount: premiumMembers.length,
         totalActiveCoaches: activeCoaches,
         premiumPercentage: activeCoaches > 0 ? (premiumMembers.length / activeCoaches * 100).toFixed(2) : 0
@@ -4059,9 +4144,18 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
       topSpenders,
       recentTransactions,
       dailyRevenue,
+      lastUpdatedAt: new Date().toISOString(),
+      appliedFilters: {
+        source: sourceFilter,
+        paymentTypes: typesFilter || [],
+        userTypes: userTypesFilter || [],
+        minAmount: minAmountFilter,
+        maxAmount: maxAmountFilter,
+        q: qStr || ''
+      },
       dateRange: {
         from: startDate.toISOString(),
-        to: new Date().toISOString(),
+        to: endDate.toISOString(),
         days: daysBack
       }
     };
@@ -4104,7 +4198,8 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
       longitude,
       startDate,
       endDate,
-      maxParticipants
+      maxParticipants,
+      level
     } = req.body;
 
     // Validation
@@ -4148,6 +4243,13 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
 
     if (endDateObj && endDateObj <= startDateObj) {
       return res.status(400).json(errorResponse('Event end date must be after start date.', 400));
+    }
+
+    // Validate level (EventLevel enum)
+    const validLevels = ['DISTRICT', 'STATE', 'NATIONAL', 'SCHOOL'];
+    const normalizedLevel = level ? String(level).toUpperCase() : 'DISTRICT';
+    if (normalizedLevel && !validLevels.includes(normalizedLevel)) {
+      return res.status(400).json(errorResponse(`Invalid event level. Must be one of: ${validLevels.join(', ')}`, 400));
     }
 
     // Get or create a system coach for admin-created events
@@ -4202,6 +4304,7 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
         name,
         description,
         sport,
+        level: normalizedLevel || 'DISTRICT',
         venue,
         address,
         city,
@@ -6505,6 +6608,7 @@ router.get('/events/fees-overview', authenticate, requireAdmin, async (req, res)
 
     // Calculate effective organizer/coordinator fee for each event
     const eventsWithFees = events.map(event => {
+      const isAdminCreated = !!event.createdByAdmin;
       let calculatedFee = 0;
       if (event.feeMode === 'GLOBAL') {
         if (event.currentParticipants > 0 && perStudentBaseCharge > 0) {
@@ -6518,15 +6622,15 @@ router.get('/events/fees-overview', authenticate, requireAdmin, async (req, res)
 
       // For admin-created events, student participation fees are handled per student,
       // not as a lump-sum. We surface the configured per-unit fee here for clarity.
-      const isAdminCreated = !!event.createdByAdmin;
       const studentFeeEnabled = !!event.studentFeeEnabled && isAdminCreated;
       const studentFeeAmount = studentFeeEnabled ? (event.studentFeeAmount || 0) : 0;
       const studentFeeUnit = studentFeeEnabled ? (event.studentFeeUnit || 'PERSON') : 'PERSON';
 
       return {
         ...event,
-        calculatedFee,
-        perStudentFee: event.feeMode === 'GLOBAL' ? perStudentBaseCharge : (event.eventFee || 0),
+        // Organizer totals are NOT applicable to admin-created (student-fee) events.
+        calculatedFee: isAdminCreated ? null : calculatedFee,
+        perStudentFee: isAdminCreated ? null : (event.feeMode === 'GLOBAL' ? perStudentBaseCharge : (event.eventFee || 0)),
         // Explicit student fee info (admin-created events only)
         isAdminCreated,
         studentFeeEnabled,
@@ -6550,30 +6654,51 @@ router.put('/events/:eventId/fee', authenticate, requireAdmin, async (req, res) 
     const { eventId } = req.params;
     const { eventFee, coordinatorFee, feeMode, studentFeeEnabled, studentFeeAmount, studentFeeUnit } = req.body;
 
+    const existing = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, createdByAdmin: true }
+    });
+    if (!existing) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
     const updateData = {};
-    
-    if (eventFee !== undefined) {
-      updateData.eventFee = Number(eventFee) || 0;
-    }
-    
-    if (coordinatorFee !== undefined) {
-      updateData.coordinatorFee = Number(coordinatorFee) || 0;
-    }
-    
-    if (feeMode && ['GLOBAL', 'EVENT', 'DISABLED'].includes(feeMode)) {
-      updateData.feeMode = feeMode;
+
+    const toNonNegativeNumber = (v) => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return 0;
+      return Math.max(0, n);
+    };
+
+    const normalizedFeeMode = feeMode ? String(feeMode).toUpperCase() : null;
+    if (normalizedFeeMode && !['GLOBAL', 'EVENT', 'DISABLED'].includes(normalizedFeeMode)) {
+      return res.status(400).json(errorResponse('feeMode must be one of GLOBAL, EVENT, DISABLED.', 400));
     }
 
-    if (studentFeeEnabled !== undefined) {
-      updateData.studentFeeEnabled = !!studentFeeEnabled;
+    // IMPORTANT RULES:
+    // - Organizer/coordinator fees apply only to non-admin (coordinator-created) events.
+    // - Student fees apply only to admin-created events.
+    if (existing.createdByAdmin) {
+      // Ignore organizer fee controls and enforce they stay zero.
+      updateData.eventFee = 0;
+      updateData.coordinatorFee = 0;
+
+      if (studentFeeEnabled !== undefined) updateData.studentFeeEnabled = !!studentFeeEnabled;
+      if (studentFeeAmount !== undefined) updateData.studentFeeAmount = toNonNegativeNumber(studentFeeAmount);
+      if (studentFeeUnit !== undefined && studentFeeUnit !== null) updateData.studentFeeUnit = String(studentFeeUnit).toUpperCase();
+    } else {
+      // Ignore student fee controls for coordinator-created events.
+      if (normalizedFeeMode) updateData.feeMode = normalizedFeeMode;
+      if (eventFee !== undefined) updateData.eventFee = toNonNegativeNumber(eventFee);
+      if (coordinatorFee !== undefined) updateData.coordinatorFee = toNonNegativeNumber(coordinatorFee);
     }
 
-    if (studentFeeAmount !== undefined) {
-      updateData.studentFeeAmount = Number(studentFeeAmount) || 0;
-    }
-
-    if (studentFeeUnit) {
-      updateData.studentFeeUnit = studentFeeUnit;
+    // Validation: if feeMode is EVENT for coordinator-created events, require eventFee > 0.
+    if (!existing.createdByAdmin && updateData.feeMode === 'EVENT') {
+      const effectiveEventFee = updateData.eventFee !== undefined ? updateData.eventFee : 0;
+      if (!effectiveEventFee || Number(effectiveEventFee) <= 0) {
+        return res.status(400).json(errorResponse('eventFee must be > 0 when feeMode is EVENT.', 400));
+      }
     }
 
     const updated = await prisma.event.update({

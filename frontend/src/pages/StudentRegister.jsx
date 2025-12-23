@@ -3,6 +3,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/Spinner';
 import Modal from '../components/Modal';
+import TermsAgreementStep from '../components/TermsAgreementStep';
+import { TERMS, TERMS_VERSION } from '../content/terms';
 
 const StudentRegister = () => {
   const navigate = useNavigate();
@@ -12,6 +14,8 @@ const StudentRegister = () => {
   const [apiError, setApiError] = useState('');
   const [currentStep, setCurrentStep] = useState(1);
   const [fieldErrors, setFieldErrors] = useState({});
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsScrolled, setTermsScrolled] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
     fatherName: '',
@@ -36,7 +40,7 @@ const StudentRegister = () => {
     level: 'BEGINNER'
   });
 
-  const totalSteps = 5;
+  const totalSteps = 6;
 
   // Validator functions
   const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -279,6 +283,10 @@ const StudentRegister = () => {
         if (!validatePassword(formData.password)) stepErrors.password = 'Password must be at least 6 characters';
         if (formData.password !== formData.confirmPassword) stepErrors.confirmPassword = 'Passwords do not match';
         break;
+      case 6:
+        if (!termsScrolled) stepErrors.terms = 'Please scroll through the Terms & Conditions.';
+        if (!termsAccepted) stepErrors.termsAccepted = 'You must agree to the Terms & Conditions to create an account.';
+        break;
 
       default:
         break;
@@ -301,7 +309,8 @@ const StudentRegister = () => {
       2: "Tell Us Where You're From 📍",
       3: "How Can We Reach You? 📱",
       4: "Your Athletic Journey 🏃‍♀️",
-      5: "Secure Your Account 🔒"
+      5: "Secure Your Account 🔒",
+      6: "Terms & Conditions ✅"
     };
     return titles[currentStep];
   };
@@ -312,7 +321,8 @@ const StudentRegister = () => {
       2: "Help us understand your location for better local opportunities.",
       3: "Your contact info helps us keep you updated on exciting events!",
       4: "Time to showcase your sporting talents and interests!",
-      5: "Almost there! Create a secure password to protect your profile."
+      5: "Almost there! Create a secure password to protect your profile.",
+      6: "Please scroll and accept the Terms & Conditions to create your account."
     };
     return subtitles[currentStep];
   };
@@ -342,7 +352,9 @@ const StudentRegister = () => {
       coachName: formData.coachName || null,
       coachMobile: formData.coachMobile || null,
       level: formData.level,
-      password: formData.password
+      password: formData.password,
+      termsAccepted: true,
+      termsVersion: TERMS_VERSION
     };
 
     const result = await register(studentData, 'student');
@@ -880,6 +892,27 @@ const StudentRegister = () => {
                 </div>
               </div>
             </div>
+          </div>
+        );
+
+      case 6:
+        return (
+          <div className="space-y-6 animate-slide-in-right">
+            <TermsAgreementStep
+              title={TERMS.ATHLETE.title}
+              sections={TERMS.ATHLETE.sections}
+              checkboxText={TERMS.ATHLETE.checkboxText}
+              version={TERMS_VERSION}
+              accepted={termsAccepted}
+              onAcceptedChange={setTermsAccepted}
+              hasScrolledToBottom={termsScrolled}
+              onScrolledToBottom={setTermsScrolled}
+            />
+            {(fieldErrors.terms || fieldErrors.termsAccepted) && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                {fieldErrors.termsAccepted || fieldErrors.terms}
+              </div>
+            )}
           </div>
         );
 

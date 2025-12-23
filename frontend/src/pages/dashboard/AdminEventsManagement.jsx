@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, getEventAssignments, getEventInchargePermissions, updateEventInchargePermissions, getAllUsers, createEventInchargeInvite, getEventInchargeInvites, revokeEventInchargeInvite, resendEventInchargeInvite } from '../../api';
+import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, getEventAssignments, getEventInchargePermissions, updateEventInchargePermissions, getAllUsers, createEventInchargeInvite, getEventInchargeInvites, revokeEventInchargeInvite, resendEventInchargeInvite, adminUpdateEvent } from '../../api';
 import ParticipantsModal from '../../components/ParticipantsModal';
 import AdminCertificateIssuance from '../../components/AdminCertificateIssuance';
 
@@ -36,6 +36,12 @@ const AdminEventsManagement = () => {
   });
 
   const [modalTab, setModalTab] = useState('details'); // 'details', 'certificates'
+  // Admin edit event (in modal)
+  const [editEventForm, setEditEventForm] = useState(null);
+  const [editEventOriginal, setEditEventOriginal] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editMsg, setEditMsg] = useState('');
+  const [editErr, setEditErr] = useState('');
   const [analytics, setAnalytics] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [globalPaymentSettings, setGlobalPaymentSettings] = useState({ perStudentBaseCharge: '', defaultEventFee: '' });
@@ -132,6 +138,50 @@ const AdminEventsManagement = () => {
       loadAnalytics(eventDetailsModal.event.id);
     }
   }, [modalTab, eventDetailsModal.event]);
+
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return '';
+    try {
+      const d = new Date(dateString);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+      return '';
+    }
+  };
+
+  // Initialize edit form when opening modal or switching event
+  useEffect(() => {
+    const ev = eventDetailsModal?.event;
+    if (!ev) {
+      setEditEventForm(null);
+      setEditEventOriginal(null);
+      setEditSaving(false);
+      setEditMsg('');
+      setEditErr('');
+      return;
+    }
+    setEditEventOriginal(ev);
+    setEditEventForm({
+      name: ev.name || '',
+      description: ev.description || '',
+      sport: ev.sport || '',
+      level: (ev.level || 'DISTRICT'),
+      startDate: formatDateForInput(ev.startDate),
+      endDate: formatDateForInput(ev.endDate),
+      venue: ev.venue || '',
+      address: ev.address || '',
+      city: ev.city || '',
+      state: ev.state || '',
+      maxParticipants: ev.maxParticipants ?? ''
+    });
+    setEditMsg('');
+    setEditErr('');
+  }, [eventDetailsModal?.event?.id]);
 
   const loadAnalytics = async (eventId) => {
     try {
@@ -1166,6 +1216,19 @@ const AdminEventsManagement = () => {
     }
   };
 
+  // Open event modal directly on Edit tab (lighter than full details fetch)
+  const handleEditEvent = (event) => {
+    setModalTab('edit');
+    setEventDetailsModal({
+      isOpen: true,
+      event,
+      participants: [],
+      payments: [],
+      loading: false,
+      paymentsLoading: false
+    });
+  };
+
   const closeEventDetailsModal = () => {
     setEventDetailsModal({
       isOpen: false,
@@ -1176,6 +1239,102 @@ const AdminEventsManagement = () => {
       paymentsLoading: false
     });
     setModalTab('details');
+    setEditEventForm(null);
+    setEditEventOriginal(null);
+    setEditSaving(false);
+    setEditMsg('');
+    setEditErr('');
+  };
+
+  const handleEditEventChange = (e) => {
+    const { name, value } = e.target;
+    setEditEventForm((prev) => ({ ...(prev || {}), [name]: value }));
+  };
+
+  const buildEventPatch = (next, original) => {
+    if (!next || !original) return {};
+    const patch = {};
+
+    const setIfChanged = (key, nextVal, origVal) => {
+      // normalize undefined/null/'' for comparisons
+      const n = (nextVal === undefined ? null : nextVal);
+      const o = (origVal === undefined ? null : origVal);
+      if (String(n ?? '') !== String(o ?? '')) patch[key] = nextVal;
+    };
+
+    setIfChanged('name', next.name?.trim() || '', original.name || '');
+    setIfChanged('description', next.description?.trim() || '', original.description || '');
+    setIfChanged('sport', next.sport?.trim() || '', original.sport || '');
+    setIfChanged('level', String(next.level || 'DISTRICT').toUpperCase(), String(original.level || 'DISTRICT').toUpperCase());
+    setIfChanged('venue', next.venue?.trim() || '', original.venue || '');
+    setIfChanged('address', next.address?.trim() || '', original.address || '');
+    setIfChanged('city', next.city?.trim() || '', original.city || '');
+    setIfChanged('state', next.state?.trim() || '', original.state || '');
+
+    // maxParticipants
+    const nextMax = next.maxParticipants === '' ? null : Number(next.maxParticipants);
+    const origMax = original.maxParticipants === '' ? null : Number(original.maxParticipants);
+    if (Number.isFinite(nextMax) && nextMax > 0 && nextMax !== origMax) patch.maxParticipants = nextMax;
+
+    // Dates: only include if changed; send ISO-ish strings the backend can parse.
+    const nextStart = next.startDate ? `${next.startDate}:00` : null;
+    const origStart = original.startDate ? new Date(original.startDate).toISOString().slice(0, 19) : null;
+    if (next.startDate) {
+      // compare by minute precision
+      const nextStartKey = nextStart?.slice(0, 16);
+      const origStartKey = original.startDate ? formatDateForInput(original.startDate) : '';
+      if (nextStartKey !== origStartKey) patch.startDate = nextStart;
+    }
+
+    const nextEndKey = next.endDate ? next.endDate : '';
+    const origEndKey = original.endDate ? formatDateForInput(original.endDate) : '';
+    if (nextEndKey !== origEndKey) patch.endDate = next.endDate ? `${next.endDate}:00` : null;
+
+    return patch;
+  };
+
+  const saveEditedEvent = async () => {
+    try {
+      const ev = eventDetailsModal?.event;
+      if (!ev?.id) return;
+      setEditSaving(true);
+      setEditErr('');
+      setEditMsg('');
+
+      const patch = buildEventPatch(editEventForm, editEventOriginal);
+      if (!patch || Object.keys(patch).length === 0) {
+        setEditMsg('No changes to save.');
+        return;
+      }
+
+      // Basic client-side guardrails
+      if (patch.name !== undefined && !patch.name.trim()) {
+        setEditErr('Event name is required.');
+        return;
+      }
+      if (patch.sport !== undefined && !patch.sport.trim()) {
+        setEditErr('Sport is required.');
+        return;
+      }
+
+      const res = await adminUpdateEvent(ev.id, patch);
+      if (!res?.success) {
+        setEditErr(res?.message || 'Failed to update event.');
+        return;
+      }
+
+      const updated = res.data || res;
+      setEditMsg('Event updated successfully.');
+
+      // Update in-memory lists so UI is instantly consistent
+      setEvents((prev) => prev.map((x) => (x.id === ev.id ? { ...x, ...updated } : x)));
+      setEventDetailsModal((prev) => ({ ...prev, event: { ...(prev.event || {}), ...updated } }));
+      setEditEventOriginal((prev) => ({ ...(prev || {}), ...updated }));
+    } catch (error) {
+      setEditErr(getErrorMessage(error, 'Failed to update event.'));
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -1379,6 +1538,16 @@ const AdminEventsManagement = () => {
               Event Details & Participants
             </button>
             <button
+              onClick={() => setModalTab('edit')}
+              className={`px-6 py-3 font-medium text-sm transition-colors ${
+                modalTab === 'edit'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              ✏️ Edit Event
+            </button>
+            <button
               onClick={() => setModalTab('results')}
               className={`px-6 py-3 font-medium text-sm transition-colors ${
                 modalTab === 'results'
@@ -1578,6 +1747,176 @@ const AdminEventsManagement = () => {
                   )}
                 </div>
               </>
+            )}
+
+            {/* Edit Tab */}
+            {modalTab === 'edit' && (
+              <div className="p-6">
+                <div className="mb-4">
+                  <h3 className="text-xl font-bold text-gray-900">Edit Event</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Updates apply immediately. Only changed fields are saved (prevents date-validation issues).
+                  </p>
+                </div>
+
+                {editErr && (
+                  <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                    {editErr}
+                  </div>
+                )}
+                {editMsg && (
+                  <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
+                    {editMsg}
+                  </div>
+                )}
+
+                {!editEventForm ? (
+                  <div className="text-gray-600">Loading...</div>
+                ) : (
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
+                        <input
+                          type="text"
+                          name="name"
+                          value={editEventForm.name}
+                          onChange={handleEditEventChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Sport *</label>
+                        <input
+                          type="text"
+                          name="sport"
+                          value={editEventForm.sport}
+                          onChange={handleEditEventChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="e.g. Cricket (or Cricket, Football)"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                      <textarea
+                        name="description"
+                        rows={3}
+                        value={editEventForm.description}
+                        onChange={handleEditEventChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Level</label>
+                        <select
+                          name="level"
+                          value={editEventForm.level}
+                          onChange={handleEditEventChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="DISTRICT">DISTRICT</option>
+                          <option value="STATE">STATE</option>
+                          <option value="NATIONAL">NATIONAL</option>
+                          <option value="SCHOOL">SCHOOL</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Date & Time</label>
+                        <input
+                          type="datetime-local"
+                          name="startDate"
+                          value={editEventForm.startDate}
+                          onChange={handleEditEventChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">End Date & Time</label>
+                        <input
+                          type="datetime-local"
+                          name="endDate"
+                          value={editEventForm.endDate}
+                          onChange={handleEditEventChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Venue</label>
+                        <input
+                          type="text"
+                          name="venue"
+                          value={editEventForm.venue}
+                          onChange={handleEditEventChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Max Participants</label>
+                        <input
+                          type="number"
+                          min="1"
+                          name="maxParticipants"
+                          value={editEventForm.maxParticipants}
+                          onChange={handleEditEventChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                      <input
+                        type="text"
+                        name="address"
+                        value={editEventForm.address}
+                        onChange={handleEditEventChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                        <input
+                          type="text"
+                          name="city"
+                          value={editEventForm.city}
+                          onChange={handleEditEventChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                        <input
+                          type="text"
+                          name="state"
+                          value={editEventForm.state}
+                          onChange={handleEditEventChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={saveEditedEvent}
+                        disabled={editSaving}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-60"
+                      >
+                        {editSaving ? 'Saving...' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Results Tab - Admin can upload result sheets */}
@@ -3290,6 +3629,16 @@ const AdminEventsManagement = () => {
                           >
                             {event.name || event.title}
                           </button>
+                          <div className="mt-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEditEvent(event)}
+                              className="inline-flex items-center text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded px-2 py-1 transition-colors"
+                              title="Edit event details"
+                            >
+                              ✏️ Edit
+                            </button>
+                          </div>
                           {event.uniqueId && (
                             <div className="text-xs text-blue-600 font-mono bg-blue-50 px-2 py-0.5 rounded mt-1 inline-block">
                               ID: {event.uniqueId}
