@@ -108,7 +108,9 @@ const GoogleMapsPlacesAutocomplete = ({
   }, [isApiReady, inputRef.current]);
 
   const loadGoogleMaps = () => {
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    const rawKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    // Guard against accidental whitespace / trailing dot in env files (common copy/paste issue)
+    const apiKey = (rawKey || "").toString().trim().replace(/\.+$/, "");
 
     console.log("🔍 Environment check:");
     console.log("- API Key exists:", !!apiKey);

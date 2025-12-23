@@ -53,17 +53,27 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // CORS configuration - Allow specific origins
-const allowedOrigins = [
+// IMPORTANT: In production, prefer controlling this via `CORS_ORIGINS` env (comma-separated)
+// so deployments don't accidentally drift from hardcoded lists.
+const defaultAllowedOrigins = [
   'http://localhost:5173',      // Local dev
   'http://localhost:5174',      // Local dev (vite alt port)
   'http://localhost:3000',      // Local dev (alternative)
   'http://160.187.22.41:3008',  // Local server
+  'http://160.187.22.41:5173',
   'https://stairs.astroraag.com',      // Production frontend
   'https://www.stairs.astroraag.com',
   'http://stairs.astroraag.com',
-  'http://www.portal.stairs.org.in', 
-  'https://portal.stairs.org.in'   
+  'https://portal.stairs.org.in',
+  'https://www.portal.stairs.org.in'
 ];
+
+const envAllowedOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...envAllowedOrigins]));
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
