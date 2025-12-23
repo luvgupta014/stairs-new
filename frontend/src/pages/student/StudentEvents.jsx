@@ -21,6 +21,25 @@ const StudentEvents = () => {
     maxFees: ''
   });
 
+  const getLevelBadge = (lvlRaw) => {
+    const lvl = (lvlRaw || 'DISTRICT').toString().toUpperCase();
+    const label = lvl === 'DISTRICT' ? 'District'
+      : lvl === 'STATE' ? 'State'
+      : lvl === 'NATIONAL' ? 'National'
+      : lvl === 'SCHOOL' ? 'School'
+      : lvl;
+    const cls = lvl === 'DISTRICT' ? 'bg-green-100 text-green-800'
+      : lvl === 'STATE' ? 'bg-blue-100 text-blue-800'
+      : lvl === 'NATIONAL' ? 'bg-purple-100 text-purple-800'
+      : lvl === 'SCHOOL' ? 'bg-amber-100 text-amber-800'
+      : 'bg-gray-100 text-gray-800';
+    return (
+      <span className={`${cls} px-2 py-1 rounded-full text-xs font-semibold`}>
+        {label}
+      </span>
+    );
+  };
+
   useEffect(() => {
     loadData();
     loadRazorpayScript();
@@ -546,10 +565,15 @@ const StudentEvents = () => {
                     {filteredEvents.map(event => (
                       <div key={event.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
                         <div className="flex justify-between items-start mb-4">
-                          <h3 className="font-semibold text-gray-900 text-lg">{event.title || event.name}</h3>
-                          <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
-                            {event.status}
-                          </span>
+                          <div className="min-w-0">
+                            <h3 className="font-semibold text-gray-900 text-lg truncate">{event.title || event.name}</h3>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              {getLevelBadge(event.level)}
+                              <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                                {event.status}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                         
                         <div className="space-y-2 mb-4">
@@ -597,7 +621,12 @@ const StudentEvents = () => {
                     {myRegistrations.map(registration => (
                       <div key={registration.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
                         <div className="flex justify-between items-start mb-4">
-                          <h3 className="font-semibold text-gray-900 text-lg">{registration.event.title || registration.event.name}</h3>
+                          <div className="min-w-0">
+                            <h3 className="font-semibold text-gray-900 text-lg truncate">{registration.event.title || registration.event.name}</h3>
+                            <div className="mt-2">
+                              {getLevelBadge(registration.event.level)}
+                            </div>
+                          </div>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                             registration.status === 'REGISTERED' || registration.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
                             registration.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :

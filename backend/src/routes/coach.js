@@ -1150,6 +1150,7 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
       name,
       description,
       sport,
+      level,
       venue,
       address,
       city,
@@ -1174,6 +1175,13 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
     // Validation
     if (!name || !description || !sport || !venue || !startDate) {
       return res.status(400).json(errorResponse('Name, description, sport, venue, and start date are required.', 400));
+    }
+
+    // Validate level (EventLevel enum)
+    const validLevels = ['DISTRICT', 'STATE', 'NATIONAL', 'SCHOOL'];
+    const normalizedLevel = level ? String(level).toUpperCase() : 'DISTRICT';
+    if (normalizedLevel && !validLevels.includes(normalizedLevel)) {
+      return res.status(400).json(errorResponse(`Invalid event level. Must be one of: ${validLevels.join(', ')}`, 400));
     }
 
     // Parse dates for India (IST) only platform
@@ -1229,6 +1237,7 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
         name,
         description,
         sport,
+        level: normalizedLevel || 'DISTRICT',
         venue,
         address,
         city,
@@ -1386,6 +1395,7 @@ router.get('/events', authenticate, requireCoach, async (req, res) => {
         name: event.name,
         description: event.description,
         sport: event.sport,
+        level: event.level,
         venue: event.venue,
         address: event.address,
         city: event.city,
@@ -1433,6 +1443,7 @@ router.put('/events/:eventId', authenticate, requireCoach, async (req, res) => {
       name,
       description,
       sport,
+      level,
       venue,
       address,
       city,
@@ -1518,6 +1529,14 @@ router.put('/events/:eventId', authenticate, requireCoach, async (req, res) => {
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
     if (sport !== undefined) updateData.sport = sport;
+    if (level !== undefined) {
+      const validLevels = ['DISTRICT', 'STATE', 'NATIONAL', 'SCHOOL'];
+      const normalizedLevel = level ? String(level).toUpperCase() : null;
+      if (normalizedLevel && !validLevels.includes(normalizedLevel)) {
+        return res.status(400).json(errorResponse(`Invalid event level. Must be one of: ${validLevels.join(', ')}`, 400));
+      }
+      updateData.level = normalizedLevel;
+    }
     if (venue !== undefined) updateData.venue = venue;
     if (address !== undefined) updateData.address = address;
     if (city !== undefined) updateData.city = city;

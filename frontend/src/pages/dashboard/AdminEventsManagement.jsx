@@ -1293,6 +1293,78 @@ const AdminEventsManagement = () => {
     return patch;
   };
 
+  const resetEditedEvent = () => {
+    const ev = editEventOriginal;
+    if (!ev) return;
+    setEditEventForm({
+      name: ev.name || '',
+      description: ev.description || '',
+      sport: ev.sport || '',
+      level: (ev.level || 'DISTRICT'),
+      startDate: formatDateForInput(ev.startDate),
+      endDate: formatDateForInput(ev.endDate),
+      venue: ev.venue || '',
+      address: ev.address || '',
+      city: ev.city || '',
+      state: ev.state || '',
+      maxParticipants: ev.maxParticipants ?? ''
+    });
+    setEditErr('');
+    setEditMsg('');
+  };
+
+  const editPatch = useMemo(() => buildEventPatch(editEventForm, editEventOriginal), [editEventForm, editEventOriginal]);
+  const hasEditChanges = useMemo(() => !!editPatch && Object.keys(editPatch).length > 0, [editPatch]);
+
+  const editValidation = useMemo(() => {
+    const errors = {};
+    const warnings = {};
+    const ev = eventDetailsModal?.event;
+
+    if (!editEventForm) return { isValid: false, errors, warnings };
+
+    const required = (key, label) => {
+      const v = String(editEventForm[key] ?? '').trim();
+      if (!v) errors[key] = `${label} is required.`;
+    };
+
+    // Required fields per schema
+    required('name', 'Event name');
+    required('sport', 'Sport');
+    required('venue', 'Venue');
+    required('city', 'City');
+    required('state', 'State');
+    required('startDate', 'Start date');
+
+    // Dates
+    const start = editEventForm.startDate ? new Date(`${editEventForm.startDate}:00`) : null;
+    const end = editEventForm.endDate ? new Date(`${editEventForm.endDate}:00`) : null;
+    if (editEventForm.startDate && Number.isNaN(start?.getTime())) errors.startDate = 'Start date is invalid.';
+    if (editEventForm.endDate && Number.isNaN(end?.getTime())) errors.endDate = 'End date is invalid.';
+    if (start && end && end <= start) errors.endDate = 'End date must be after start date.';
+
+    // Backend edge case: startDate updates must be in the future
+    if (editPatch?.startDate && start && start <= new Date()) {
+      errors.startDate = 'Start date must be in the future (backend restriction).';
+    } else if (start && start <= new Date()) {
+      // If event is already in the past, warn that changing startDate won’t be allowed.
+      warnings.startDate = 'This event has already started/ended. Changing start date may be rejected by the backend.';
+    }
+
+    // Max participants: must be >= current participants (safety)
+    const currentParticipants =
+      Number(ev?.currentParticipants) ||
+      Number(ev?._count?.registrations) ||
+      0;
+    if (editEventForm.maxParticipants !== '' && editEventForm.maxParticipants !== null && editEventForm.maxParticipants !== undefined) {
+      const mp = Number(editEventForm.maxParticipants);
+      if (!Number.isFinite(mp) || mp < 1) errors.maxParticipants = 'Max participants must be a positive number.';
+      else if (mp < currentParticipants) errors.maxParticipants = `Max participants cannot be less than current participants (${currentParticipants}).`;
+    }
+
+    return { isValid: Object.keys(errors).length === 0, errors, warnings };
+  }, [editEventForm, eventDetailsModal?.event, editPatch]);
+
   const saveEditedEvent = async () => {
     try {
       const ev = eventDetailsModal?.event;
@@ -1301,9 +1373,15 @@ const AdminEventsManagement = () => {
       setEditErr('');
       setEditMsg('');
 
-      const patch = buildEventPatch(editEventForm, editEventOriginal);
+      const patch = editPatch;
       if (!patch || Object.keys(patch).length === 0) {
         setEditMsg('No changes to save.');
+        return;
+      }
+
+      if (!editValidation.isValid) {
+        const first = Object.values(editValidation.errors || {})[0] || 'Please fix the highlighted fields.';
+        setEditErr(first);
         return;
       }
 
@@ -1757,6 +1835,14 @@ const AdminEventsManagement = () => {
                   <p className="text-sm text-gray-600 mt-1">
                     Updates apply immediately. Only changed fields are saved (prevents date-validation issues).
                   </p>
+                  {hasEditChanges && (
+                    <div className="mt-3 bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded text-sm">
+                      <div className="font-semibold">Unsaved changes</div>
+                      <div className="mt-1">
+                        Changed fields: <span className="font-medium">{Object.keys(editPatch || {}).join(', ')}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {editErr && (
@@ -1774,6 +1860,11 @@ const AdminEventsManagement = () => {
                   <div className="text-gray-600">Loading...</div>
                 ) : (
                   <div className="space-y-5">
+                    {editValidation?.warnings?.startDate && (
+                      <div className="bg-blue-50 border border-blue-200 text-blue-900 px-4 py-3 rounded text-sm">
+                        {editValidation.warnings.startDate}
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
@@ -1782,8 +1873,13 @@ const AdminEventsManagement = () => {
                           name="name"
                           value={editEventForm.name}
                           onChange={handleEditEventChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                            editValidation?.errors?.name ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         />
+                        {editValidation?.errors?.name && (
+                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.name}</div>
+                        )}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Sport *</label>
@@ -1792,9 +1888,14 @@ const AdminEventsManagement = () => {
                           name="sport"
                           value={editEventForm.sport}
                           onChange={handleEditEventChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                            editValidation?.errors?.sport ? 'border-red-300' : 'border-gray-300'
+                          }`}
                           placeholder="e.g. Cricket (or Cricket, Football)"
                         />
+                        {editValidation?.errors?.sport && (
+                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.sport}</div>
+                        )}
                       </div>
                     </div>
 
@@ -1825,14 +1926,19 @@ const AdminEventsManagement = () => {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Date & Time</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Date & Time *</label>
                         <input
                           type="datetime-local"
                           name="startDate"
                           value={editEventForm.startDate}
                           onChange={handleEditEventChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                            editValidation?.errors?.startDate ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         />
+                        {editValidation?.errors?.startDate && (
+                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.startDate}</div>
+                        )}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">End Date & Time</label>
@@ -1841,21 +1947,31 @@ const AdminEventsManagement = () => {
                           name="endDate"
                           value={editEventForm.endDate}
                           onChange={handleEditEventChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                            editValidation?.errors?.endDate ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         />
+                        {editValidation?.errors?.endDate && (
+                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.endDate}</div>
+                        )}
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Venue</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Venue *</label>
                         <input
                           type="text"
                           name="venue"
                           value={editEventForm.venue}
                           onChange={handleEditEventChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                            editValidation?.errors?.venue ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         />
+                        {editValidation?.errors?.venue && (
+                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.venue}</div>
+                        )}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Max Participants</label>
@@ -1865,8 +1981,13 @@ const AdminEventsManagement = () => {
                           name="maxParticipants"
                           value={editEventForm.maxParticipants}
                           onChange={handleEditEventChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                            editValidation?.errors?.maxParticipants ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         />
+                        {editValidation?.errors?.maxParticipants && (
+                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.maxParticipants}</div>
+                        )}
                       </div>
                     </div>
 
@@ -1883,33 +2004,59 @@ const AdminEventsManagement = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
                         <input
                           type="text"
                           name="city"
                           value={editEventForm.city}
                           onChange={handleEditEventChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                            editValidation?.errors?.city ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         />
+                        {editValidation?.errors?.city && (
+                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.city}</div>
+                        )}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
                         <input
                           type="text"
                           name="state"
                           value={editEventForm.state}
                           onChange={handleEditEventChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                            editValidation?.errors?.state ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         />
+                        {editValidation?.errors?.state && (
+                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.state}</div>
+                        )}
                       </div>
                     </div>
 
                     <div className="flex items-center justify-end gap-3 pt-2">
                       <button
                         type="button"
+                        onClick={resetEditedEvent}
+                        disabled={editSaving || !hasEditChanges}
+                        className="px-4 py-2 bg-white border border-gray-300 text-gray-800 rounded-lg font-semibold hover:bg-gray-50 disabled:opacity-60"
+                        title={hasEditChanges ? 'Reset changes' : 'No changes to reset'}
+                      >
+                        Reset
+                      </button>
+                      <button
+                        type="button"
                         onClick={saveEditedEvent}
-                        disabled={editSaving}
+                        disabled={editSaving || !hasEditChanges || !editValidation?.isValid}
                         className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-60"
+                        title={
+                          !hasEditChanges
+                            ? 'No changes to save'
+                            : !editValidation?.isValid
+                              ? 'Fix validation errors before saving'
+                              : 'Save changes'
+                        }
                       >
                         {editSaving ? 'Saving...' : 'Save Changes'}
                       </button>

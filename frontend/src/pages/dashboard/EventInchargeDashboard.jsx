@@ -21,6 +21,25 @@ const EventInchargeDashboard = () => {
     );
   }, [user]);
 
+  const getLevelBadge = (lvlRaw) => {
+    const lvl = (lvlRaw || 'DISTRICT').toString().toUpperCase();
+    const label = lvl === 'DISTRICT' ? 'District'
+      : lvl === 'STATE' ? 'State'
+      : lvl === 'NATIONAL' ? 'National'
+      : lvl === 'SCHOOL' ? 'School'
+      : lvl;
+    const cls = lvl === 'DISTRICT' ? 'bg-green-100 text-green-800'
+      : lvl === 'STATE' ? 'bg-blue-100 text-blue-800'
+      : lvl === 'NATIONAL' ? 'bg-purple-100 text-purple-800'
+      : lvl === 'SCHOOL' ? 'bg-amber-100 text-amber-800'
+      : 'bg-gray-100 text-gray-800';
+    return (
+      <span className={`${cls} px-2 py-1 rounded text-xs font-semibold`}>
+        {label}
+      </span>
+    );
+  };
+
   useEffect(() => {
     const run = async () => {
       setLoading(true);
@@ -144,6 +163,7 @@ const EventInchargeDashboard = () => {
                         </div>
                         <div className="text-xs text-gray-600 mt-1">
                           {ev.sport ? <span className="font-medium">{ev.sport}</span> : null}
+                          {ev.level ? <> • {getLevelBadge(ev.level)}</> : null}
                           {ev.venue || ev.city || ev.state ? (
                             <> • {[ev.venue, ev.city, ev.state].filter(Boolean).join(', ')}</>
                           ) : null}

@@ -44,6 +44,7 @@ router.get('/invites/validate', async (req, res) => {
             id: true,
             name: true,
             sport: true,
+            level: true,
             venue: true,
             city: true,
             state: true,

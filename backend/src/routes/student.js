@@ -597,6 +597,7 @@ router.get('/events', authenticate, requireStudent, async (req, res) => {
       name: event.name,
       description: event.description,
       sport: event.sport,
+      level: event.level,
       startDate: event.startDate,
       endDate: event.endDate,
       location: event.venue,                // Map venue to location for frontend
@@ -712,6 +713,7 @@ router.get('/events/:eventId', authenticate, requireStudent, async (req, res) =>
       name: event.name,
       description: event.description,
       sport: event.sport,
+      level: event.level,
       startDate: event.startDate,
       endDate: event.endDate,
       venue: event.venue,
@@ -864,9 +866,11 @@ router.get('/event-registrations', authenticate, requireStudent, async (req, res
           event: {
             select: {
               id: true,
+              uniqueId: true,
               name: true,
               description: true,
               sport: true,
+              level: true,
               startDate: true,
               endDate: true,
               venue: true,
@@ -947,6 +951,7 @@ router.get('/event-registrations', authenticate, requireStudent, async (req, res
           name: reg.event.name,
           description: reg.event.description,
           sport: reg.event.sport,
+          level: reg.event.level,
           startDate: reg.event.startDate,
           endDate: reg.event.endDate,
           location: reg.event.venue,  // Map venue to location
@@ -1092,6 +1097,7 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
               id: true,
               name: true,
               sport: true,
+              level: true,
               startDate: true,
               venue: true,
               eventFee: true,
@@ -1185,6 +1191,7 @@ router.get('/dashboard', authenticate, requireStudent, async (req, res) => {
           title: reg.event.name,
           name: reg.event.name,
           sport: reg.event.sport,
+          level: reg.event.level,
           startDate: reg.event.startDate,
           location: reg.event.venue,
           venue: reg.event.venue,

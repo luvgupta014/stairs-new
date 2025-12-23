@@ -5691,6 +5691,7 @@ router.get('/users/me/assigned-events', authenticate, async (req, res) => {
             id: true,
             name: true,
             sport: true,
+            level: true,
             startDate: true,
             endDate: true,
             venue: true,

@@ -203,8 +203,9 @@ class EventController {
       if (user.role === 'COACH') userId = req.coach?.id;
       else if (user.role === 'INSTITUTE') userId = req.institute?.id;
       else if (user.role === 'CLUB') userId = req.club?.id;
+      else if (user.role === 'ADMIN') userId = user.id;
 
-      if (!userId) {
+      if (!userId && user.role !== 'ADMIN') {
         return res.status(400).json(errorResponse('User profile not found', 400));
       }
 
@@ -233,8 +234,9 @@ class EventController {
       if (user.role === 'COACH') userId = req.coach?.id;
       else if (user.role === 'INSTITUTE') userId = req.institute?.id;
       else if (user.role === 'CLUB') userId = req.club?.id;
+      else if (user.role === 'ADMIN') userId = user.id;
 
-      if (!userId) {
+      if (!userId && user.role !== 'ADMIN') {
         return res.status(400).json(errorResponse('User profile not found', 400));
       }
 
@@ -264,8 +266,9 @@ class EventController {
       if (user.role === 'COACH') userId = req.coach?.id;
       else if (user.role === 'INSTITUTE') userId = req.institute?.id;
       else if (user.role === 'CLUB') userId = req.club?.id;
+      else if (user.role === 'ADMIN') userId = user.id;
 
-      if (!userId) {
+      if (!userId && user.role !== 'ADMIN') {
         return res.status(400).json(errorResponse('User profile not found', 400));
       }
 
