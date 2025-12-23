@@ -1571,7 +1571,8 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
             address: row.address,
             city: row.city,
             state: row.state,
-            level: row.level || null,
+            // Preserve actual event level from DB (DISTRICT/STATE/NATIONAL/SCHOOL)
+            level: row.level || 'DISTRICT',
             latitude: row.latitude ? parseFloat(row.latitude) : null,
             longitude: row.longitude ? parseFloat(row.longitude) : null,
             startDate: row.startDate,
@@ -1587,7 +1588,6 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
             coordinatorFee: 0, // Default value for missing column
             eventCategory: null,
             feeMode: 'GLOBAL',
-            level: 'DISTRICT',
             coach: row.coach_id ? {
               id: row.coach_id,
               name: row.coach_name,

@@ -379,13 +379,28 @@ const AdminGlobalPayments = () => {
                       {event.currentParticipants || 0}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        event.feeMode === 'GLOBAL' ? 'bg-blue-100 text-blue-800' :
-                        event.feeMode === 'EVENT' ? 'bg-green-100 text-green-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {event.feeMode}
-                      </span>
+                      {/* Show live value during edit; for admin-created events show Student-only badge */}
+                      {event.isAdminCreated || event.createdByAdmin ? (
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                          STUDENT_FEE
+                        </span>
+                      ) : editingEventId === event.id ? (
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          (eventEditForm.feeMode === 'GLOBAL') ? 'bg-blue-100 text-blue-800' :
+                          (eventEditForm.feeMode === 'EVENT') ? 'bg-green-100 text-green-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {eventEditForm.feeMode}
+                        </span>
+                      ) : (
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          event.feeMode === 'GLOBAL' ? 'bg-blue-100 text-blue-800' :
+                          event.feeMode === 'EVENT' ? 'bg-green-100 text-green-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {event.feeMode}
+                        </span>
+                      )}
                     </td>
                     {editingEventId === event.id ? (
                       <>
