@@ -390,85 +390,108 @@ const AdminGlobalPayments = () => {
                     {editingEventId === event.id ? (
                       <>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <select
-                            name="feeMode"
-                            value={eventEditForm.feeMode}
-                            onChange={handleEventFeeChange}
-                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
-                          >
-                            <option value="GLOBAL">GLOBAL</option>
-                            <option value="EVENT">EVENT</option>
-                            <option value="DISABLED">DISABLED</option>
-                          </select>
+                          {(event.isAdminCreated || event.createdByAdmin) ? (
+                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-50 text-purple-700">
+                              Student fee only
+                            </span>
+                          ) : (
+                            <select
+                              name="feeMode"
+                              value={eventEditForm.feeMode}
+                              onChange={handleEventFeeChange}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                            >
+                              <option value="GLOBAL">GLOBAL</option>
+                              <option value="EVENT">EVENT</option>
+                              <option value="DISABLED">DISABLED</option>
+                            </select>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <input
-                            type="number"
-                            name="eventFee"
-                            value={eventEditForm.eventFee}
-                            onChange={handleEventFeeChange}
-                            className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
-                            min="0"
-                            step="0.01"
-                          />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <input
-                            type="number"
-                            name="coordinatorFee"
-                            value={eventEditForm.coordinatorFee}
-                            onChange={handleEventFeeChange}
-                            className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
-                            min="0"
-                            step="0.01"
-                            // Coordinator fee only applies to non-admin (coordinator-created) events
-                            disabled={!!eventEditForm.createdByAdmin}
-                          />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {eventEditForm.feeMode === 'GLOBAL' 
-                            ? `₹${(Number(form.perStudentBaseCharge) * (event.currentParticipants || 0)).toFixed(2)}`
-                            : `₹${(Number(eventEditForm.eventFee || 0) + Number(eventEditForm.coordinatorFee || 0)).toFixed(2)}`
-                          }
-                        </td>
-                        {/* Student fee controls (admin-created events only) */}
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <input
-                            type="checkbox"
-                            name="studentFeeEnabled"
-                            checked={!!eventEditForm.studentFeeEnabled}
-                            onChange={(e) =>
-                              setEventEditForm((prev) => ({
-                                ...prev,
-                                studentFeeEnabled: e.target.checked
-                              }))
-                            }
-                            disabled={!eventEditForm.createdByAdmin}
-                          />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <div className="flex items-center space-x-2">
+                          {(event.isAdminCreated || event.createdByAdmin) ? (
+                            <span className="text-xs text-gray-400">N/A</span>
+                          ) : (
                             <input
                               type="number"
-                              name="studentFeeAmount"
-                              value={eventEditForm.studentFeeAmount}
+                              name="eventFee"
+                              value={eventEditForm.eventFee}
                               onChange={handleEventFeeChange}
-                              className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
+                              className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
                               min="0"
                               step="0.01"
-                              disabled={!eventEditForm.createdByAdmin || !eventEditForm.studentFeeEnabled}
                             />
-                            <select
-                              name="studentFeeUnit"
-                              value={eventEditForm.studentFeeUnit}
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {(event.isAdminCreated || event.createdByAdmin) ? (
+                            <span className="text-xs text-gray-400">N/A</span>
+                          ) : (
+                            <input
+                              type="number"
+                              name="coordinatorFee"
+                              value={eventEditForm.coordinatorFee}
                               onChange={handleEventFeeChange}
-                              className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
-                              disabled={!eventEditForm.createdByAdmin || !eventEditForm.studentFeeEnabled}
-                            >
-                              <option value="PERSON">PERSON</option>
-                              <option value="TEAM">TEAM</option>
-                            </select>
-                          </div>
+                              className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                              min="0"
+                              step="0.01"
+                            />
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {(event.isAdminCreated || event.createdByAdmin)
+                            ? <span className="text-xs text-gray-400">N/A</span>
+                            : (
+                              eventEditForm.feeMode === 'GLOBAL' 
+                                ? `₹${(Number(form.perStudentBaseCharge) * (event.currentParticipants || 0)).toFixed(2)}`
+                                : `₹${(Number(eventEditForm.eventFee || 0) + Number(eventEditForm.coordinatorFee || 0)).toFixed(2)}`
+                            )
+                          }
+                        </td>
+                        {/* Student fee controls */}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {(event.isAdminCreated || event.createdByAdmin) ? (
+                            <input
+                              type="checkbox"
+                              name="studentFeeEnabled"
+                              checked={!!eventEditForm.studentFeeEnabled}
+                              onChange={(e) =>
+                                setEventEditForm((prev) => ({
+                                  ...prev,
+                                  studentFeeEnabled: e.target.checked
+                                }))
+                              }
+                            />
+                          ) : (
+                            <span className="text-xs text-gray-400">N/A</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {(event.isAdminCreated || event.createdByAdmin) ? (
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="number"
+                                name="studentFeeAmount"
+                                value={eventEditForm.studentFeeAmount}
+                                onChange={handleEventFeeChange}
+                                className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
+                                min="0"
+                                step="0.01"
+                                disabled={!eventEditForm.studentFeeEnabled}
+                              />
+                              <select
+                                name="studentFeeUnit"
+                                value={eventEditForm.studentFeeUnit}
+                                onChange={handleEventFeeChange}
+                                className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 disabled:text-gray-400"
+                                disabled={!eventEditForm.studentFeeEnabled}
+                              >
+                                <option value="PERSON">PERSON</option>
+                                <option value="TEAM">TEAM</option>
+                              </select>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">N/A</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <div className="flex items-center space-x-2">
