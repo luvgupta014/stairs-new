@@ -496,7 +496,9 @@ const AdminGlobalPayments = () => {
                           {event.eventFee || 0}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {event.coordinatorFee || 0}
+                          {event.isAdminCreated || event.createdByAdmin
+                            ? <span className="text-gray-400 text-xs">N/A</span>
+                            : (event.coordinatorFee || 0)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           ₹{event.calculatedFee?.toFixed(2) || '0.00'}
