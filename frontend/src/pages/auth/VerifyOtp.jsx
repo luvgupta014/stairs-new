@@ -104,14 +104,23 @@ const VerifyOtp = () => {
             }
           }, 1500);
         } else {
-          // Navigate to appropriate dashboard
+          // Navigate to appropriate dashboard or pending event registration
           setTimeout(() => {
-            if (role === 'COACH') {
-              navigate('/coach/dashboard');
+            // Check for pending event registration (for students)
+            if (role === 'student' || role === 'STUDENT') {
+              const pendingEvent = localStorage.getItem('pendingEventRegistration');
+              if (pendingEvent) {
+                localStorage.removeItem('pendingEventRegistration');
+                navigate(`/event/${pendingEvent}`);
+                return;
+              }
+              navigate('/dashboard/student');
+            } else if (role === 'COACH') {
+              navigate('/dashboard/coach');
             } else if (role === 'INSTITUTE') {
-              navigate('/institute/dashboard');
+              navigate('/dashboard/institute');
             } else if (role === 'CLUB') {
-              navigate('/club/dashboard');
+              navigate('/dashboard/club');
             }
           }, 1500);
         }

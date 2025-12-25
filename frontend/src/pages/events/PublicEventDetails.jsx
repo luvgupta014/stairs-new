@@ -24,6 +24,14 @@ const PublicEventDetails = () => {
     loadEventDetails();
   }, [uniqueId]);
 
+  // Redirect to authenticated event page if already logged in as student
+  useEffect(() => {
+    if (user?.role === 'STUDENT' && event?.id) {
+      // If logged in as student, redirect to authenticated event details page
+      navigate(`/events/${event.id}`, { replace: true });
+    }
+  }, [user, event, navigate]);
+
   const loadEventDetails = async () => {
     try {
       setIsLoading(true);
@@ -47,25 +55,30 @@ const PublicEventDetails = () => {
 
   const handleRegisterClick = () => {
     if (!user) {
-      // Not logged in - redirect to student registration/login
-      // Store the event ID to redirect back after registration
+      // Not logged in - show options to sign up or login
+      // Store the event uniqueId to redirect back after registration/login
       localStorage.setItem('pendingEventRegistration', uniqueId);
+      // For now, default to registration, but could show a modal with options
       navigate('/register/student');
     } else if (user.role === 'STUDENT') {
-      // Already logged in as student - redirect to event details page for registration
-      // We need to use the event ID (database ID) for the authenticated route
+      // Already logged in as student - redirect to authenticated event details page
       if (event?.id) {
         navigate(`/events/${event.id}`);
       } else {
-        // If we only have uniqueId, try to use it
+        // Fallback: try with uniqueId
         navigate(`/events/${uniqueId}`);
       }
     } else {
       // Logged in but not as student - redirect to student registration
-      alert('Please register as a student to participate in events.');
       localStorage.setItem('pendingEventRegistration', uniqueId);
       navigate('/register/student');
     }
+  };
+
+  const handleLoginClick = () => {
+    // Store event for redirect after login
+    localStorage.setItem('pendingEventRegistration', uniqueId);
+    navigate('/login/student');
   };
 
   const formatDate = (dateString) => {
@@ -118,7 +131,9 @@ const PublicEventDetails = () => {
             <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-8 text-white">
               <h1 className="text-3xl font-bold mb-2">{event.name}</h1>
               {event.description && (
-                <p className="text-blue-100 text-lg">{event.description}</p>
+                <div className="mt-3">
+                  <p className="text-blue-100 text-lg leading-relaxed">{event.description}</p>
+                </div>
               )}
             </div>
 
@@ -172,25 +187,61 @@ const PublicEventDetails = () => {
                 )}
               </div>
 
-              {/* Register Button */}
+              {/* Registration Section */}
               <div className="mt-8 pt-6 border-t border-gray-200">
                 <div className="text-center">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                  <h2 className="text-3xl font-bold text-gray-900 mb-3">
                     Are you an athlete?
                   </h2>
-                  <p className="text-gray-600 mb-6">
-                    Register now to participate in this event and showcase your talent!
+                  <p className="text-lg text-gray-600 mb-8">
+                    Sign up or log in to register for this event and showcase your talent!
                   </p>
-                  <Button
-                    onClick={handleRegisterClick}
-                    className="px-8 py-3 text-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md hover:shadow-lg transition-all"
-                  >
-                    Register Now
-                  </Button>
-                  {!user && (
-                    <p className="text-sm text-gray-500 mt-4">
-                      You'll need to create an account or log in to register
-                    </p>
+                  
+                  {!user ? (
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                      <Button
+                        onClick={handleRegisterClick}
+                        className="px-8 py-3 text-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                        </svg>
+                        Sign Up to Register
+                      </Button>
+                      <span className="text-gray-400 font-medium">or</span>
+                      <Button
+                        onClick={handleLoginClick}
+                        className="px-8 py-3 text-lg font-semibold bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                        </svg>
+                        Log In to Register
+                      </Button>
+                    </div>
+                  ) : user.role === 'STUDENT' ? (
+                    <div>
+                      <p className="text-gray-600 mb-4">You're logged in! Redirecting to registration...</p>
+                      <Button
+                        onClick={handleRegisterClick}
+                        className="px-8 py-3 text-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md hover:shadow-lg transition-all"
+                      >
+                        Go to Event Registration
+                      </Button>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-red-600 mb-4">Please log in as an athlete to register for events.</p>
+                      <Button
+                        onClick={() => {
+                          localStorage.setItem('pendingEventRegistration', uniqueId);
+                          navigate('/register/student');
+                        }}
+                        className="px-8 py-3 text-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md hover:shadow-lg transition-all"
+                      >
+                        Register as Athlete
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>

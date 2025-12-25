@@ -39,7 +39,15 @@ const StudentLogin = () => {
       console.log('Login result:', { success: result.success, message: result.message });
       
       if (result.success) {
-        navigate('/dashboard/student');
+        // Check if there's a pending event registration
+        const pendingEvent = localStorage.getItem('pendingEventRegistration');
+        if (pendingEvent) {
+          localStorage.removeItem('pendingEventRegistration');
+          // Redirect to the public event page, which will then redirect to authenticated page
+          navigate(`/event/${pendingEvent}`);
+        } else {
+          navigate('/dashboard/student');
+        }
       } else {
         // Parse error and show popup
         const errorConfig = parseLoginError(result.message || result, 'student');
