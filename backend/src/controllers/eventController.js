@@ -46,8 +46,15 @@ class EventController {
 
       const event = await eventService.createEvent(req.body, creatorId, creatorType);
 
+      // Generate shareable link
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const shareableLink = event.uniqueId ? `${frontendUrl}/event/${event.uniqueId}` : null;
+
       res.status(201).json(successResponse(
-        event,
+        {
+          ...event,
+          shareableLink
+        },
         `Event created successfully. It will be reviewed by admin before activation.`
       ));
     } catch (error) {
@@ -158,6 +165,22 @@ class EventController {
     } catch (error) {
       console.error('Get events by creator error:', error);
       res.status(500).json(errorResponse(error.message || 'Failed to retrieve events', 500));
+    }
+  }
+
+  /**
+   * Get public event by uniqueId (no authentication required)
+   * GET /api/events/public/:uniqueId
+   */
+  async getPublicEventByUniqueId(req, res) {
+    try {
+      const { uniqueId } = req.params;
+      const event = await eventService.getPublicEventByUniqueId(uniqueId);
+      res.json(successResponse(event, 'Event retrieved successfully'));
+    } catch (error) {
+      console.error('Get public event error:', error);
+      const statusCode = error.message === 'Event not found' || error.message === 'Event not available' ? 404 : 500;
+      res.status(statusCode).json(errorResponse(error.message || 'Failed to retrieve event', statusCode));
     }
   }
 

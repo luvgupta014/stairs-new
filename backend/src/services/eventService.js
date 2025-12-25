@@ -422,6 +422,77 @@ class EventService {
   }
 
   /**
+   * Get a single event by uniqueId (public access)
+   * @param {string} uniqueId - Event uniqueId
+   * @returns {Promise<Object>} - Public event object
+   */
+  async getPublicEventByUniqueId(uniqueId) {
+    try {
+      const event = await prisma.event.findUnique({
+        where: { uniqueId },
+        select: {
+          id: true,
+          uniqueId: true,
+          name: true,
+          description: true,
+          sport: true,
+          level: true,
+          venue: true,
+          address: true,
+          city: true,
+          state: true,
+          latitude: true,
+          longitude: true,
+          startDate: true,
+          endDate: true,
+          maxParticipants: true,
+          currentParticipants: true,
+          eventFee: true,
+          studentFeeEnabled: true,
+          studentFeeAmount: true,
+          studentFeeUnit: true,
+          status: true,
+          createdAt: true,
+          coach: {
+            select: {
+              id: true,
+              name: true,
+              primarySport: true,
+              user: {
+                select: {
+                  email: false, // Don't expose email in public endpoint
+                  phone: false  // Don't expose phone in public endpoint
+                }
+              }
+            }
+          },
+          _count: {
+            select: {
+              registrations: true
+            }
+          }
+        }
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Only show approved/active events publicly
+      if (event.status !== 'APPROVED' && event.status !== 'ACTIVE') {
+        throw new Error('Event not available');
+      }
+
+      event.currentParticipants = event._count.registrations;
+      event.dynamicStatus = this._computeDynamicStatus(event);
+
+      return event;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * Get a single event by ID
    * @param {string} eventId - Event ID
    * @param {string} userRole - Role of requesting user

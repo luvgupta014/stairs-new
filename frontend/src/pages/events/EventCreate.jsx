@@ -211,6 +211,7 @@ const EventCreate = ({ adminMode = false }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [successData, setSuccessData] = useState(null);
   const [coachData, setCoachData] = useState(null);
   const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(!adminMode);
   
@@ -287,10 +288,14 @@ const EventCreate = ({ adminMode = false }) => {
       const result = await createEvent(eventData, adminMode);
       
       if (result.success) {
+        // Store shareable link if available
+        const eventData = result.data?.event || result.data;
+        const shareableLink = eventData?.shareableLink || (eventData?.uniqueId ? `${window.location.origin}/event/${eventData.uniqueId}` : null);
         setSuccess(true);
+        setSuccessData({ shareableLink, eventName: eventData?.name });
         setTimeout(() => {
           navigate(adminMode ? '/dashboard/admin' : '/dashboard/coach');
-        }, 2000);
+        }, 5000); // Increased timeout to show shareable link
       } else {
         setError(result.message || 'Failed to create event');
       }
@@ -354,7 +359,37 @@ const EventCreate = ({ adminMode = false }) => {
             <p className="text-gray-600 mb-4">
               Your event has been created and submitted for admin approval.
             </p>
-            <p className="text-sm text-gray-500">Redirecting to dashboard...</p>
+            
+            {successData?.shareableLink && (
+              <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-sm font-semibold text-blue-900 mb-2">Shareable Event Link:</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={successData.shareableLink}
+                    className="flex-1 px-3 py-2 text-sm border border-blue-300 rounded bg-white text-gray-800"
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(successData.shareableLink).then(() => {
+                        alert('Link copied to clipboard!');
+                      }).catch(err => {
+                        console.error('Failed to copy:', err);
+                      });
+                    }}
+                    className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <p className="text-xs text-blue-700 mt-2">
+                  Share this link with athletes to let them register for your event!
+                </p>
+              </div>
+            )}
+            
+            <p className="text-sm text-gray-500 mt-4">Redirecting to dashboard...</p>
           </div>
         </div>
       </div>

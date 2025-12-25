@@ -1719,6 +1719,28 @@ export const getEventById = async (eventId) => {
   }
 };
 
+// Get public event by uniqueId (no authentication required)
+export const getPublicEventByUniqueId = async (uniqueId) => {
+  try {
+    const response = await api.get(`/api/events/public/${uniqueId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Get public event error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
+// Share event via email
+export const shareEventViaEmail = async (eventId, emails, message = '') => {
+  try {
+    const response = await api.post(`/api/events/${eventId}/share`, { emails, message });
+    return response.data;
+  } catch (error) {
+    console.error('Share event error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 // Event Fee Management (event-scoped; requires feeManagement permission)
 export const getEventFeeSettings = async (eventId) => {
   try {

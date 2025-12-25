@@ -155,6 +155,50 @@ const sendEventInchargeInviteEmail = async ({
 };
 
 /**
+ * Send event share email
+ */
+const sendEventShareEmail = async ({ to, eventName, eventLink, senderName = 'STAIRS Talent Hub' }) => {
+  const subject = `Event Invitation: ${eventName}`;
+  const text = `You have been invited to register for the event: ${eventName}\n\nEvent Link: ${eventLink}`;
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #111827; }
+          .container { max-width: 640px; margin: 0 auto; padding: 24px; }
+          .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; }
+          .title { font-size: 20px; font-weight: 700; margin: 0 0 12px 0; }
+          .muted { color: #6b7280; font-size: 14px; margin: 0 0 16px 0; }
+          .details { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin: 16px 0; }
+          .button { display: inline-block; margin-top: 14px; background: #2563eb; color: #fff; text-decoration: none; padding: 12px 18px; border-radius: 10px; font-weight: 700; }
+          .footer { margin-top: 18px; color: #6b7280; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="card">
+            <p class="title">Event Invitation: ${eventName}</p>
+            <p class="muted">
+              You have been invited by ${senderName} to register for this event.
+            </p>
+            <div class="details">
+              <p><strong>Event:</strong> ${eventName}</p>
+            </div>
+            <a class="button" href="${eventLink}">View Event & Register</a>
+            <div class="footer">
+              <p>© ${new Date().getFullYear()} STAIRS Talent Hub</p>
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+  return sendEmail({ to, subject, text, html });
+};
+
+/**
  * Send OTP email for registration
  * @param {string} email - Recipient email
  * @param {string} otp - OTP code
@@ -1261,6 +1305,7 @@ const sendPaymentReceiptEmail = async (receiptData) => {
 };
 
 module.exports = {
+  sendEventShareEmail,
   sendOTPEmail,
   sendPasswordResetEmail,
   sendWelcomeEmail,

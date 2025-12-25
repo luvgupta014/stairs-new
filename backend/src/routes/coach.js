@@ -1253,8 +1253,15 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
       }
     });
 
+    // Generate shareable link
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const shareableLink = event.uniqueId ? `${frontendUrl}/event/${event.uniqueId}` : null;
+
     res.status(201).json(successResponse({
-      event,
+      event: {
+        ...event,
+        shareableLink
+      },
       message: 'Event created successfully. It will be reviewed by admin before activation.'
       // Removed requiresPayment field
     }, 'Event created successfully.', 201));

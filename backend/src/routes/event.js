@@ -101,8 +101,11 @@ const clearExpressFileUpload = (req, res, next) => {
 
 /**
  * Event Routes
- * All routes require authentication
+ * Most routes require authentication
  */
+
+// Public route: Get event by uniqueId (no authentication required)
+router.get('/public/:uniqueId', eventController.getPublicEventByUniqueId.bind(eventController));
 
 // Public event listing (for students)
 router.get('/', authenticate, eventController.getEvents.bind(eventController));
@@ -1161,6 +1164,77 @@ router.post('/orders/:orderId/verify-payment', authenticate, async (req, res) =>
   } catch (error) {
     console.error('Verify event order payment error:', error);
     return res.status(500).json(errorResponse('Payment verification failed.', 500));
+  }
+});
+
+/**
+ * Share event via email
+ * POST /api/events/:eventId/share
+ */
+router.post('/:eventId/share', authenticate, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { emails, message } = req.body || {};
+    const { user } = req;
+
+    if (!emails || !Array.isArray(emails) || emails.length === 0) {
+      return res.status(400).json(errorResponse('Email addresses are required', 400));
+    }
+
+    // Validate email addresses
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const invalidEmails = emails.filter(email => !emailRegex.test(email));
+    if (invalidEmails.length > 0) {
+      return res.status(400).json(errorResponse(`Invalid email addresses: ${invalidEmails.join(', ')}`, 400));
+    }
+
+    // Get event details
+    const EventService = require('../services/eventService');
+    const eventService = new EventService();
+    const event = await eventService.resolveEventId(eventId);
+
+    if (!event.uniqueId) {
+      return res.status(400).json(errorResponse('Event does not have a shareable link', 400));
+    }
+
+    // Generate shareable link
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const eventLink = `${frontendUrl}/event/${event.uniqueId}`;
+
+    // Get sender name
+    let senderName = 'STAIRS Talent Hub';
+    if (user.role === 'COACH' && req.coach) {
+      senderName = req.coach.name || senderName;
+    } else if (user.role === 'INSTITUTE' && req.institute) {
+      senderName = req.institute.name || senderName;
+    } else if (user.role === 'CLUB' && req.club) {
+      senderName = req.club.name || senderName;
+    } else if (user.name) {
+      senderName = user.name;
+    }
+
+    // Send emails
+    const { sendEventShareEmail } = require('../utils/emailService');
+    const emailResults = await Promise.allSettled(
+      emails.map(email => sendEventShareEmail({
+        to: email,
+        eventName: event.name,
+        eventLink,
+        senderName
+      }))
+    );
+
+    const successful = emailResults.filter(r => r.status === 'fulfilled' && r.value.success).length;
+    const failed = emailResults.length - successful;
+
+    return res.json(successResponse({
+      sent: successful,
+      failed,
+      eventLink
+    }, `Event shared successfully. ${successful} email(s) sent.`));
+  } catch (error) {
+    console.error('Share event error:', error);
+    return res.status(500).json(errorResponse('Failed to share event', 500));
   }
 });
 

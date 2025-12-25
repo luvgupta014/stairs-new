@@ -53,6 +53,7 @@ import AdminEventsManagement from "./pages/dashboard/AdminEventsManagement";
 // Other Pages
 import Events from "./pages/events/Events";
 import EventDetails from "./pages/events/EventDetails";
+import PublicEventDetails from "./pages/events/PublicEventDetails";
 import EventCreate from "./pages/events/EventCreate";
 import BulkUpload from "./pages/BulkUpload";
 import Payment from "./components/Payment";
@@ -432,6 +433,19 @@ function App() {
                     <ProtectedRoute role="COACH">
                       <BulkUpload />
                     </ProtectedRoute>
+                  </main>
+                  <Footer />
+                </>
+              }
+            />
+            {/* Public Event Route (no authentication required) */}
+            <Route
+              path="/event/:uniqueId"
+              element={
+                <>
+                  <Header />
+                  <main className="flex-grow">
+                    <PublicEventDetails />
                   </main>
                   <Footer />
                 </>
