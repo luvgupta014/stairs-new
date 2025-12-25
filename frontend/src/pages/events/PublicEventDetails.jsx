@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPublicEventByUniqueId } from '../../api';
 import Spinner from '../../components/Spinner';
+import Footer from '../../components/Footer';
+import logo from '../../assets/logo.png';
 import { FaCalendar, FaMapMarkerAlt, FaUsers, FaTrophy, FaClock, FaArrowRight, FaLock, FaGlobe, FaRupeeSign, FaDumbbell } from 'react-icons/fa';
 
 /**
@@ -125,6 +127,25 @@ const PublicEventDetails = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      {/* STAIRS Header */}
+      <div className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <Link to="/" className="flex items-center gap-3 group">
+            <img
+              src={logo}
+              alt="STAIRS Talent Hub Logo"
+              className="w-10 h-10 object-contain"
+            />
+            <div>
+              <h1 className="text-xl font-bold text-blue-600 group-hover:text-blue-700 transition-colors">
+                STAIRS Talent Hub
+              </h1>
+              <p className="text-xs text-gray-500">Empowering Athletes, Connecting Talent</p>
+            </div>
+          </Link>
+        </div>
+      </div>
+
       {/* Hero Section */}
       <div className="relative overflow-hidden">
         {/* Background Pattern */}
@@ -266,7 +287,7 @@ const PublicEventDetails = () => {
             {/* Sidebar - Organizer & CTA */}
             <div className="space-y-6">
               {/* Organizer Card */}
-              {event.coach && (
+              {(event.coach || event.createdByAdmin) && (
                 <div className="bg-white rounded-2xl shadow-xl p-6 transform transition-all hover:shadow-2xl">
                   <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                     <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
@@ -275,13 +296,29 @@ const PublicEventDetails = () => {
                     Organized By
                   </h3>
                   <div className="space-y-2">
-                    <p className="text-xl font-bold text-gray-900">{event.coach.name}</p>
-                    {event.coach.primarySport && (
-                      <p className="text-sm text-gray-600 flex items-center gap-2">
-                        <FaTrophy className="w-4 h-4" />
-                        {event.coach.primarySport}
-                      </p>
-                    )}
+                    {event.createdByAdmin ? (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={logo}
+                            alt="STAIRS Logo"
+                            className="w-6 h-6 object-contain"
+                          />
+                          <p className="text-xl font-bold text-gray-900">STAIRS Talent Hub</p>
+                        </div>
+                        <p className="text-sm text-gray-600">Official STAIRS Event</p>
+                      </>
+                    ) : event.coach ? (
+                      <>
+                        <p className="text-xl font-bold text-gray-900">{event.coach.name}</p>
+                        {event.coach.primarySport && (
+                          <p className="text-sm text-gray-600 flex items-center gap-2">
+                            <FaTrophy className="w-4 h-4" />
+                            {event.coach.primarySport}
+                          </p>
+                        )}
+                      </>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -302,11 +339,19 @@ const PublicEventDetails = () => {
           {/* Registration Section */}
           <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-12 transform transition-all hover:shadow-3xl">
             <div className="text-center max-w-3xl mx-auto">
+              <div className="flex items-center justify-center gap-2 mb-4">
+                <img
+                  src={logo}
+                  alt="STAIRS Logo"
+                  className="w-8 h-8 object-contain opacity-60"
+                />
+                <span className="text-sm text-gray-400 font-medium">Powered by STAIRS Talent Hub</span>
+              </div>
               <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
                 Are you an athlete?
               </h2>
               <p className="text-xl text-gray-600 mb-10 leading-relaxed">
-                Sign up or log in to register for this event and showcase your talent!
+                Sign up or log in to register for this event and showcase your talent on STAIRS Talent Hub!
               </p>
               
               {!user ? (
@@ -365,6 +410,7 @@ const PublicEventDetails = () => {
           </div>
         </div>
       </div>
+      <Footer />
     </div>
   );
 };

@@ -453,6 +453,7 @@ class EventService {
           studentFeeUnit: true,
           status: true,
           createdAt: true,
+          createdByAdmin: true,
           coach: {
             select: {
               id: true,
