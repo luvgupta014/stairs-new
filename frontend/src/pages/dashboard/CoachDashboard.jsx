@@ -13,7 +13,8 @@ import {
   getEventPaymentStatus,
   createEventPaymentOrder,
   getCoachConnectionRequests,
-  respondToCoachConnectionRequest
+  respondToCoachConnectionRequest,
+  shareEventViaEmail
 } from '../../api';
 import StudentCard from '../../components/StudentCard';
 import Spinner from '../../components/Spinner';
@@ -22,7 +23,7 @@ import PaymentPopup from '../../components/PaymentPopup';
 import CheckoutModal from '../../components/CheckoutModal';
 import usePaymentStatus from '../../hooks/usePaymentStatus';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FaExclamationTriangle, FaCreditCard, FaCheckCircle, FaEdit, FaTrash, FaEye, FaUsers, FaCalendar, FaMapMarkerAlt, FaBell } from 'react-icons/fa';
+import { FaExclamationTriangle, FaCreditCard, FaCheckCircle, FaEdit, FaTrash, FaEye, FaUsers, FaCalendar, FaMapMarkerAlt, FaBell, FaShare, FaCopy, FaEnvelope } from 'react-icons/fa';
 
 const CoachDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -65,6 +66,16 @@ const CoachDashboard = () => {
     eventData: null,
     participants: [],
     loading: false
+  });
+
+  // Share link modal state
+  const [shareModal, setShareModal] = useState({
+    isOpen: false,
+    event: null,
+    emails: '',
+    loading: false,
+    error: '',
+    success: ''
   });
 
   // Payment status hook
@@ -310,6 +321,93 @@ const CoachDashboard = () => {
 
   const handleEditEvent = (event) => {
     navigate(`/coach/event/edit/${event.id}`, { state: { event } });
+  };
+
+  // Share link functions
+  const getShareableLink = (event) => {
+    if (!event?.uniqueId) return null;
+    return `${window.location.origin}/event/${event.uniqueId}`;
+  };
+
+  const openShareModal = (event) => {
+    setShareModal({
+      isOpen: true,
+      event,
+      emails: '',
+      loading: false,
+      error: '',
+      success: ''
+    });
+  };
+
+  const closeShareModal = () => {
+    setShareModal({
+      isOpen: false,
+      event: null,
+      emails: '',
+      loading: false,
+      error: '',
+      success: ''
+    });
+  };
+
+  const copyLinkToClipboard = (event) => {
+    const link = getShareableLink(event);
+    if (!link) {
+      alert('Event does not have a shareable link yet.');
+      return;
+    }
+    navigator.clipboard.writeText(link).then(() => {
+      alert('Link copied to clipboard!');
+      setShareModal(prev => ({ ...prev, success: 'Link copied to clipboard!' }));
+      setTimeout(() => setShareModal(prev => ({ ...prev, success: '' })), 3000);
+    }).catch(err => {
+      console.error('Failed to copy:', err);
+      alert('Failed to copy link. Please try again.');
+    });
+  };
+
+  const handleShareViaEmail = async () => {
+    if (!shareModal.emails.trim()) {
+      setShareModal(prev => ({ ...prev, error: 'Please enter at least one email address' }));
+      return;
+    }
+
+    const emailList = shareModal.emails.split(',').map(e => e.trim()).filter(Boolean);
+    if (emailList.length === 0) {
+      setShareModal(prev => ({ ...prev, error: 'Please enter valid email addresses' }));
+      return;
+    }
+
+    setShareModal(prev => ({ ...prev, loading: true, error: '', success: '' }));
+
+    try {
+      const response = await shareEventViaEmail(shareModal.event.id, emailList);
+      if (response.success) {
+        setShareModal(prev => ({
+          ...prev,
+          success: `Event shared successfully! ${response.data?.sent || 0} email(s) sent.`,
+          emails: '',
+          loading: false
+        }));
+        setTimeout(() => {
+          closeShareModal();
+        }, 3000);
+      } else {
+        setShareModal(prev => ({
+          ...prev,
+          error: response.message || 'Failed to share event',
+          loading: false
+        }));
+      }
+    } catch (error) {
+      console.error('Share event error:', error);
+      setShareModal(prev => ({
+        ...prev,
+        error: error.message || 'Failed to share event. Please try again.',
+        loading: false
+      }));
+    }
   };
 
   const handleDeleteEvent = async (eventId) => {
@@ -1506,6 +1604,16 @@ const CoachDashboard = () => {
                               </button>
                             )}
 
+                            {['APPROVED', 'ACTIVE'].includes(event.status) && event.uniqueId && (
+                              <button
+                                onClick={() => openShareModal(event)}
+                                className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 transition-colors inline-flex items-center"
+                              >
+                                <FaShare className="mr-2" />
+                                Share Link
+                              </button>
+                            )}
+
                             {['APPROVED', 'ACTIVE'].includes(event.status) && (
                               <button
                                 onClick={() => viewRegistrations(event)}
@@ -1841,6 +1949,107 @@ const CoachDashboard = () => {
           />
         )}
       </div>
+    </div>
+      )}
+
+      {/* Share Link Modal */}
+      {shareModal.isOpen && shareModal.event && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Share Event</h2>
+              <button
+                onClick={closeShareModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {getShareableLink(shareModal.event) ? (
+              <>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Shareable Link:
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={getShareableLink(shareModal.event)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-sm"
+                    />
+                    <button
+                      onClick={() => copyLinkToClipboard(shareModal.event)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2"
+                    >
+                      <FaCopy className="w-4 h-4" />
+                      Copy
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Share via Email (comma-separated):
+                  </label>
+                  <textarea
+                    value={shareModal.emails}
+                    onChange={(e) => setShareModal(prev => ({ ...prev, emails: e.target.value }))}
+                    placeholder="email1@example.com, email2@example.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="3"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter email addresses separated by commas
+                  </p>
+                </div>
+
+                {shareModal.error && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
+                    {shareModal.error}
+                  </div>
+                )}
+
+                {shareModal.success && (
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-md text-sm">
+                    {shareModal.success}
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleShareViaEmail}
+                    disabled={shareModal.loading || !shareModal.emails.trim()}
+                    className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <FaEnvelope className="w-4 h-4" />
+                    {shareModal.loading ? 'Sending...' : 'Send Email'}
+                  </button>
+                  <button
+                    onClick={closeShareModal}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-gray-600 mb-4">This event does not have a shareable link yet.</p>
+                <button
+                  onClick={closeShareModal}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

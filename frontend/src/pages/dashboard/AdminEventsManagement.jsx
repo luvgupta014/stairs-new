@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, getEventAssignments, getEventInchargePermissions, updateEventInchargePermissions, getAllUsers, createEventInchargeInvite, getEventInchargeInvites, revokeEventInchargeInvite, resendEventInchargeInvite, adminUpdateEvent } from '../../api';
+import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, getEventAssignments, getEventInchargePermissions, updateEventInchargePermissions, getAllUsers, createEventInchargeInvite, getEventInchargeInvites, revokeEventInchargeInvite, resendEventInchargeInvite, adminUpdateEvent, shareEventViaEmail } from '../../api';
 import ParticipantsModal from '../../components/ParticipantsModal';
 import AdminCertificateIssuance from '../../components/AdminCertificateIssuance';
 
@@ -102,6 +102,16 @@ const AdminEventsManagement = () => {
   const [bulkInvitePrepared, setBulkInvitePrepared] = useState([]); // verified rows to send
   const [bulkInviteStats, setBulkInviteStats] = useState(null); // { raw, deduped, invalid, ready, duplicatesRemoved }
   const [bulkInviteInvalidEmails, setBulkInviteInvalidEmails] = useState([]); // string[]
+
+  // Share link modal state
+  const [shareModal, setShareModal] = useState({
+    isOpen: false,
+    event: null,
+    emails: '',
+    loading: false,
+    error: '',
+    success: ''
+  });
 
   // Cache incharge assignments per event for quick UI rendering
   const [eventIncharges, setEventIncharges] = useState({}); // { [eventId]: [{ userId, name, email, uniqueId, isPointOfContact }] }
@@ -1615,6 +1625,15 @@ const AdminEventsManagement = () => {
             >
               Event Details & Participants
             </button>
+            {event.uniqueId && (event.status === 'APPROVED' || event.status === 'ACTIVE') && (
+              <button
+                onClick={() => openShareModal(event)}
+                className="px-6 py-3 font-medium text-sm transition-colors text-gray-600 hover:text-gray-900 flex items-center gap-2"
+              >
+                <span>🔗</span>
+                <span>Share Link</span>
+              </button>
+            )}
             <button
               onClick={() => setModalTab('edit')}
               className={`px-6 py-3 font-medium text-sm transition-colors ${
@@ -2679,14 +2698,25 @@ const AdminEventsManagement = () => {
             </div>
           )}
 
-          {/* View Details button - more prominent */}
-          <button
-            onClick={() => handleViewEventDetails(event)}
-            className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-blue-700 hover:shadow-md transition-all transform hover:scale-105 w-full flex items-center justify-center space-x-1"
-          >
-            <span>👁️</span>
-            <span>View Details</span>
-          </button>
+          {/* Action buttons */}
+          <div className="flex flex-col space-y-2 w-full">
+            <button
+              onClick={() => handleViewEventDetails(event)}
+              className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-blue-700 hover:shadow-md transition-all transform hover:scale-105 w-full flex items-center justify-center space-x-1"
+            >
+              <span>👁️</span>
+              <span>View Details</span>
+            </button>
+            {event.uniqueId && (event.status === 'APPROVED' || event.status === 'ACTIVE') && (
+              <button
+                onClick={() => openShareModal(event)}
+                className="bg-indigo-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-indigo-700 hover:shadow-md transition-all transform hover:scale-105 w-full flex items-center justify-center space-x-1"
+              >
+                <span>🔗</span>
+                <span>Share Link</span>
+              </button>
+            )}
+          </div>
         </div>
       );
     } catch (error) {
@@ -3977,6 +4007,109 @@ const AdminEventsManagement = () => {
         payments={eventDetailsModal.payments}
         paymentsLoading={eventDetailsModal.paymentsLoading}
       />
+
+      {/* Share Link Modal */}
+      {shareModal.isOpen && shareModal.event && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Share Event</h2>
+              <button
+                onClick={closeShareModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {getShareableLink(shareModal.event) ? (
+              <>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Shareable Link:
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={getShareableLink(shareModal.event)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-sm"
+                    />
+                    <button
+                      onClick={() => copyLinkToClipboard(shareModal.event)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      Copy
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Share via Email (comma-separated):
+                  </label>
+                  <textarea
+                    value={shareModal.emails}
+                    onChange={(e) => setShareModal(prev => ({ ...prev, emails: e.target.value }))}
+                    placeholder="email1@example.com, email2@example.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="3"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter email addresses separated by commas
+                  </p>
+                </div>
+
+                {shareModal.error && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
+                    {shareModal.error}
+                  </div>
+                )}
+
+                {shareModal.success && (
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-md text-sm">
+                    {shareModal.success}
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleShareViaEmail}
+                    disabled={shareModal.loading || !shareModal.emails.trim()}
+                    className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    {shareModal.loading ? 'Sending...' : 'Send Email'}
+                  </button>
+                  <button
+                    onClick={closeShareModal}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-gray-600 mb-4">This event does not have a shareable link yet.</p>
+                <button
+                  onClick={closeShareModal}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 };
