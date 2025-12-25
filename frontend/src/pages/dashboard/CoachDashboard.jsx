@@ -1949,8 +1949,6 @@ const CoachDashboard = () => {
           />
         )}
       </div>
-    </div>
-      )}
 
       {/* Share Link Modal */}
       {shareModal.isOpen && shareModal.event && (
