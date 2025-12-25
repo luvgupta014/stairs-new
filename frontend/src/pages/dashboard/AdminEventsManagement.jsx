@@ -613,6 +613,92 @@ const AdminEventsManagement = () => {
     }
   };
 
+  // Share link functions
+  const getShareableLink = (event) => {
+    if (!event?.uniqueId) return null;
+    return `${window.location.origin}/event/${event.uniqueId}`;
+  };
+
+  const openShareModal = (event) => {
+    setShareModal({
+      isOpen: true,
+      event,
+      emails: '',
+      loading: false,
+      error: '',
+      success: ''
+    });
+  };
+
+  const closeShareModal = () => {
+    setShareModal({
+      isOpen: false,
+      event: null,
+      emails: '',
+      loading: false,
+      error: '',
+      success: ''
+    });
+  };
+
+  const copyLinkToClipboard = (event) => {
+    const link = getShareableLink(event);
+    if (!link) {
+      alert('Event does not have a shareable link yet.');
+      return;
+    }
+    navigator.clipboard.writeText(link).then(() => {
+      setShareModal(prev => ({ ...prev, success: 'Link copied to clipboard!' }));
+      setTimeout(() => setShareModal(prev => ({ ...prev, success: '' })), 3000);
+    }).catch(err => {
+      console.error('Failed to copy:', err);
+      setShareModal(prev => ({ ...prev, error: 'Failed to copy link. Please try again.' }));
+    });
+  };
+
+  const handleShareViaEmail = async () => {
+    if (!shareModal.emails.trim()) {
+      setShareModal(prev => ({ ...prev, error: 'Please enter at least one email address' }));
+      return;
+    }
+
+    const emailList = shareModal.emails.split(',').map(e => e.trim()).filter(Boolean);
+    if (emailList.length === 0) {
+      setShareModal(prev => ({ ...prev, error: 'Please enter valid email addresses' }));
+      return;
+    }
+
+    setShareModal(prev => ({ ...prev, loading: true, error: '', success: '' }));
+
+    try {
+      const response = await shareEventViaEmail(shareModal.event.id, emailList);
+      if (response.success) {
+        setShareModal(prev => ({
+          ...prev,
+          success: `Event shared successfully! ${response.data?.sent || 0} email(s) sent.`,
+          emails: '',
+          loading: false
+        }));
+        setTimeout(() => {
+          closeShareModal();
+        }, 3000);
+      } else {
+        setShareModal(prev => ({
+          ...prev,
+          error: response.message || 'Failed to share event',
+          loading: false
+        }));
+      }
+    } catch (error) {
+      console.error('Share event error:', error);
+      setShareModal(prev => ({
+        ...prev,
+        error: error.message || 'Failed to share event. Please try again.',
+        loading: false
+      }));
+    }
+  };
+
   const parseBulkInviteEmails = (text) => {
     const raw = String(text || '');
     const parts = raw.split(/[\n,;]+/g).map(s => s.trim()).filter(Boolean);

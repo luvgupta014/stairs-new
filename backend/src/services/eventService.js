@@ -457,13 +457,7 @@ class EventService {
             select: {
               id: true,
               name: true,
-              primarySport: true,
-              user: {
-                select: {
-                  email: false, // Don't expose email in public endpoint
-                  phone: false  // Don't expose phone in public endpoint
-                }
-              }
+              primarySport: true
             }
           },
           _count: {
