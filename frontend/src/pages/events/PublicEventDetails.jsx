@@ -3,8 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPublicEventByUniqueId } from '../../api';
 import Spinner from '../../components/Spinner';
-import { FaCalendar, FaMapMarkerAlt, FaUsers, FaTrophy, FaClock, FaArrowRight, FaLock } from 'react-icons/fa6';
-import { FaGlobe, FaRupeeSign, FaDumbbell } from 'react-icons/fa';
+import { FaCalendar, FaMapMarkerAlt, FaUsers, FaTrophy, FaClock, FaArrowRight, FaLock, FaGlobe, FaRupeeSign, FaDumbbell } from 'react-icons/fa';
 
 /**
  * PublicEventDetails Page
