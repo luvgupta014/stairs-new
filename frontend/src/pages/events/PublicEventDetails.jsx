@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPublicEventByUniqueId } from '../../api';
 import Spinner from '../../components/Spinner';
-import { FaCalendar, FaMapMarkerAlt, FaUsers, FaTrophy, FaRunning, FaClock, FaArrowRight, FaLock } from 'react-icons/fa6';
-import { FaGlobe, FaRupeeSign } from 'react-icons/fa';
+import { FaCalendar, FaMapMarkerAlt, FaUsers, FaTrophy, FaClock, FaArrowRight, FaLock } from 'react-icons/fa6';
+import { FaGlobe, FaRupeeSign, FaDumbbell } from 'react-icons/fa';
 
 /**
  * PublicEventDetails Page
@@ -165,7 +165,7 @@ const PublicEventDetails = () => {
               <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 transform transition-all hover:shadow-2xl">
                 <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
                   <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <FaRunning className="w-5 h-5 text-blue-600" />
+                    <FaDumbbell className="w-5 h-5 text-blue-600" />
                   </div>
                   Event Details
                 </h2>
