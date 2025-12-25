@@ -75,15 +75,50 @@ const envAllowedOrigins = (process.env.CORS_ORIGINS || '')
 
 const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...envAllowedOrigins]));
 
+// Helper function to check if origin matches allowed patterns
+const isOriginAllowed = (origin) => {
+  if (!origin) return false;
+  
+  // Exact match
+  if (allowedOrigins.includes(origin)) {
+    return true;
+  }
+  
+  // Check for subdomain matches (e.g., www.portal.stairs.org.in matches portal.stairs.org.in)
+  const originUrl = new URL(origin);
+  const originHostname = originUrl.hostname;
+  
+  for (const allowed of allowedOrigins) {
+    try {
+      const allowedUrl = new URL(allowed);
+      const allowedHostname = allowedUrl.hostname;
+      
+      // Check if hostname matches or is a subdomain
+      if (originHostname === allowedHostname || 
+          originHostname.endsWith('.' + allowedHostname)) {
+        return true;
+      }
+    } catch (e) {
+      // If allowed origin is not a valid URL, skip
+      continue;
+    }
+  }
+  
+  return false;
+};
+
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // Check if origin is in allowed list
-  if (allowedOrigins.includes(origin)) {
+  // Check if origin is in allowed list (exact or pattern match)
+  if (origin && isOriginAllowed(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
   } else if (process.env.NODE_ENV !== 'production') {
     // Allow any origin in development
     res.header('Access-Control-Allow-Origin', origin || '*');
+  } else if (origin) {
+    // In production, log blocked origins for debugging
+    console.warn(`⚠️ CORS blocked origin: ${origin}. Allowed origins:`, allowedOrigins);
   }
   
   res.header('Access-Control-Allow-Credentials', 'true');
