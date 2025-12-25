@@ -3,9 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPublicEventByUniqueId } from '../../api';
 import Spinner from '../../components/Spinner';
-import Button from '../../components/Button';
-import Header from '../../components/Header';
-import Footer from '../../components/Footer';
+import { FaCalendar, FaMapMarkerAlt, FaUsers, FaTrophy, FaRunning, FaClock, FaArrowRight, FaLock } from 'react-icons/fa6';
+import { FaGlobe, FaRupeeSign } from 'react-icons/fa';
 
 /**
  * PublicEventDetails Page
@@ -27,7 +26,6 @@ const PublicEventDetails = () => {
   // Redirect to authenticated event page if already logged in as student
   useEffect(() => {
     if (user?.role === 'STUDENT' && event?.id) {
-      // If logged in as student, redirect to authenticated event details page
       navigate(`/events/${event.id}`, { replace: true });
     }
   }, [user, event, navigate]);
@@ -55,28 +53,21 @@ const PublicEventDetails = () => {
 
   const handleRegisterClick = () => {
     if (!user) {
-      // Not logged in - show options to sign up or login
-      // Store the event uniqueId to redirect back after registration/login
       localStorage.setItem('pendingEventRegistration', uniqueId);
-      // For now, default to registration, but could show a modal with options
       navigate('/register/student');
     } else if (user.role === 'STUDENT') {
-      // Already logged in as student - redirect to authenticated event details page
       if (event?.id) {
         navigate(`/events/${event.id}`);
       } else {
-        // Fallback: try with uniqueId
         navigate(`/events/${uniqueId}`);
       }
     } else {
-      // Logged in but not as student - redirect to student registration
       localStorage.setItem('pendingEventRegistration', uniqueId);
       navigate('/register/student');
     }
   };
 
   const handleLoginClick = () => {
-    // Store event for redirect after login
     localStorage.setItem('pendingEventRegistration', uniqueId);
     navigate('/login/student');
   };
@@ -93,175 +84,289 @@ const PublicEventDetails = () => {
     });
   };
 
+  const getParticipantPercentage = () => {
+    if (!event?.maxParticipants || event.maxParticipants === 0) return 0;
+    return Math.min((event.currentParticipants || 0) / event.maxParticipants * 100, 100);
+  };
+
   if (isLoading) {
     return (
-      <>
-        <Header />
-        <main className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
           <Spinner />
-        </main>
-        <Footer />
-      </>
+          <p className="mt-4 text-gray-600 font-medium">Loading event details...</p>
+        </div>
+      </div>
     );
   }
 
   if (error || !event) {
     return (
-      <>
-        <Header />
-        <main className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6 text-center">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Event Not Found</h2>
-            <p className="text-gray-600 mb-6">{error || 'The event you are looking for does not exist or is no longer available.'}</p>
-            <Button onClick={() => navigate('/')}>Go to Home</Button>
+      <div className="min-h-screen bg-gradient-to-br from-red-50 via-pink-50 to-orange-50 flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center transform transition-all">
+          <div className="mb-6">
+            <div className="mx-auto w-20 h-20 bg-red-100 rounded-full flex items-center justify-center">
+              <svg className="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
           </div>
-        </main>
-        <Footer />
-      </>
+          <h2 className="text-3xl font-bold text-gray-900 mb-3">Event Not Found</h2>
+          <p className="text-gray-600 mb-8 leading-relaxed">{error || 'The event you are looking for does not exist or is no longer available.'}</p>
+          <button
+            onClick={() => navigate('/')}
+            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+          >
+            Go to Home
+          </button>
+        </div>
+      </div>
     );
   }
 
   return (
-    <>
-      <Header />
-      <main className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Event Header */}
-          <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-            <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-8 text-white">
-              <h1 className="text-3xl font-bold mb-2">{event.name}</h1>
-              {event.description && (
-                <div className="mt-3">
-                  <p className="text-blue-100 text-lg leading-relaxed">{event.description}</p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      {/* Hero Section */}
+      <div className="relative overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0" style={{
+            backgroundImage: 'radial-gradient(circle at 2px 2px, #4f46e5 1px, transparent 0)',
+            backgroundSize: '40px 40px'
+          }}></div>
+        </div>
+
+        {/* Main Content */}
+        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-8">
+          {/* Event Title Card */}
+          <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-3xl shadow-2xl overflow-hidden transform transition-all hover:shadow-3xl mb-8">
+            <div className="p-8 md:p-12 text-white">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                  <FaTrophy className="w-6 h-6" />
                 </div>
+                <span className="px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-sm font-semibold uppercase tracking-wide">
+                  {event.level || 'EVENT'}
+                </span>
+              </div>
+              <h1 className="text-4xl md:text-5xl font-bold mb-4 leading-tight">{event.name}</h1>
+              {event.description && (
+                <p className="text-blue-100 text-lg md:text-xl leading-relaxed max-w-3xl">
+                  {event.description}
+                </p>
               )}
             </div>
+          </div>
 
-            {/* Event Details */}
-            <div className="px-6 py-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2">Sport</h3>
-                  <p className="text-lg font-medium text-gray-900">{event.sport}</p>
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2">Level</h3>
-                  <p className="text-lg font-medium text-gray-900">{event.level}</p>
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2">Start Date</h3>
-                  <p className="text-lg font-medium text-gray-900">{formatDate(event.startDate)}</p>
-                </div>
-
-                {event.endDate && (
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2">End Date</h3>
-                    <p className="text-lg font-medium text-gray-900">{formatDate(event.endDate)}</p>
+          {/* Event Details Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            {/* Main Details Card */}
+            <div className="lg:col-span-2">
+              <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 transform transition-all hover:shadow-2xl">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <FaRunning className="w-5 h-5 text-blue-600" />
                   </div>
-                )}
-
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2">Venue</h3>
-                  <p className="text-lg font-medium text-gray-900">
-                    {event.venue}
-                    {event.address && `, ${event.address}`}
-                    {event.city && `, ${event.city}`}
-                    {event.state && `, ${event.state}`}
-                  </p>
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2">Participants</h3>
-                  <p className="text-lg font-medium text-gray-900">
-                    {event.currentParticipants || 0} / {event.maxParticipants || 'Unlimited'}
-                  </p>
-                </div>
-
-                {event.studentFeeEnabled && event.studentFeeAmount > 0 && (
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2">Registration Fee</h3>
-                    <p className="text-lg font-medium text-gray-900">₹{event.studentFeeAmount}</p>
+                  Event Details
+                </h2>
+                
+                <div className="space-y-6">
+                  {/* Sport */}
+                  <div className="flex items-start gap-4 pb-6 border-b border-gray-100">
+                    <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <FaTrophy className="w-6 h-6 text-indigo-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">Sport</p>
+                      <p className="text-xl font-bold text-gray-900">{event.sport}</p>
+                    </div>
                   </div>
-                )}
-              </div>
 
-              {/* Registration Section */}
-              <div className="mt-8 pt-6 border-t border-gray-200">
-                <div className="text-center">
-                  <h2 className="text-3xl font-bold text-gray-900 mb-3">
-                    Are you an athlete?
-                  </h2>
-                  <p className="text-lg text-gray-600 mb-8">
-                    Sign up or log in to register for this event and showcase your talent!
-                  </p>
-                  
-                  {!user ? (
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                      <Button
-                        onClick={handleRegisterClick}
-                        className="px-8 py-3 text-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                        </svg>
-                        Sign Up to Register
-                      </Button>
-                      <span className="text-gray-400 font-medium">or</span>
-                      <Button
-                        onClick={handleLoginClick}
-                        className="px-8 py-3 text-lg font-semibold bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                        </svg>
-                        Log In to Register
-                      </Button>
+                  {/* Dates */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <FaCalendar className="w-6 h-6 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">Start Date</p>
+                        <p className="text-lg font-semibold text-gray-900">{formatDate(event.startDate)}</p>
+                      </div>
                     </div>
-                  ) : user.role === 'STUDENT' ? (
-                    <div>
-                      <p className="text-gray-600 mb-4">You're logged in! Redirecting to registration...</p>
-                      <Button
-                        onClick={handleRegisterClick}
-                        className="px-8 py-3 text-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md hover:shadow-lg transition-all"
-                      >
-                        Go to Event Registration
-                      </Button>
+
+                    {event.endDate && (
+                      <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                          <FaClock className="w-6 h-6 text-orange-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">End Date</p>
+                          <p className="text-lg font-semibold text-gray-900">{formatDate(event.endDate)}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Venue */}
+                  <div className="flex items-start gap-4 pb-6 border-b border-gray-100">
+                    <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <FaMapMarkerAlt className="w-6 h-6 text-red-600" />
                     </div>
-                  ) : (
-                    <div>
-                      <p className="text-red-600 mb-4">Please log in as an athlete to register for events.</p>
-                      <Button
-                        onClick={() => {
-                          localStorage.setItem('pendingEventRegistration', uniqueId);
-                          navigate('/register/student');
-                        }}
-                        className="px-8 py-3 text-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md hover:shadow-lg transition-all"
-                      >
-                        Register as Athlete
-                      </Button>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">Venue</p>
+                      <p className="text-lg font-semibold text-gray-900 leading-relaxed">
+                        {event.venue}
+                        {event.address && `, ${event.address}`}
+                        {event.city && `, ${event.city}`}
+                        {event.state && `, ${event.state}`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Participants */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                          <FaUsers className="w-6 h-6 text-purple-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Participants</p>
+                          <p className="text-lg font-bold text-gray-900">
+                            {event.currentParticipants || 0} / {event.maxParticipants || 'Unlimited'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    {event.maxParticipants && (
+                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-1000 ease-out"
+                          style={{ width: `${getParticipantPercentage()}%` }}
+                        ></div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Registration Fee */}
+                  {event.studentFeeEnabled && event.studentFeeAmount > 0 && (
+                    <div className="flex items-center gap-4 pt-6 border-t border-gray-100">
+                      <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <FaRupeeSign className="w-6 h-6 text-amber-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">Registration Fee</p>
+                        <p className="text-2xl font-bold text-gray-900">₹{event.studentFeeAmount}</p>
+                      </div>
                     </div>
                   )}
                 </div>
               </div>
             </div>
+
+            {/* Sidebar - Organizer & CTA */}
+            <div className="space-y-6">
+              {/* Organizer Card */}
+              {event.coach && (
+                <div className="bg-white rounded-2xl shadow-xl p-6 transform transition-all hover:shadow-2xl">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                      <FaGlobe className="w-4 h-4 text-white" />
+                    </div>
+                    Organized By
+                  </h3>
+                  <div className="space-y-2">
+                    <p className="text-xl font-bold text-gray-900">{event.coach.name}</p>
+                    {event.coach.primarySport && (
+                      <p className="text-sm text-gray-600 flex items-center gap-2">
+                        <FaTrophy className="w-4 h-4" />
+                        {event.coach.primarySport}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Registration CTA Card */}
+              <div className="bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl shadow-2xl p-6 text-white transform transition-all hover:scale-105">
+                <div className="text-center mb-4">
+                  <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <FaTrophy className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-2xl font-bold mb-2">Join the Competition!</h3>
+                  <p className="text-indigo-100 text-sm">Don't miss this opportunity to showcase your talent</p>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Coach/Organizer Info */}
-          {event.coach && (
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Organized By</h3>
-              <p className="text-gray-700">{event.coach.name}</p>
-              {event.coach.primarySport && (
-                <p className="text-sm text-gray-500 mt-1">Sport: {event.coach.primarySport}</p>
+          {/* Registration Section */}
+          <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-12 transform transition-all hover:shadow-3xl">
+            <div className="text-center max-w-3xl mx-auto">
+              <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+                Are you an athlete?
+              </h2>
+              <p className="text-xl text-gray-600 mb-10 leading-relaxed">
+                Sign up or log in to register for this event and showcase your talent!
+              </p>
+              
+              {!user ? (
+                <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
+                  <button
+                    onClick={handleRegisterClick}
+                    className="group px-10 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-lg font-bold rounded-2xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-200 flex items-center gap-3 min-w-[220px] justify-center"
+                  >
+                    <svg className="w-6 h-6 group-hover:rotate-12 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                    </svg>
+                    Sign Up to Register
+                    <FaArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                  
+                  <span className="text-gray-400 font-semibold text-lg">or</span>
+                  
+                  <button
+                    onClick={handleLoginClick}
+                    className="group px-10 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white text-lg font-bold rounded-2xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-200 flex items-center gap-3 min-w-[220px] justify-center"
+                  >
+                    <FaLock className="w-6 h-6 group-hover:rotate-12 transition-transform" />
+                    Log In to Register
+                    <FaArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+              ) : user.role === 'STUDENT' ? (
+                <div className="space-y-6">
+                  <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6">
+                    <p className="text-green-800 font-semibold text-lg mb-4">You're logged in! Redirecting to registration...</p>
+                    <button
+                      onClick={handleRegisterClick}
+                      className="px-10 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-lg font-bold rounded-2xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-200"
+                    >
+                      Go to Event Registration
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-6">
+                    <p className="text-amber-800 font-semibold text-lg mb-4">Please log in as an athlete to register for events.</p>
+                    <button
+                      onClick={() => {
+                        localStorage.setItem('pendingEventRegistration', uniqueId);
+                        navigate('/register/student');
+                      }}
+                      className="px-10 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-lg font-bold rounded-2xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-200"
+                    >
+                      Register as Athlete
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
-          )}
+          </div>
         </div>
-      </main>
-      <Footer />
-    </>
+      </div>
+    </div>
   );
 };
 

@@ -441,15 +441,7 @@ function App() {
             {/* Public Event Route (no authentication required) */}
             <Route
               path="/event/:uniqueId"
-              element={
-                <>
-                  <Header />
-                  <main className="flex-grow">
-                    <PublicEventDetails />
-                  </main>
-                  <Footer />
-                </>
-              }
+              element={<PublicEventDetails />}
             />
             <Route
               path="/events"
