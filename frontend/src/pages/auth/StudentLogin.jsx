@@ -46,7 +46,7 @@ const StudentLogin = () => {
           // Redirect to the public event page, which will then redirect to authenticated page
           navigate(`/event/${pendingEvent}`);
         } else {
-          navigate('/dashboard/student');
+        navigate('/dashboard/student');
         }
       } else {
         // Parse error and show popup

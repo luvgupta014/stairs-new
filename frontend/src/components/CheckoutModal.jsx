@@ -162,6 +162,26 @@ const CheckoutModal = ({
                       {eventDetails.participants} participant{eventDetails.participants !== 1 ? 's' : ''}
                     </p>
                   )}
+                  {eventDetails.perStudentFee && (
+                    <p className="text-sm text-blue-700 mt-2">
+                      <strong>Per Student Fee:</strong> ₹{eventDetails.perStudentFee.toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Digital Certificate Message for Event Payments */}
+              {paymentType === 'event' && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-start">
+                    <FaInfoCircle className="text-green-600 mt-0.5 mr-3 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-green-900 mb-1">Digital Certificate Issuance</p>
+                      <p className="text-xs text-green-700">
+                        Digital certificate issuance is provided at no additional cost. Continue to pay event fees only.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
 

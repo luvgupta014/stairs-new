@@ -897,7 +897,18 @@ class EventService {
         },
         include: {
           event: {
-            select: { name: true, startDate: true }
+            select: { 
+              name: true, 
+              startDate: true,
+              createdByAdmin: true,
+              studentFeeEnabled: true,
+              studentFeeAmount: true
+            }
+          },
+          student: {
+            select: {
+              userId: true
+            }
           }
         }
       });
@@ -909,6 +920,28 @@ class EventService {
       // Check if event is still in the future
       if (new Date(registration.event.startDate) <= new Date()) {
         throw new Error('Cannot unregister from past events');
+      }
+
+      // Prevent unregistration if event has fees enabled and student has paid
+      const event = registration.event;
+      const hasFees = event.createdByAdmin && event.studentFeeEnabled && (event.studentFeeAmount || 0) > 0;
+      
+      if (hasFees) {
+        // Check if student has made a payment for this event
+        const payment = await prisma.payment.findFirst({
+          where: {
+            userId: registration.student.userId,
+            status: 'SUCCESS',
+            type: 'EVENT_STUDENT_FEE',
+            metadata: {
+              contains: eventId
+            }
+          }
+        });
+
+        if (payment) {
+          throw new Error('Cannot unregister from an event after payment has been made. Please contact support for assistance.');
+        }
       }
 
       // Delete registration

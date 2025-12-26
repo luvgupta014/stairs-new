@@ -782,7 +782,7 @@ const CoachDashboard = () => {
           <div className="flex items-center justify-between">
             <div className="text-white">
               <h1 className="text-3xl font-bold mb-2">
-                Welcome back, Coach {dashboardData?.coach?.name || 'Coach'}!
+                Welcome back, Coordinator {dashboardData?.coach?.name || 'Coordinator'}!
               </h1>
               <p className="text-green-100 text-lg">
                 {dashboardData?.coach?.specialization || 'Sports Training'} • Member since {new Date(dashboardData?.coach?.joinedDate).getFullYear()}
@@ -1642,7 +1642,7 @@ const CoachDashboard = () => {
                                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                                   </svg>
-                                  Place Orders
+                                  Place Medal Orders
                                 </Link>
                               </>
                             )}
@@ -1664,7 +1664,7 @@ const CoachDashboard = () => {
                                 ) : (
                                   <>
                                     <FaCreditCard className="mr-2" />
-                                    Payment Pending
+                                    Issue Digital Certificate
                                   </>
                                 )}
                               </div>
@@ -1938,7 +1938,8 @@ const CoachDashboard = () => {
               paymentType: 'event',
               eventDetails: {
                 name: razorpayOrderData.eventName || selectedEventForPayment.name,
-                participants: selectedEventForPayment.currentParticipants || 0
+                participants: selectedEventForPayment.currentParticipants || 0,
+                perStudentFee: selectedEventForPayment.studentFeeAmount ? (selectedEventForPayment.studentFeeAmount / 100) : null
               },
               subtotal: (razorpayOrderData.amount / 100) || 0,
               tax: 0,

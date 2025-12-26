@@ -60,7 +60,10 @@ const Header = () => {
         console.error('Failed to mark notification as read:', error);
       }
     }
-    setShowNotifications(false);
+    // Smooth close animation
+    setTimeout(() => {
+      setShowNotifications(false);
+    }, 150);
 
     // Parse notification data if available
     let navigationPath = null;
@@ -117,6 +120,10 @@ const Header = () => {
         prev.map(n => ({ ...n, isRead: true, readAt: new Date() }))
       );
       setUnreadCount(0);
+      // Smooth animation - remove unread indicators
+      setTimeout(() => {
+        setShowNotifications(false);
+      }, 300);
     } catch (error) {
       console.error('Failed to mark all notifications as read:', error);
     }

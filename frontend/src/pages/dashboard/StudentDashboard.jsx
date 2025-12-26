@@ -670,11 +670,9 @@ const StudentDashboard = () => {
     
     switch (eventsFilter) {
       case 'registered':
-        return myEventRegistrations.filter(reg => reg.status === 'REGISTERED');
+        return myEventRegistrations.filter(reg => reg.status === 'REGISTERED' || reg.status === 'APPROVED');
       case 'pending':
         return myEventRegistrations.filter(reg => reg.status === 'PENDING');
-      case 'approved':
-        return myEventRegistrations.filter(reg => reg.status === 'APPROVED');
       default:
         return myEventRegistrations;
     }
@@ -1113,9 +1111,8 @@ const StudentDashboard = () => {
                       className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="all">All Events ({myEventRegistrations.length})</option>
-                      <option value="registered">Registered ({myEventRegistrations.filter(r => r.status === 'REGISTERED').length})</option>
-                      <option value="pending">Pending ({myEventRegistrations.filter(r => r.status === 'PENDING').length})</option>
-                      <option value="approved">Approved ({myEventRegistrations.filter(r => r.status === 'APPROVED').length})</option>
+                      <option value="registered">Active ({myEventRegistrations.filter(r => r.status === 'REGISTERED' || r.status === 'APPROVED').length})</option>
+                      <option value="pending">Awaiting Approval ({myEventRegistrations.filter(r => r.status === 'PENDING').length})</option>
                     </select>
                     <button 
                       onClick={handleBrowseEvents}
@@ -1137,7 +1134,10 @@ const StudentDashboard = () => {
                             registration.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
                             'bg-red-100 text-red-800'
                           }`}>
-                            {registration.status}
+                            {registration.status === 'PENDING' ? 'Awaiting Approval' : 
+                             registration.status === 'APPROVED' ? 'Active' :
+                             registration.status === 'REGISTERED' ? 'Active' :
+                             registration.status}
                           </span>
                         </div>
                         

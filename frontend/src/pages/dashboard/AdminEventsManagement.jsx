@@ -2786,13 +2786,13 @@ const AdminEventsManagement = () => {
 
           {/* Action buttons */}
           <div className="flex flex-col space-y-2 w-full">
-            <button
-              onClick={() => handleViewEventDetails(event)}
-              className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-blue-700 hover:shadow-md transition-all transform hover:scale-105 w-full flex items-center justify-center space-x-1"
-            >
-              <span>👁️</span>
-              <span>View Details</span>
-            </button>
+          <button
+            onClick={() => handleViewEventDetails(event)}
+            className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-blue-700 hover:shadow-md transition-all transform hover:scale-105 w-full flex items-center justify-center space-x-1"
+          >
+            <span>👁️</span>
+            <span>View Details</span>
+          </button>
             {event.uniqueId && (event.status === 'APPROVED' || event.status === 'ACTIVE') && (
               <button
                 onClick={() => openShareModal(event)}

@@ -157,12 +157,12 @@ const EventOrders = () => {
       const hasBreakdown = (mg + ms + mb) > 0;
       const fallbackGold = hasBreakdown ? mg : (parseInt(order.medals ?? 0) || 0);
       setOrderForm({
-        certificates: order.certificates,
+        certificates: 0,
         medals: order.medals,
         medalGold: hasBreakdown ? mg : fallbackGold,
         medalSilver: hasBreakdown ? ms : 0,
         medalBronze: hasBreakdown ? mb : 0,
-        trophies: order.trophies,
+        trophies: 0,
         medalPrice: showMedalPricing && order.medalPrice !== null && order.medalPrice !== undefined ? String(order.medalPrice) : '',
         specialInstructions: order.specialInstructions || '',
         urgentDelivery: order.urgentDelivery
@@ -195,11 +195,13 @@ const EventOrders = () => {
     const payload = {
       ...orderForm,
       medals: medalsTotal,
+      certificates: 0, // Remove certificates
+      trophies: 0, // Remove trophies
       ...(showMedalPricing ? { medalPrice: orderForm.medalPrice } : {})
     };
 
-    if (payload.certificates === 0 && payload.medals === 0 && payload.trophies === 0) {
-      showMessage('error', 'Please specify at least one item to order');
+    if (payload.medals === 0) {
+      showMessage('error', 'Please specify at least one medal to order');
       return;
     }
 
@@ -449,15 +451,15 @@ const EventOrders = () => {
                 />
               </div>
               <div className="text-white">
-                <h1 className="text-3xl font-bold mb-2">Event Orders</h1>
+                <h1 className="text-3xl font-bold mb-2">Place Medal Orders</h1>
                 <p className="text-blue-100 text-lg">
-                  {eventData ? `Manage orders for: ${eventData.name}` : 'Manage your event orders'}
+                  {eventData ? `Manage medal orders for: ${eventData.name}` : 'Manage your medal orders'}
                 </p>
               </div>
             </div>
             <div className="hidden md:flex items-center space-x-2 text-white">
-              <FaTrophy className="text-2xl" />
-              <span className="text-lg font-medium">Orders Management</span>
+              <FaMedal className="text-2xl" />
+              <span className="text-lg font-medium">Medal Orders Management</span>
             </div>
           </div>
         </div>
@@ -505,7 +507,7 @@ const EventOrders = () => {
             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors inline-flex items-center"
           >
             <FaPlus className="mr-2" />
-            Create New Order
+            Place Medal Order
           </button>
         </div>
 
@@ -513,22 +515,22 @@ const EventOrders = () => {
         <div className="bg-white rounded-lg shadow-md">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900">
-              Event Orders ({orders.length})
+              Medal Orders ({orders.length})
             </h2>
           </div>
 
           {orders.length === 0 ? (
             <div className="text-center py-12">
-              <FaTrophy className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No Orders Yet</h3>
+              <FaMedal className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Medal Orders Yet</h3>
               <p className="text-gray-600 mb-4">
-                Create your first order for certificates, medals, or trophies.
+                Create your first medal order for this event.
               </p>
               <button
                 onClick={() => openOrderModal()}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
               >
-                Create First Order
+                Place First Medal Order
               </button>
             </div>
           ) : (
@@ -553,28 +555,16 @@ const EventOrders = () => {
                         )}
                       </div>
                       
-                      <div className="grid grid-cols-3 gap-4 text-sm text-gray-600 mb-2">
-                        {order.certificates > 0 && (
-                          <div className="flex items-center">
-                            <FaCertificate className="text-yellow-500 mr-1" />
-                            {order.certificates} Certificates
-                          </div>
-                        )}
+                      <div className="text-sm text-gray-600 mb-2">
                         {order.medals > 0 && (
                           <div className="flex items-center">
                             <FaMedal className="text-yellow-500 mr-1" />
-                            {order.medals} Medals
+                            <span className="font-medium">{order.medals} Medals</span>
                             {(order.medalGold || order.medalSilver || order.medalBronze) ? (
                               <span className="ml-2 text-xs text-gray-500">
-                                (G:{order.medalGold || 0} / S:{order.medalSilver || 0} / B:{order.medalBronze || 0})
+                                (Gold: {order.medalGold || 0} / Silver: {order.medalSilver || 0} / Bronze: {order.medalBronze || 0})
                               </span>
                             ) : null}
-                          </div>
-                        )}
-                        {order.trophies > 0 && (
-                          <div className="flex items-center">
-                            <FaTrophy className="text-yellow-600 mr-1" />
-                            {order.trophies} Trophies
                           </div>
                         )}
                       </div>
@@ -709,26 +699,13 @@ const EventOrders = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
             <h3 className="text-lg font-semibold mb-4">
-              {editingOrder ? 'Edit Order' : 'Create New Order'}
+              {editingOrder ? 'Edit Medal Order' : 'Place New Medal Order'}
             </h3>
             
             <form onSubmit={handleSubmitOrder} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Certificates
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={orderForm.certificates}
-                  onChange={(e) => setOrderForm(prev => ({ ...prev, certificates: parseInt(e.target.value) || 0 }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Medals (Gold / Silver / Bronze)
+                  Medals (Gold / Silver / Bronze) *
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
@@ -808,19 +785,6 @@ const EventOrders = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Trophies
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={orderForm.trophies}
-                  onChange={(e) => setOrderForm(prev => ({ ...prev, trophies: parseInt(e.target.value) || 0 }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Special Instructions (Optional)
                 </label>
                 <textarea
@@ -864,7 +828,7 @@ const EventOrders = () => {
                       {editingOrder ? 'Updating...' : 'Creating...'}
                     </>
                   ) : (
-                    editingOrder ? 'Update Order' : 'Create Order'
+                    editingOrder ? 'Update Medal Order' : 'Place Medal Order'
                   )}
                 </button>
               </div>
@@ -895,19 +859,9 @@ const EventOrders = () => {
               trophies: razorpayOrderData.orderDetails.trophies || 0
             },
             items: [
-              ...(razorpayOrderData.orderDetails.certificates > 0 ? [{
-                name: 'Certificates',
-                quantity: razorpayOrderData.orderDetails.certificates,
-                amount: 0 // Price breakdown would come from backend if available
-              }] : []),
               ...(razorpayOrderData.orderDetails.medals > 0 ? [{
                 name: 'Medals',
                 quantity: razorpayOrderData.orderDetails.medals,
-                amount: 0
-              }] : []),
-              ...(razorpayOrderData.orderDetails.trophies > 0 ? [{
-                name: 'Trophies',
-                quantity: razorpayOrderData.orderDetails.trophies,
                 amount: 0
               }] : [])
             ],
