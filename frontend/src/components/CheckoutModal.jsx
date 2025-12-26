@@ -229,20 +229,33 @@ const CheckoutModal = ({
                       </div>
                     )}
                     {paymentType === 'event' && eventDetails && (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {eventDetails.perStudentFee && eventDetails.perStudentFee > 0 && eventDetails.participants > 0 ? (
                           <>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Per Student Fee:</span>
-                              <span className="text-gray-900 font-medium">₹{eventDetails.perStudentFee.toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Number of Participants:</span>
-                              <span className="text-gray-900 font-medium">{eventDetails.participants}</span>
-                            </div>
-                            <div className="flex justify-between text-sm pt-2 border-t border-gray-200">
-                              <span className="text-gray-700 font-medium">Subtotal ({eventDetails.participants} × ₹{eventDetails.perStudentFee.toFixed(2)}):</span>
-                              <span className="text-gray-900 font-semibold">{formatAmount(eventDetails.participants * eventDetails.perStudentFee)}</span>
+                            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                              <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm font-medium text-gray-700">Per Student Fee:</span>
+                                  <span className="text-base font-semibold text-gray-900">₹{eventDetails.perStudentFee.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm font-medium text-gray-700">Number of Participants:</span>
+                                  <span className="text-base font-semibold text-gray-900">{eventDetails.participants}</span>
+                                </div>
+                                <div className="pt-3 border-t-2 border-gray-300">
+                                  <div className="flex justify-between items-center mb-1">
+                                    <span className="text-sm text-gray-600">Calculation:</span>
+                                  </div>
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-base font-semibold text-gray-900">
+                                      {eventDetails.participants} × ₹{eventDetails.perStudentFee.toFixed(2)}
+                                    </span>
+                                    <span className="text-lg font-bold text-blue-600">
+                                      = ₹{(eventDetails.participants * eventDetails.perStudentFee).toFixed(2)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           </>
                         ) : (
@@ -269,32 +282,41 @@ const CheckoutModal = ({
                 )}
 
                 {/* Calculations */}
-                <div className="space-y-2 pt-4 border-t border-gray-200">
-                  {subtotal > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="text-gray-900">{formatAmount(subtotal)}</span>
-                    </div>
-                  )}
-                  {tax > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Tax:</span>
-                      <span className="text-gray-900">{formatAmount(tax)}</span>
-                    </div>
-                  )}
-                  {discount > 0 && (
-                    <div className="flex justify-between text-sm text-emerald-600">
-                      <span>Discount:</span>
-                      <span>-{formatAmount(discount)}</span>
-                    </div>
-                  )}
-                </div>
+                {!(paymentType === 'event' && eventDetails?.perStudentFee && eventDetails.perStudentFee > 0) && (
+                  <div className="space-y-2 pt-4 border-t border-gray-200">
+                    {subtotal > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Subtotal:</span>
+                        <span className="text-gray-900">{formatAmount(subtotal)}</span>
+                      </div>
+                    )}
+                    {tax > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Tax:</span>
+                        <span className="text-gray-900">{formatAmount(tax)}</span>
+                      </div>
+                    )}
+                    {discount > 0 && (
+                      <div className="flex justify-between text-sm text-emerald-600">
+                        <span>Discount:</span>
+                        <span>-{formatAmount(discount)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Total Amount */}
               <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg p-4 mb-6 border-2 border-emerald-200">
                 <div className="flex justify-between items-center">
-                  <span className="text-lg font-semibold text-gray-900">Total Amount:</span>
+                  <div>
+                    <span className="text-lg font-semibold text-gray-900">Total Amount:</span>
+                    {paymentType === 'event' && eventDetails?.perStudentFee && eventDetails.perStudentFee > 0 && eventDetails.participants > 0 && (
+                      <p className="text-xs text-gray-600 mt-1">
+                        ({eventDetails.participants} participants × ₹{eventDetails.perStudentFee.toFixed(2)})
+                      </p>
+                    )}
+                  </div>
                   <span className="text-3xl font-bold text-emerald-600">
                     {formatAmount(total)}
                   </span>

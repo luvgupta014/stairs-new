@@ -24,8 +24,11 @@ import CheckoutModal from '../../components/CheckoutModal';
 import usePaymentStatus from '../../hooks/usePaymentStatus';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FaExclamationTriangle, FaCreditCard, FaCheckCircle, FaEdit, FaTrash, FaEye, FaUsers, FaCalendar, FaMapMarkerAlt, FaBell, FaShare, FaCopy, FaEnvelope } from 'react-icons/fa';
+import NotificationsPage from '../../components/NotificationsPage';
+import { useAuth } from '../../contexts/AuthContext';
 
 const CoachDashboard = () => {
+  const { user } = useAuth();
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1066,6 +1069,7 @@ const CoachDashboard = () => {
                 { id: 'overview', name: 'Overview', icon: '📊' },
                 { id: 'athletes', name: 'Athletes', icon: '👥' },
                 { id: 'events', name: 'My Events', icon: '📅' },
+                { id: 'notifications', name: 'Notifications', icon: '🔔', badge: unreadCount > 0 ? unreadCount : null },
                 { id: 'analytics', name: 'Analytics', icon: '📈' }
               ].map((tab) => (
                 <button
@@ -1078,6 +1082,11 @@ const CoachDashboard = () => {
                 >
                   <span className="mr-2">{tab.icon}</span>
                   {tab.name}
+                  {tab.badge && tab.badge > 0 && (
+                    <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
+                      {tab.badge > 9 ? '9+' : tab.badge}
+                    </span>
+                  )}
                 </button>
               ))}
             </nav>
@@ -1718,6 +1727,12 @@ const CoachDashboard = () => {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'notifications' && (
+              <div className="-m-6">
+                <NotificationsPage userRole={user?.role || 'COACH'} />
               </div>
             )}
 

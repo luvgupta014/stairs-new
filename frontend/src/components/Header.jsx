@@ -26,6 +26,7 @@ const Header = () => {
       if (response.success) {
         setNotifications(response.data.notifications || []);
         setUnreadCount(response.data.unreadCount || 0);
+        setTotalItems(response.data.pagination?.totalItems || response.data.notifications?.length || 0);
       }
     } catch (error) {
       console.error('Failed to load notifications:', error);
@@ -43,6 +44,13 @@ const Header = () => {
       return () => clearInterval(interval);
     }
   }, [user, loadNotifications]); // Depend on user and memoized loadNotifications
+
+  // Refresh notifications when dropdown is opened
+  useEffect(() => {
+    if (showNotifications && user && isAuthenticated()) {
+      loadNotifications();
+    }
+  }, [showNotifications, user, loadNotifications]);
 
   const handleNotificationClick = async (notification) => {
     if (!notification.isRead) {
@@ -176,6 +184,22 @@ const Header = () => {
 
   const isLoginPage = location.pathname.includes('/login');
   const isRegisterPage = location.pathname.includes('/register');
+
+  // Close notifications dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showNotifications && !event.target.closest('.relative')) {
+        setShowNotifications(false);
+      }
+    };
+
+    if (showNotifications) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showNotifications]);
 
   const getDisplayName = () => {
     if (!user || !user.profile) return user?.role || 'User';
@@ -342,6 +366,7 @@ const Header = () => {
                 {/* Notifications - All Authenticated Users */}
                 <div className="relative">
                   <button
+                    data-notifications-button
                     onClick={() => setShowNotifications(!showNotifications)}
                     className="relative p-2 text-gray-700 hover:text-blue-600 focus:outline-none"
                   >
@@ -357,7 +382,11 @@ const Header = () => {
                   
                   {/* Notifications Dropdown */}
                   {showNotifications && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg py-1 z-50 border">
+                  <div 
+                    data-notifications-dropdown
+                    className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg py-1 z-50 border"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div className="px-4 py-2 border-b border-gray-200 flex justify-between items-center">
                       <h3 className="text-sm font-medium text-gray-900">Notifications</h3>
                       <div className="flex items-center gap-3">
@@ -433,10 +462,14 @@ const Header = () => {
                       <div className="px-4 py-2 border-t border-gray-200 text-center">
                         <Link
                           to={`/dashboard/${user.role.toLowerCase()}?tab=notifications`}
-                          className="text-xs text-blue-600 hover:text-blue-800"
-                          onClick={() => setShowNotifications(false)}
+                          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                          onClick={() => {
+                            setShowNotifications(false);
+                            // Refresh notification count when navigating
+                            setTimeout(() => loadNotifications(), 500);
+                          }}
                         >
-                          View all notifications
+                          View all notifications ({totalItems > 0 ? totalItems : notifications.length})
                         </Link>
                       </div>
                     )}

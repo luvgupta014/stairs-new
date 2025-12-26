@@ -3451,6 +3451,67 @@ router.delete('/notifications/:notificationId', authenticate, async (req, res) =
   }
 });
 
+// Delete all notifications for a user (clear all)
+router.delete('/notifications/clear-all', authenticate, async (req, res) => {
+  try {
+    console.log(`🔔 Clearing all notifications for user ${req.user.id}`);
+
+    // Check if notification model exists
+    if (!prisma.notification) {
+      console.log('⚠️ Notification model not found in Prisma schema');
+      return res.status(404).json(errorResponse('Notifications feature not available.', 404));
+    }
+
+    const result = await prisma.notification.deleteMany({
+      where: {
+        userId: req.user.id
+      }
+    });
+
+    res.json(successResponse({
+      deletedCount: result.count
+    }, `${result.count} notifications cleared successfully.`));
+
+  } catch (error) {
+    console.error('❌ Clear all notifications error:', error);
+    res.status(500).json(errorResponse('Failed to clear all notifications.', 500));
+  }
+});
+
+// Bulk delete notifications
+router.delete('/notifications/bulk-delete', authenticate, async (req, res) => {
+  try {
+    const { notificationIds } = req.body;
+
+    if (!notificationIds || !Array.isArray(notificationIds) || notificationIds.length === 0) {
+      return res.status(400).json(errorResponse('Notification IDs are required.', 400));
+    }
+
+    console.log(`🔔 Bulk deleting ${notificationIds.length} notifications for user ${req.user.id}`);
+
+    // Check if notification model exists
+    if (!prisma.notification) {
+      console.log('⚠️ Notification model not found in Prisma schema');
+      return res.status(404).json(errorResponse('Notifications feature not available.', 404));
+    }
+
+    const result = await prisma.notification.deleteMany({
+      where: {
+        id: { in: notificationIds },
+        userId: req.user.id // Ensure user can only delete their own notifications
+      }
+    });
+
+    res.json(successResponse({
+      deletedCount: result.count
+    }, `${result.count} notifications deleted successfully.`));
+
+  } catch (error) {
+    console.error('❌ Bulk delete notifications error:', error);
+    res.status(500).json(errorResponse('Failed to bulk delete notifications.', 500));
+  }
+});
+
 // Get notification count (for header badge) - Optimized with caching
 router.get('/notifications/count', authenticate, async (req, res) => {
   try {

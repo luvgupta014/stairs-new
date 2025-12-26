@@ -1614,6 +1614,26 @@ export const getNotificationCount = async () => {
   }
 };
 
+export const clearAllNotifications = async () => {
+  try {
+    const response = await api.delete('/api/admin/notifications/clear-all');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const bulkDeleteNotifications = async (notificationIds) => {
+  try {
+    const response = await api.delete('/api/admin/notifications/bulk-delete', {
+      data: { notificationIds }
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 // Student Registration Management for Events
 export const bulkRegisterStudentsForEvent = async (eventId, studentIds, eventFeePerStudent = 0) => {
   try {

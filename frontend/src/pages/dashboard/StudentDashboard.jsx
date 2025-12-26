@@ -9,8 +9,11 @@ import {
   getStudentEventRegistrations,
   getStudentCertificates,
   getStudentEventDetails,
-  createStudentEventPaymentOrder
+  createStudentEventPaymentOrder,
+  getNotifications,
+  getNotificationCount
 } from '../../api';
+import NotificationsPage from '../../components/NotificationsPage';
 import CoachCard from '../../components/CoachCard';
 import Spinner from '../../components/Spinner';
 import Modal from '../../components/Modal';
@@ -118,7 +121,19 @@ const StudentDashboard = () => {
     loadMyEventRegistrations();
     loadCertificates();
     loadRazorpayScript();
+    loadNotificationCount();
   }, [searchParams]);
+
+  const loadNotificationCount = async () => {
+    try {
+      const response = await getNotificationCount();
+      if (response.success) {
+        setUnreadCount(response.data.unreadCount || 0);
+      }
+    } catch (error) {
+      console.error('Failed to load notification count:', error);
+    }
+  };
 
   const handleUpdateProfile = () => {
     navigate('/student/profile');
@@ -905,6 +920,11 @@ const StudentDashboard = () => {
                 >
                   <span className="mr-2">{tab.icon}</span>
                   {tab.name}
+                  {tab.badge && tab.badge > 0 && (
+                    <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
+                      {tab.badge > 9 ? '9+' : tab.badge}
+                    </span>
+                  )}
                 </button>
               ))}
             </nav>
@@ -1287,42 +1307,8 @@ const StudentDashboard = () => {
             )}
 
             {activeTab === 'notifications' && (
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">All Notifications</h3>
-                {dashboardData?.notifications && dashboardData.notifications.length > 0 ? (
-                  <div className="space-y-3">
-                    {dashboardData.notifications.map(notification => (
-                      <div
-                        key={notification.id}
-                        className="flex items-start space-x-4 p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
-                      >
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0 ${
-                          notification.type === 'event' ? 'bg-blue-100' :
-                          notification.type === 'coach' ? 'bg-green-100' : 
-                          notification.type === 'achievement' ? 'bg-yellow-100' : 'bg-gray-100'
-                        }`}>
-                          {notification.type === 'event' ? '🏆' : 
-                           notification.type === 'coach' ? '👨‍🏫' : 
-                           notification.type === 'achievement' ? '🏅' : '📢'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">{notification.message}</p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {formatNotificationTime(notification.createdAt || notification.time)}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <span className="text-gray-400 text-5xl">🔔</span>
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Notifications</h3>
-                    <p className="text-gray-600">You're all caught up! Check back later for updates.</p>
-                  </div>
-                )}
+              <div className="-m-6">
+                <NotificationsPage userRole="STUDENT" />
               </div>
             )}
 
