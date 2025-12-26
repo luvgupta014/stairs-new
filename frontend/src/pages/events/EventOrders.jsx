@@ -713,9 +713,25 @@ const EventOrders = () => {
                     <input
                       type="number"
                       min="0"
-                      value={orderForm.medalGold}
-                      onChange={(e) => setOrderForm(prev => ({ ...prev, medalGold: parseInt(e.target.value) || 0 }))}
+                      step="1"
+                      value={orderForm.medalGold === 0 ? '' : orderForm.medalGold}
+                      onChange={(e) => {
+                        const inputVal = e.target.value;
+                        if (inputVal === '') {
+                          setOrderForm(prev => ({ ...prev, medalGold: 0 }));
+                        } else {
+                          const numVal = parseInt(inputVal, 10);
+                          if (!isNaN(numVal) && numVal >= 0) {
+                            setOrderForm(prev => ({ ...prev, medalGold: numVal }));
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setOrderForm(prev => ({ ...prev, medalGold: isNaN(val) || val < 0 ? 0 : val }));
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="0"
                     />
                   </div>
                   <div>
@@ -723,9 +739,25 @@ const EventOrders = () => {
                     <input
                       type="number"
                       min="0"
-                      value={orderForm.medalSilver}
-                      onChange={(e) => setOrderForm(prev => ({ ...prev, medalSilver: parseInt(e.target.value) || 0 }))}
+                      step="1"
+                      value={orderForm.medalSilver === 0 ? '' : orderForm.medalSilver}
+                      onChange={(e) => {
+                        const inputVal = e.target.value;
+                        if (inputVal === '') {
+                          setOrderForm(prev => ({ ...prev, medalSilver: 0 }));
+                        } else {
+                          const numVal = parseInt(inputVal, 10);
+                          if (!isNaN(numVal) && numVal >= 0) {
+                            setOrderForm(prev => ({ ...prev, medalSilver: numVal }));
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setOrderForm(prev => ({ ...prev, medalSilver: isNaN(val) || val < 0 ? 0 : val }));
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="0"
                     />
                   </div>
                   <div>
@@ -733,9 +765,25 @@ const EventOrders = () => {
                     <input
                       type="number"
                       min="0"
-                      value={orderForm.medalBronze}
-                      onChange={(e) => setOrderForm(prev => ({ ...prev, medalBronze: parseInt(e.target.value) || 0 }))}
+                      step="1"
+                      value={orderForm.medalBronze === 0 ? '' : orderForm.medalBronze}
+                      onChange={(e) => {
+                        const inputVal = e.target.value;
+                        if (inputVal === '') {
+                          setOrderForm(prev => ({ ...prev, medalBronze: 0 }));
+                        } else {
+                          const numVal = parseInt(inputVal, 10);
+                          if (!isNaN(numVal) && numVal >= 0) {
+                            setOrderForm(prev => ({ ...prev, medalBronze: numVal }));
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setOrderForm(prev => ({ ...prev, medalBronze: isNaN(val) || val < 0 ? 0 : val }));
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="0"
                     />
                   </div>
                 </div>

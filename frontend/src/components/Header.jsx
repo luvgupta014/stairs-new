@@ -360,14 +360,25 @@ const Header = () => {
                   <div className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg py-1 z-50 border">
                     <div className="px-4 py-2 border-b border-gray-200 flex justify-between items-center">
                       <h3 className="text-sm font-medium text-gray-900">Notifications</h3>
-                      {unreadCount > 0 && (
+                      <div className="flex items-center gap-3">
+                        {unreadCount > 0 && (
+                          <button
+                            onClick={handleMarkAllAsRead}
+                            className="text-xs text-blue-600 hover:text-blue-800"
+                          >
+                            Mark all as read
+                          </button>
+                        )}
                         <button
-                          onClick={handleMarkAllAsRead}
-                          className="text-xs text-blue-600 hover:text-blue-800"
+                          onClick={() => setShowNotifications(false)}
+                          className="text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
+                          aria-label="Close notifications"
                         >
-                          Mark all as read
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
                         </button>
-                      )}
+                      </div>
                     </div>
                     
                     <div className="max-h-96 overflow-y-auto">

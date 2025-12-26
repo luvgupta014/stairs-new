@@ -323,6 +323,16 @@ router.post('/create-order-events', authenticate, async (req, res) => {
       throw dbError;
     }
 
+    // Calculate per-student fee for display
+    let perStudentFee = 0;
+    if (event.feeMode === 'GLOBAL' && participantCount > 0 && perStudentBaseCharge > 0) {
+      perStudentFee = perStudentBaseCharge;
+    } else if (event.feeMode === 'EVENT' && participantCount > 0) {
+      // For EVENT mode, divide total by participant count
+      const totalFee = (event.eventFee || 0) + (event.coordinatorFee || 0);
+      perStudentFee = totalFee / participantCount;
+    }
+
     res.json(successResponse({
       orderId: order.id,
       amount: order.amount,
@@ -330,6 +340,7 @@ router.post('/create-order-events', authenticate, async (req, res) => {
       eventName: event.name,
       participantCount: participantCount,
       amountInRupees: amountInRupees,
+      perStudentFee: Math.round(perStudentFee * 100) / 100, // Round to 2 decimal places
       razorpayKeyId: process.env.RAZORPAY_KEY_ID
     }, 'Event payment order created successfully.'));
 

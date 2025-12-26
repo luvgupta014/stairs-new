@@ -457,7 +457,7 @@ const CoachDashboard = () => {
         throw new Error(orderData?.message || 'Payment initialization failed. Please try again.');
       }
 
-      const { orderId, amount, currency, eventName, razorpayKeyId } = orderData.data || {};
+      const { orderId, amount, currency, eventName, razorpayKeyId, perStudentFee, participantCount } = orderData.data || {};
 
       // Validate response data
       if (!orderId || !amount || !razorpayKeyId) {
@@ -472,7 +472,9 @@ const CoachDashboard = () => {
         amount,
         currency: currency || 'INR',
         eventName,
-        razorpayKeyId
+        razorpayKeyId,
+        perStudentFee: perStudentFee || null,
+        participantCount: participantCount || (event.currentParticipants || 0)
       });
       setShowCheckout(true);
     } catch (err) {
@@ -1938,8 +1940,8 @@ const CoachDashboard = () => {
               paymentType: 'event',
               eventDetails: {
                 name: razorpayOrderData.eventName || selectedEventForPayment.name,
-                participants: selectedEventForPayment.currentParticipants || 0,
-                perStudentFee: selectedEventForPayment.studentFeeAmount ? (selectedEventForPayment.studentFeeAmount / 100) : null
+                participants: razorpayOrderData.participantCount || selectedEventForPayment.currentParticipants || 0,
+                perStudentFee: razorpayOrderData.perStudentFee || null
               },
               subtotal: (razorpayOrderData.amount / 100) || 0,
               tax: 0,
