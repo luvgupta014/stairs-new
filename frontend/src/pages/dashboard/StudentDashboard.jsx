@@ -32,7 +32,11 @@ const StudentDashboard = () => {
   const [showCoachModal, setShowCoachModal] = useState(false);
   const [showEventsModal, setShowEventsModal] = useState(false);
   const [connectedCoaches, setConnectedCoaches] = useState([]);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() => {
+    // Initialize from URL if available
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'overview';
+  });
   const [registeringEventId, setRegisteringEventId] = useState(null);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
@@ -107,14 +111,16 @@ const StudentDashboard = () => {
   useEffect(() => {
     // Check if tab is specified in URL query params
     const tabParam = searchParams.get('tab');
-    if (tabParam) {
+    if (tabParam && tabParam !== activeTab) {
       setActiveTab(tabParam);
       // Scroll to tab content after a small delay
       setTimeout(() => {
         tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
     }
-    
+  }, [searchParams]);
+
+  useEffect(() => {
     loadDashboardData();
     loadCoaches();
     loadAvailableEvents();
@@ -122,7 +128,7 @@ const StudentDashboard = () => {
     loadCertificates();
     loadRazorpayScript();
     loadNotificationCount();
-  }, [searchParams]);
+  }, []);
 
   const loadNotificationCount = async () => {
     try {
@@ -911,7 +917,10 @@ const StudentDashboard = () => {
               ].map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setSearchParams({ tab: tab.id });
+                  }}
                   className={`py-4 px-1 border-b-2 font-medium text-sm ${
                     activeTab === tab.id
                       ? 'border-blue-500 text-blue-600'

@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useState, useEffect, useCallback } from 'react';
-import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../api';
+import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, clearAllNotifications } from '../api';
 
 const Header = () => {
   const location = useLocation();
@@ -12,6 +12,7 @@ const Header = () => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [totalItems, setTotalItems] = useState(0);
 
   const handleLogout = () => {
     logout();
@@ -134,6 +135,26 @@ const Header = () => {
       }, 300);
     } catch (error) {
       console.error('Failed to mark all notifications as read:', error);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm('Are you sure you want to clear all notifications? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await clearAllNotifications();
+      setNotifications([]);
+      setUnreadCount(0);
+      setTotalItems(0);
+      // Smooth animation
+      setTimeout(() => {
+        setShowNotifications(false);
+      }, 300);
+    } catch (error) {
+      console.error('Failed to clear all notifications:', error);
+      alert('Failed to clear notifications. Please try again.');
     }
   };
 
@@ -390,6 +411,15 @@ const Header = () => {
                     <div className="px-4 py-2 border-b border-gray-200 flex justify-between items-center">
                       <h3 className="text-sm font-medium text-gray-900">Notifications</h3>
                       <div className="flex items-center gap-3">
+                        {notifications.length > 0 && (
+                          <button
+                            onClick={handleClearAll}
+                            className="text-xs text-red-600 hover:text-red-800 font-medium"
+                            title="Clear all notifications"
+                          >
+                            Clear all
+                          </button>
+                        )}
                         {unreadCount > 0 && (
                           <button
                             onClick={handleMarkAllAsRead}

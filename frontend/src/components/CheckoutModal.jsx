@@ -26,6 +26,15 @@ const CheckoutModal = ({
     eventDetails = null
   } = paymentData || {};
 
+  // Debug logging for event payments
+  if (paymentType === 'event' && eventDetails) {
+    console.log('CheckoutModal Event Details:', {
+      perStudentFee: eventDetails.perStudentFee,
+      participants: eventDetails.participants,
+      name: eventDetails.name
+    });
+  }
+
   const formatAmount = (amount) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -230,40 +239,47 @@ const CheckoutModal = ({
                     )}
                     {paymentType === 'event' && eventDetails && (
                       <div className="space-y-3">
-                        {eventDetails.perStudentFee && eventDetails.perStudentFee > 0 && eventDetails.participants > 0 ? (
-                          <>
-                            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                              <div className="space-y-3">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-sm font-medium text-gray-700">Per Student Fee:</span>
-                                  <span className="text-base font-semibold text-gray-900">₹{eventDetails.perStudentFee.toFixed(2)}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-sm font-medium text-gray-700">Number of Participants:</span>
-                                  <span className="text-base font-semibold text-gray-900">{eventDetails.participants}</span>
-                                </div>
-                                <div className="pt-3 border-t-2 border-gray-300">
-                                  <div className="flex justify-between items-center mb-1">
-                                    <span className="text-sm text-gray-600">Calculation:</span>
+                        {(() => {
+                          const perStudentFee = eventDetails.perStudentFee != null ? Number(eventDetails.perStudentFee) : null;
+                          const participants = Number(eventDetails.participants) || 0;
+                          
+                          if (perStudentFee != null && perStudentFee > 0 && participants > 0) {
+                            return (
+                              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                <div className="space-y-3">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm font-medium text-gray-700">Per Student Fee:</span>
+                                    <span className="text-base font-semibold text-gray-900">₹{perStudentFee.toFixed(2)}</span>
                                   </div>
                                   <div className="flex justify-between items-center">
-                                    <span className="text-base font-semibold text-gray-900">
-                                      {eventDetails.participants} × ₹{eventDetails.perStudentFee.toFixed(2)}
-                                    </span>
-                                    <span className="text-lg font-bold text-blue-600">
-                                      = ₹{(eventDetails.participants * eventDetails.perStudentFee).toFixed(2)}
-                                    </span>
+                                    <span className="text-sm font-medium text-gray-700">Number of Participants:</span>
+                                    <span className="text-base font-semibold text-gray-900">{participants}</span>
+                                  </div>
+                                  <div className="pt-3 border-t-2 border-gray-300">
+                                    <div className="flex justify-between items-center mb-1">
+                                      <span className="text-sm text-gray-600">Calculation:</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-base font-semibold text-gray-900">
+                                        {participants} × ₹{perStudentFee.toFixed(2)}
+                                      </span>
+                                      <span className="text-lg font-bold text-blue-600">
+                                        = ₹{(participants * perStudentFee).toFixed(2)}
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="flex justify-between">
-                            <span>Event Fee:</span>
-                            <span className="font-medium">{formatAmount(subtotal)}</span>
-                          </div>
-                        )}
+                            );
+                          } else {
+                            return (
+                              <div className="flex justify-between">
+                                <span>Event Fee:</span>
+                                <span className="font-medium">{formatAmount(subtotal)}</span>
+                              </div>
+                            );
+                          }
+                        })()}
                       </div>
                     )}
                     {paymentType === 'event' && !eventDetails && (
@@ -311,11 +327,18 @@ const CheckoutModal = ({
                 <div className="flex justify-between items-center">
                   <div>
                     <span className="text-lg font-semibold text-gray-900">Total Amount:</span>
-                    {paymentType === 'event' && eventDetails?.perStudentFee && eventDetails.perStudentFee > 0 && eventDetails.participants > 0 && (
-                      <p className="text-xs text-gray-600 mt-1">
-                        ({eventDetails.participants} participants × ₹{eventDetails.perStudentFee.toFixed(2)})
-                      </p>
-                    )}
+                    {paymentType === 'event' && eventDetails && (() => {
+                      const perStudentFee = eventDetails.perStudentFee != null ? Number(eventDetails.perStudentFee) : null;
+                      const participants = Number(eventDetails.participants) || 0;
+                      if (perStudentFee != null && perStudentFee > 0 && participants > 0) {
+                        return (
+                          <p className="text-xs text-gray-600 mt-1">
+                            ({participants} participants × ₹{perStudentFee.toFixed(2)})
+                          </p>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                   <span className="text-3xl font-bold text-emerald-600">
                     {formatAmount(total)}

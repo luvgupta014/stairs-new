@@ -32,7 +32,11 @@ const CoachDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() => {
+    // Initialize from URL if available
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'overview';
+  });
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [coachEvents, setCoachEvents] = useState([]);
   const [eventsLoading, setEventsLoading] = useState(false);
@@ -93,6 +97,12 @@ const CoachDashboard = () => {
 
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Get active tab from URL query params
+  const getTabFromURL = () => {
+    const params = new URLSearchParams(location.search);
+    return params.get('tab') || 'overview';
+  };
 
   // Use ref to track if initial load is done
   const initialLoadDone = useRef(false);
@@ -216,6 +226,15 @@ const CoachDashboard = () => {
     const interval = setInterval(loadNotificationCount, 180000); // 3 minutes
     return () => clearInterval(interval);
   }, [loadNotificationCount]);
+
+  // Update active tab when URL changes
+  useEffect(() => {
+    const tabFromURL = getTabFromURL();
+    if (tabFromURL !== activeTab) {
+      setActiveTab(tabFromURL);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   // Load events when tab changes or filters change
   useEffect(() => {
@@ -468,6 +487,11 @@ const CoachDashboard = () => {
         throw new Error('Invalid payment order data. Please try again.');
       }
 
+      // Convert perStudentFee to number if it exists
+      const perStudentFeeNum = perStudentFee != null ? Number(perStudentFee) : null;
+      
+      console.log('Payment order data:', { perStudentFee: perStudentFeeNum, participantCount, eventName });
+
       // Store event and payment data for checkout modal
       setSelectedEventForPayment(event);
       setRazorpayOrderData({
@@ -476,7 +500,7 @@ const CoachDashboard = () => {
         currency: currency || 'INR',
         eventName,
         razorpayKeyId,
-        perStudentFee: perStudentFee || null,
+        perStudentFee: perStudentFeeNum,
         participantCount: participantCount || (event.currentParticipants || 0)
       });
       setShowCheckout(true);
@@ -1074,7 +1098,10 @@ const CoachDashboard = () => {
               ].map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    navigate(`/dashboard/coach?tab=${tab.id}`, { replace: true });
+                  }}
                   className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === tab.id
                     ? 'border-green-500 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'

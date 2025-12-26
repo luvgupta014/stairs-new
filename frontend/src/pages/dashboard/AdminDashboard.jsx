@@ -1,18 +1,29 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { getAdminDashboard, moderateEvent, getAdminEvents, getEventParticipants } from '../../api';
 import InfoModal from '../../components/InfoModal';
 import DetailModal from '../../components/DetailModal';
 import ActionModal from '../../components/ActionModal';
 import ParticipantsModal from '../../components/ParticipantsModal';
+import NotificationsPage from '../../components/NotificationsPage';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   
   // Loading and error states
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [usingCachedData, setUsingCachedData] = useState(false);
+  
+  // Get active tab from URL query params
+  const getTabFromURL = () => {
+    const params = new URLSearchParams(location.search);
+    return params.get('tab') || 'overview';
+  };
+  
+  // Tab state
+  const [activeTab, setActiveTab] = useState(getTabFromURL());
 
   // Stats and data states
   const [stats, setStats] = useState({
@@ -35,7 +46,6 @@ export default function AdminDashboard() {
   const [allEvents, setAllEvents] = useState([]);
 
   // Tab and filter states
-  const [activeTab, setActiveTab] = useState('pending');
   const [eventFilters, setEventFilters] = useState({
     status: 'PENDING',
     sport: '',
@@ -326,6 +336,14 @@ export default function AdminDashboard() {
     }
   }, [eventFilters]);
 
+  // Update active tab when URL changes
+  useEffect(() => {
+    const tabFromURL = getTabFromURL();
+    if (tabFromURL !== activeTab) {
+      setActiveTab(tabFromURL);
+    }
+  }, [location.search]);
+
   // Initial data load
   useEffect(() => {
     if (!initialLoadDone.current) {
@@ -333,30 +351,14 @@ export default function AdminDashboard() {
       fetchDashboardData();
     }
   }, [fetchDashboardData]);
+  
+  // Handle tab change
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    navigate(`/dashboard/admin?tab=${tab}`, { replace: true });
+  };
 
-  // Load all events when tab changes
-  useEffect(() => {
-    if (activeTab === 'all') {
-      if (searchDebounceTimer.current) {
-        clearTimeout(searchDebounceTimer.current);
-      }
-
-      if (eventFilters.search) {
-        console.log('⏱️ Debouncing search input...');
-        searchDebounceTimer.current = setTimeout(() => {
-          fetchAllEvents();
-        }, 500);
-      } else {
-        fetchAllEvents();
-      }
-    }
-
-    return () => {
-      if (searchDebounceTimer.current) {
-        clearTimeout(searchDebounceTimer.current);
-      }
-    };
-  }, [activeTab, eventFilters, fetchAllEvents]);
+  // Note: Event loading is now handled separately via /admin/events page
 
   const handleModerateEvent = async (eventId, action, remarks = '') => {
     try {
@@ -372,21 +374,6 @@ export default function AdminDashboard() {
         
         if (action === 'APPROVE' || action === 'REJECT') {
           setPendingEvents(prev => prev.filter(event => event.id !== eventId));
-        }
-        
-        if (activeTab === 'all') {
-          setAllEvents(prev => prev.map(event => 
-            event.id === eventId 
-              ? { 
-                  ...event, 
-                  status: action === 'APPROVE' ? 'APPROVED' : 
-                         action === 'REJECT' ? 'REJECTED' :
-                         action === 'SUSPEND' ? 'SUSPENDED' :
-                         action === 'RESTART' ? 'APPROVED' : event.status,
-                  adminNotes: remarks || event.adminNotes
-                }
-              : event
-          ));
         }
         
         if (action === 'APPROVE' || action === 'REJECT') {
@@ -757,8 +744,36 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Recent Users Section */}
-        <div ref={recentRegistrationsRef} className="bg-white rounded-xl shadow-lg p-6">
+        {/* Tabs Navigation */}
+        <div className="bg-white rounded-xl shadow-lg mb-8">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8 px-6">
+              {[
+                { id: 'overview', label: 'Overview', icon: '📊' },
+                { id: 'notifications', label: 'Notifications', icon: '🔔' }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                    activeTab === tab.id
+                      ? 'border-red-500 text-red-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <span>{tab.icon}</span>
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'overview' && (
+          <>
+            {/* Recent Users Section */}
+            <div ref={recentRegistrationsRef} className="bg-white rounded-xl shadow-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-semibold text-gray-900">Recent Registrations ({getFilteredRecentUsers().length})</h3>
             <button
@@ -847,7 +862,15 @@ export default function AdminDashboard() {
               )}
             </div>
           )}
-        </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'notifications' && (
+          <div className="-m-6">
+            <NotificationsPage userRole="ADMIN" />
+          </div>
+        )}
 
         {/* Modals */}
         <InfoModal
