@@ -11,11 +11,10 @@ import {
 import { 
   FaBell, 
   FaCheckCircle, 
-  FaTrash, 
+  FaTimes, 
   FaCheck, 
   FaExclamationCircle,
   FaInfoCircle,
-  FaTimes,
   FaSearch,
   FaFilter
 } from 'react-icons/fa';
@@ -44,8 +43,11 @@ const NotificationsPage = ({ userRole = 'student' }) => {
       setLoading(true);
       setError('');
       
+      // Ensure page is a valid number
+      const pageNum = Math.max(1, parseInt(page) || 1);
+      
       const params = {
-        page,
+        page: pageNum,
         limit: itemsPerPage,
         ...(filterType === 'unread' && { unreadOnly: 'true' })
       };
@@ -55,9 +57,11 @@ const NotificationsPage = ({ userRole = 'student' }) => {
       if (response.success) {
         setNotifications(response.data.notifications || []);
         setUnreadCount(response.data.unreadCount || 0);
-        setTotalPages(response.data.pagination?.totalPages || 1);
-        setTotalItems(response.data.pagination?.totalItems || 0);
-        setCurrentPage(response.data.pagination?.currentPage || 1);
+        const pagination = response.data.pagination || {};
+        setTotalPages(pagination.totalPages || 1);
+        setTotalItems(pagination.totalItems || 0);
+        // Use the page from response, or fallback to the page we requested
+        setCurrentPage(pagination.currentPage || pageNum);
       } else {
         throw new Error(response.message || 'Failed to load notifications');
       }
@@ -173,9 +177,23 @@ const NotificationsPage = ({ userRole = 'student' }) => {
     try {
       setActionLoading(true);
       await deleteNotification(notificationId);
-      setNotifications(prev => prev.filter(n => n.id !== notificationId));
-      if (!notifications.find(n => n.id === notificationId)?.isRead) {
+      
+      // Remove from current list
+      const deletedNotification = notifications.find(n => n.id === notificationId);
+      const updatedNotifications = notifications.filter(n => n.id !== notificationId);
+      setNotifications(updatedNotifications);
+      
+      // Update unread count if needed
+      if (deletedNotification && !deletedNotification.isRead) {
         setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+      
+      // If current page becomes empty and not on first page, go to previous page
+      if (updatedNotifications.length === 0 && currentPage > 1) {
+        handlePageChange(currentPage - 1);
+      } else {
+        // Reload current page to refresh counts
+        loadNotifications(currentPage, filter);
       }
     } catch (error) {
       console.error('Failed to delete notification:', error);
@@ -206,8 +224,13 @@ const NotificationsPage = ({ userRole = 'student' }) => {
       setSelectedNotifications(new Set());
       setIsSelecting(false);
       
-      // Reload to refresh list
-      await loadNotifications(currentPage, filter);
+      // If current page becomes empty and not on first page, go to previous page
+      if (notifications.length === selectedNotifications.size && currentPage > 1) {
+        handlePageChange(currentPage - 1);
+      } else {
+        // Reload to refresh list
+        await loadNotifications(currentPage, filter);
+      }
     } catch (error) {
       console.error('Failed to bulk delete notifications:', error);
       setError('Failed to delete notifications. Please try again.');
@@ -226,6 +249,9 @@ const NotificationsPage = ({ userRole = 'student' }) => {
       await clearAllNotifications();
       setNotifications([]);
       setUnreadCount(0);
+      setTotalItems(0);
+      setTotalPages(1);
+      setCurrentPage(1);
       setSelectedNotifications(new Set());
       setIsSelecting(false);
     } catch (error) {
@@ -299,9 +325,18 @@ const NotificationsPage = ({ userRole = 'student' }) => {
     return true;
   });
 
-  const handlePageChange = (page) => {
-    setCurrentPage(page);
-    loadNotifications(page, filter);
+  const handlePageChange = (newPage) => {
+    // Validate page number
+    const pageNum = parseInt(newPage);
+    if (isNaN(pageNum) || pageNum < 1 || pageNum > totalPages) {
+      return;
+    }
+    
+    // Prevent multiple simultaneous requests
+    if (loading) return;
+    
+    // Update state and load notifications
+    loadNotifications(pageNum, filter);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -346,7 +381,7 @@ const NotificationsPage = ({ userRole = 'student' }) => {
                     disabled={selectedNotifications.size === 0 || actionLoading}
                     className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    <FaTrash className="w-4 h-4" />
+                    <FaTimes className="w-4 h-4" />
                     Delete ({selectedNotifications.size})
                   </button>
                 </>
@@ -376,7 +411,7 @@ const NotificationsPage = ({ userRole = 'student' }) => {
                         disabled={actionLoading}
                         className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50 flex items-center gap-2"
                       >
-                        <FaTrash className="w-4 h-4" />
+                        <FaTimes className="w-4 h-4" />
                         Clear All
                       </button>
                     </>
@@ -567,7 +602,7 @@ const NotificationsPage = ({ userRole = 'student' }) => {
                               className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50"
                               title="Delete"
                             >
-                              <FaTrash className="w-4 h-4" />
+                              <FaTimes className="w-4 h-4" />
                             </button>
                           </div>
                         )}

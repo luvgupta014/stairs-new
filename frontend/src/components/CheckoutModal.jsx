@@ -240,10 +240,25 @@ const CheckoutModal = ({
                     {paymentType === 'event' && eventDetails && (
                       <div className="space-y-3">
                         {(() => {
-                          const perStudentFee = eventDetails.perStudentFee != null ? Number(eventDetails.perStudentFee) : null;
                           const participants = Number(eventDetails.participants) || 0;
+                          let perStudentFee = null;
                           
-                          if (perStudentFee != null && perStudentFee > 0 && participants > 0) {
+                          // Try to get perStudentFee from eventDetails
+                          if (eventDetails.perStudentFee != null && eventDetails.perStudentFee !== 0) {
+                            perStudentFee = Number(eventDetails.perStudentFee);
+                          }
+                          
+                          // If perStudentFee is not provided or is 0, calculate it from subtotal
+                          if ((perStudentFee == null || perStudentFee === 0) && participants > 0 && subtotal > 0) {
+                            perStudentFee = subtotal / participants;
+                          }
+                          
+                          // Always show detailed breakdown if we have participants and any amount
+                          if (participants > 0 && (subtotal > 0 || total > 0)) {
+                            // Use calculated perStudentFee or calculate from total/subtotal
+                            if (!perStudentFee || perStudentFee === 0) {
+                              perStudentFee = (subtotal > 0 ? subtotal : total) / participants;
+                            }
                             return (
                               <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                                 <div className="space-y-3">
@@ -328,8 +343,19 @@ const CheckoutModal = ({
                   <div>
                     <span className="text-lg font-semibold text-gray-900">Total Amount:</span>
                     {paymentType === 'event' && eventDetails && (() => {
-                      const perStudentFee = eventDetails.perStudentFee != null ? Number(eventDetails.perStudentFee) : null;
                       const participants = Number(eventDetails.participants) || 0;
+                      let perStudentFee = null;
+                      
+                      // Try to get perStudentFee from eventDetails
+                      if (eventDetails.perStudentFee != null) {
+                        perStudentFee = Number(eventDetails.perStudentFee);
+                      }
+                      
+                      // If perStudentFee is not provided or is 0, calculate it from total
+                      if ((perStudentFee == null || perStudentFee === 0) && participants > 0 && total > 0) {
+                        perStudentFee = total / participants;
+                      }
+                      
                       if (perStudentFee != null && perStudentFee > 0 && participants > 0) {
                         return (
                           <p className="text-xs text-gray-600 mt-1">
