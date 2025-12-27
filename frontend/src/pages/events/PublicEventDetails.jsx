@@ -24,6 +24,112 @@ const PublicEventDetails = () => {
     loadEventDetails();
   }, [uniqueId]);
 
+  // Update meta tags for social sharing when event loads
+  useEffect(() => {
+    if (event) {
+      // Update document title
+      document.title = `${event.name} | STAIRS Talent Hub`;
+      
+      // Create or update meta tags
+      const updateMetaTag = (property, content) => {
+        let meta = document.querySelector(`meta[property="${property}"]`);
+        if (!meta) {
+          meta = document.createElement('meta');
+          meta.setAttribute('property', property);
+          document.head.appendChild(meta);
+        }
+        meta.setAttribute('content', content);
+      };
+
+      const updateMetaTagName = (name, content) => {
+        let meta = document.querySelector(`meta[name="${name}"]`);
+        if (!meta) {
+          meta = document.createElement('meta');
+          meta.setAttribute('name', name);
+          document.head.appendChild(meta);
+        }
+        meta.setAttribute('content', content);
+      };
+
+      // Build event details for description
+      const eventDetails = [];
+      if (event.sport) eventDetails.push(event.sport);
+      if (event.level) eventDetails.push(`${event.level} Level`);
+      if (event.startDate) {
+        const date = new Date(event.startDate);
+        const formattedDate = date.toLocaleDateString('en-IN', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        eventDetails.push(formattedDate);
+      }
+      if (event.venue) {
+        let venueInfo = event.venue;
+        if (event.city) venueInfo += `, ${event.city}`;
+        if (event.state) venueInfo += `, ${event.state}`;
+        eventDetails.push(`📍 ${venueInfo}`);
+      }
+      
+      // Build enhanced description
+      const organizerName = event.createdByAdmin 
+        ? 'STAIRS Talent Hub' 
+        : (event.coach?.name || 'STAIRS Talent Hub');
+      
+      // Clean description for meta tags (remove line breaks, limit length)
+      const cleanDescription = event.description 
+        ? event.description.replace(/\n+/g, ' ').trim().substring(0, 200)
+        : '';
+      
+      // Build description for preview cards
+      let enhancedDescription = '';
+      if (cleanDescription) {
+        enhancedDescription = `${cleanDescription} | ${eventDetails.join(' • ')} | Organized by ${organizerName}`;
+      } else {
+        enhancedDescription = `${event.name} - ${eventDetails.join(' • ')} | Organized by ${organizerName} on STAIRS Talent Hub`;
+      }
+      
+      // Truncate to reasonable length for meta tags (max ~300 chars)
+      if (enhancedDescription.length > 300) {
+        enhancedDescription = enhancedDescription.substring(0, 297) + '...';
+      }
+
+      // Basic meta tags
+      updateMetaTagName('description', enhancedDescription);
+      
+      // Open Graph tags
+      updateMetaTag('og:title', event.name);
+      updateMetaTag('og:description', enhancedDescription);
+      updateMetaTag('og:type', 'website');
+      updateMetaTag('og:url', `${window.location.origin}/event/${event.uniqueId}`);
+      updateMetaTag('og:site_name', 'STAIRS Talent Hub');
+      
+      // Set og:image - use logo from public folder (accessible at root path)
+      const baseUrl = window.location.origin;
+      const logoUrl = `${baseUrl}/logo.png`; // Logo from public folder
+      updateMetaTag('og:image', logoUrl);
+      updateMetaTag('og:image:width', '1200');
+      updateMetaTag('og:image:height', '630');
+      updateMetaTag('og:image:alt', `${event.name} - STAIRS Talent Hub Event`);
+      updateMetaTag('og:image:type', 'image/png');
+      
+      // Twitter Card tags
+      updateMetaTagName('twitter:card', 'summary_large_image');
+      updateMetaTagName('twitter:title', event.name);
+      updateMetaTagName('twitter:description', enhancedDescription);
+      updateMetaTagName('twitter:image', logoUrl);
+      updateMetaTagName('twitter:site', '@STAIRS');
+      updateMetaTagName('twitter:creator', '@STAIRS');
+    }
+
+    // Cleanup function to restore default meta tags
+    return () => {
+      document.title = 'STAIRS Talent Hub';
+    };
+  }, [event]);
+
   // Redirect to authenticated event page if already logged in as student
   useEffect(() => {
     if (user?.role === 'STUDENT' && event?.id) {

@@ -1213,6 +1213,23 @@ router.post('/:eventId/share', authenticate, async (req, res) => {
       senderName = user.name;
     }
 
+    // Prepare event details for email
+    const eventDetails = {
+      sport: event.sport,
+      level: event.level,
+      description: event.description,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      venue: event.venue,
+      address: event.address,
+      city: event.city,
+      state: event.state,
+      maxParticipants: event.maxParticipants,
+      currentParticipants: event.currentParticipants || 0,
+      studentFeeEnabled: event.studentFeeEnabled,
+      studentFeeAmount: event.studentFeeAmount
+    };
+
     // Send emails
     const { sendEventShareEmail } = require('../utils/emailService');
     const emailResults = await Promise.allSettled(
@@ -1220,7 +1237,8 @@ router.post('/:eventId/share', authenticate, async (req, res) => {
         to: email,
         eventName: event.name,
         eventLink,
-        senderName
+        senderName,
+        eventDetails
       }))
     );
 

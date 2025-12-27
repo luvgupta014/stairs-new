@@ -157,38 +157,238 @@ const sendEventInchargeInviteEmail = async ({
 /**
  * Send event share email
  */
-const sendEventShareEmail = async ({ to, eventName, eventLink, senderName = 'STAIRS Talent Hub' }) => {
-  const subject = `Event Invitation: ${eventName}`;
-  const text = `You have been invited to register for the event: ${eventName}\n\nEvent Link: ${eventLink}`;
+const sendEventShareEmail = async ({ to, eventName, eventLink, senderName = 'STAIRS Talent Hub', eventDetails = null }) => {
+  const subject = `🏆 You're Invited: ${eventName}`;
+  
+  // Build event details if available
+  let eventInfoHtml = '';
+  let eventInfoText = '';
+  
+  if (eventDetails) {
+    const formatDate = (dateString) => {
+      if (!dateString) return 'N/A';
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-IN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    };
+    
+    const eventInfo = [];
+    if (eventDetails.sport) {
+      eventInfo.push(`<div style="margin: 8px 0;"><strong style="color: #4f46e5;">Sport:</strong> <span style="color: #111827;">${eventDetails.sport}</span></div>`);
+      eventInfoText += `Sport: ${eventDetails.sport}\n`;
+    }
+    if (eventDetails.level) {
+      eventInfo.push(`<div style="margin: 8px 0;"><strong style="color: #4f46e5;">Level:</strong> <span style="color: #111827;">${eventDetails.level}</span></div>`);
+      eventInfoText += `Level: ${eventDetails.level}\n`;
+    }
+    if (eventDetails.startDate) {
+      const startDate = formatDate(eventDetails.startDate);
+      eventInfo.push(`<div style="margin: 8px 0;"><strong style="color: #4f46e5;">📅 Start Date:</strong> <span style="color: #111827;">${startDate}</span></div>`);
+      eventInfoText += `Start Date: ${startDate}\n`;
+    }
+    if (eventDetails.endDate) {
+      // Only show end date if it's different from start date
+      const startDateStr = eventDetails.startDate ? new Date(eventDetails.startDate).toISOString().split('T')[0] : null;
+      const endDateStr = new Date(eventDetails.endDate).toISOString().split('T')[0];
+      if (startDateStr !== endDateStr) {
+        const endDate = formatDate(eventDetails.endDate);
+        eventInfo.push(`<div style="margin: 8px 0;"><strong style="color: #4f46e5;">📅 End Date:</strong> <span style="color: #111827;">${endDate}</span></div>`);
+        eventInfoText += `End Date: ${endDate}\n`;
+      }
+    }
+    if (eventDetails.venue || eventDetails.city || eventDetails.state) {
+      const venue = [eventDetails.venue, eventDetails.city, eventDetails.state].filter(Boolean).join(', ');
+      eventInfo.push(`<div style="margin: 8px 0;"><strong style="color: #4f46e5;">📍 Venue:</strong> <span style="color: #111827;">${venue}</span></div>`);
+      eventInfoText += `Venue: ${venue}\n`;
+    }
+    if (eventDetails.maxParticipants) {
+      const current = eventDetails.currentParticipants || 0;
+      eventInfo.push(`<div style="margin: 8px 0;"><strong style="color: #4f46e5;">👥 Participants:</strong> <span style="color: #111827;">${current} / ${eventDetails.maxParticipants}</span></div>`);
+      eventInfoText += `Participants: ${current} / ${eventDetails.maxParticipants}\n`;
+    }
+    if (eventDetails.studentFeeEnabled && eventDetails.studentFeeAmount > 0) {
+      eventInfo.push(`<div style="margin: 8px 0;"><strong style="color: #4f46e5;">💰 Registration Fee:</strong> <span style="color: #111827;">₹${eventDetails.studentFeeAmount}</span></div>`);
+      eventInfoText += `Registration Fee: ₹${eventDetails.studentFeeAmount}\n`;
+    }
+    
+    if (eventInfo.length > 0) {
+      eventInfoHtml = `
+        <div style="background: #ffffff; border-left: 4px solid #4f46e5; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <h3 style="margin: 0 0 16px 0; color: #111827; font-size: 18px; font-weight: 700;">Event Details</h3>
+          ${eventInfo.join('')}
+        </div>
+      `;
+    }
+    
+    if (eventDetails.description) {
+      const cleanDescription = eventDetails.description.replace(/\n/g, '<br>').substring(0, 300);
+      eventInfoHtml += `
+        <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 20px 0;">
+          <p style="margin: 0; color: #374151; line-height: 1.6;">${cleanDescription}${eventDetails.description.length > 300 ? '...' : ''}</p>
+        </div>
+      `;
+      eventInfoText += `\nDescription: ${eventDetails.description.substring(0, 300)}${eventDetails.description.length > 300 ? '...' : ''}\n`;
+    }
+  }
+  
+  const text = `You have been invited to register for the event: ${eventName}\n\n${eventInfoText}\nEvent Link: ${eventLink}\n\nInvited by: ${senderName}`;
+  
   const html = `
     <!DOCTYPE html>
     <html>
       <head>
         <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #111827; }
-          .container { max-width: 640px; margin: 0 auto; padding: 24px; }
-          .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; }
-          .title { font-size: 20px; font-weight: 700; margin: 0 0 12px 0; }
-          .muted { color: #6b7280; font-size: 14px; margin: 0 0 16px 0; }
-          .details { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin: 16px 0; }
-          .button { display: inline-block; margin-top: 14px; background: #2563eb; color: #fff; text-decoration: none; padding: 12px 18px; border-radius: 10px; font-weight: 700; }
-          .footer { margin-top: 18px; color: #6b7280; font-size: 12px; }
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+            line-height: 1.6; 
+            color: #111827; 
+            margin: 0; 
+            padding: 0; 
+            background-color: #f3f4f6;
+          }
+          .email-container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px;
+          }
+          .header {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            border-radius: 12px 12px 0 0;
+            padding: 30px;
+            text-align: center;
+            color: #ffffff;
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          }
+          .header p {
+            margin: 8px 0 0 0;
+            font-size: 14px;
+            opacity: 0.95;
+          }
+          .card { 
+            background: #ffffff; 
+            border-radius: 0 0 12px 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: hidden;
+          }
+          .card-content {
+            padding: 30px;
+          }
+          .invitation-message {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0e7ff 100%);
+            border-left: 4px solid #4f46e5;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+          }
+          .invitation-message p {
+            margin: 0;
+            color: #1e40af;
+            font-size: 16px;
+            line-height: 1.6;
+          }
+          .event-title {
+            font-size: 26px;
+            font-weight: 700;
+            color: #111827;
+            margin: 0 0 20px 0;
+            line-height: 1.3;
+          }
+          .cta-button {
+            display: inline-block;
+            margin: 24px 0;
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 16px 32px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 16px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(79, 70, 229, 0.3);
+            transition: transform 0.2s;
+          }
+          .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(79, 70, 229, 0.4);
+          }
+          .footer { 
+            margin-top: 32px; 
+            padding-top: 24px;
+            border-top: 1px solid #e5e7eb;
+            color: #6b7280; 
+            font-size: 12px; 
+            text-align: center;
+          }
+          .footer p {
+            margin: 4px 0;
+          }
+          .powered-by {
+            margin-top: 16px;
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 8px;
+            font-size: 11px;
+            color: #9ca3af;
+          }
+          @media only screen and (max-width: 600px) {
+            .email-container {
+              padding: 10px;
+            }
+            .card-content {
+              padding: 20px;
+            }
+            .event-title {
+              font-size: 22px;
+            }
+          }
         </style>
       </head>
       <body>
-        <div class="container">
+        <div class="email-container">
+          <div class="header">
+            <h1>🏆 Event Invitation</h1>
+            <p>You've been invited to join an exciting event!</p>
+          </div>
           <div class="card">
-            <p class="title">Event Invitation: ${eventName}</p>
-            <p class="muted">
-              You have been invited by ${senderName} to register for this event.
-            </p>
-            <div class="details">
-              <p><strong>Event:</strong> ${eventName}</p>
-            </div>
-            <a class="button" href="${eventLink}">View Event & Register</a>
-            <div class="footer">
-              <p>© ${new Date().getFullYear()} STAIRS Talent Hub</p>
+            <div class="card-content">
+              <div class="invitation-message">
+                <p>👋 You have been invited by <strong>${senderName}</strong> to register for this amazing event!</p>
+              </div>
+              
+              <h2 class="event-title">${eventName}</h2>
+              
+              ${eventInfoHtml}
+              
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${eventLink}" class="cta-button">🚀 View Event & Register Now</a>
+              </div>
+              
+              <div style="background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 24px 0;">
+                <p style="margin: 0; color: #92400e; font-size: 14px;">
+                  <strong>💡 Tip:</strong> Click the button above to view full event details and register. Don't miss this opportunity!
+                </p>
+              </div>
+              
+              <div class="footer">
+                <p><strong>STAIRS Talent Hub</strong></p>
+                <p>Empowering Athletes, Connecting Talent</p>
+                <div class="powered-by">
+                  <p>© ${new Date().getFullYear()} STAIRS Talent Hub. All rights reserved.</p>
+                  <p>This is an automated invitation email. Please do not reply directly to this email.</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
