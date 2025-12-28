@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { SORTED_SPORTS } from '../../constants/sports';
 import { 
   FaUsers, 
   FaUserTie, 
@@ -197,12 +198,8 @@ const ClubRegister = () => {
     'Professional Club', 'Youth Club', 'Multi-Sport Club', 'Elite Club'
   ];
 
-  const sportsOptions = [
-    'Football', 'Basketball', 'Cricket', 'Tennis', 'Swimming', 
-    'Badminton', 'Hockey', 'Athletics', 'Volleyball', 'Boxing',
-    'Table Tennis', 'Wrestling', 'Archery', 'Gymnastics', 'Golf',
-    'Cycling', 'Marathon', 'Martial Arts'
-  ];
+  // Use comprehensive sports list from constants
+  const sportsOptions = SORTED_SPORTS;
 
   const competitionTypes = [
     'Local Tournaments', 'State Championships', 'National Competitions',

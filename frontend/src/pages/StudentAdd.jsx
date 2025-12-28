@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { addStudentManually } from '../api';
 import Spinner from '../components/Spinner';
 import { useNavigate } from 'react-router-dom';
+import { SORTED_SPORTS } from '../constants/sports';
 
 const StudentAdd = () => {
   const [formData, setFormData] = useState({
@@ -50,11 +51,8 @@ const StudentAdd = () => {
     });
   };
 
-  const sports = [
-    'Football', 'Cricket', 'Basketball', 'Volleyball', 'Tennis', 'Badminton',
-    'Athletics', 'Swimming', 'Wrestling', 'Boxing', 'Hockey', 'Table Tennis',
-    'Kabaddi', 'Chess', 'Carrom', 'Weightlifting', 'Gymnastics', 'Other'
-  ];
+  // Use comprehensive sports list from constants
+  const sports = SORTED_SPORTS;
 
   const states = [
     'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',

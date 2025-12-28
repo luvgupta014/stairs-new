@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { SORTED_SPORTS } from '../../constants/sports';
 import { 
   FaBuilding, 
   FaIdCard, 
@@ -220,11 +221,8 @@ const InstituteRegister = () => {
     { name: 'Boxing Ring', icon: '🥊' }
   ];
 
-  const sportsOptions = [
-    'Football', 'Basketball', 'Cricket', 'Tennis', 'Swimming', 
-    'Badminton', 'Hockey', 'Athletics', 'Volleyball', 'Boxing',
-    'Table Tennis', 'Wrestling', 'Archery', 'Gymnastics'
-  ];
+  // Use comprehensive sports list from constants
+  const sportsOptions = SORTED_SPORTS;
 
   const instituteTypes = [
     'Sports Academy', 'School', 'College', 'University', 

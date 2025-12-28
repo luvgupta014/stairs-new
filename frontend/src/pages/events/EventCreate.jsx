@@ -7,6 +7,7 @@ import PaymentPopup from '../../components/PaymentPopup';
 import usePaymentStatus from '../../hooks/usePaymentStatus';
 import { useNavigate, Link } from 'react-router-dom';
 import { FaExclamationTriangle, FaCreditCard, FaMapMarkerAlt } from 'react-icons/fa';
+import { SORTED_SPORTS } from '../../constants/sports';
 
 // Multi-Sport Selector Component
 const MultiSportSelector = ({ selected = [], onChange, className = '' }) => {
@@ -14,24 +15,8 @@ const MultiSportSelector = ({ selected = [], onChange, className = '' }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const dropdownRef = useRef(null);
 
-  const sports = [
-    'Football',
-    'Basketball',
-    'Tennis',
-    'Cricket',
-    'Athletics',
-    'Swimming',
-    'Badminton',
-    'Volleyball',
-    'Hockey',
-    'Table Tennis',
-    'Boxing',
-    'Wrestling',
-    'Kabaddi',
-    'Archery',
-    'Cycling',
-    'Other'
-  ];
+  // Use comprehensive sports list from constants
+  const sports = SORTED_SPORTS;
 
   const filteredSports = sports.filter(sport =>
     sport.toLowerCase().includes(searchTerm.toLowerCase())

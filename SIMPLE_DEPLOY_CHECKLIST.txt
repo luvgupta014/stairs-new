@@ -1,0 +1,40 @@
+SIMPLE DEPLOYMENT CHECKLIST
+=============================
+
+📁 FILES TO UPLOAD TO: public_html/portal.stairs.org.in/
+
+1. ✅ event-preview.php
+   → Upload via cPanel File Manager
+   → Make sure it's in same folder as index.html
+
+2. ✅ .htaccess  
+   → Edit existing file OR upload new one
+   → Replace all content with new .htaccess
+
+3. ✅ debug-preview.php (optional)
+   → Upload for testing
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🧪 TEST AFTER UPLOAD:
+
+Test 1: https://portal.stairs.org.in/event-preview.php?id=TEST
+        → Should show HTML (not 404)
+
+Test 2: https://portal.stairs.org.in/debug-preview.php
+        → Should show diagnostic report
+
+Test 3: Facebook Debugger
+        → https://developers.facebook.com/tools/debug/
+        → Enter: https://portal.stairs.org.in/event/EVT-0051-OT-DL-271225
+        → Should show preview
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ VERIFY:
+- Backend running: pm2 list (stairs-backend should be online)
+- Files in correct location (same folder as index.html)
+- .htaccess updated
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+

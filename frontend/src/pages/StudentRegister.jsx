@@ -5,6 +5,7 @@ import Spinner from '../components/Spinner';
 import Modal from '../components/Modal';
 import TermsAgreementStep from '../components/TermsAgreementStep';
 import { TERMS, TERMS_VERSION } from '../content/terms';
+import { SORTED_SPORTS } from '../constants/sports';
 
 const StudentRegister = () => {
   const navigate = useNavigate();
@@ -387,11 +388,8 @@ const StudentRegister = () => {
     ) : null;
   };
 
-  const sports = [
-    'Football', 'Cricket', 'Basketball', 'Volleyball', 'Tennis', 'Badminton',
-    'Athletics', 'Swimming', 'Wrestling', 'Boxing', 'Hockey', 'Table Tennis',
-    'Kabaddi', 'Chess', 'Carrom', 'Weightlifting', 'Gymnastics', 'Other'
-  ];
+  // Use comprehensive sports list from constants
+  const sports = SORTED_SPORTS;
 
   const levels = [
     { value: 'BEGINNER', label: 'Beginner' },

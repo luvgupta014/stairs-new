@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { SORTED_SPORTS } from '../constants/sports';
 
 /**
  * EventForm Component
@@ -174,13 +175,8 @@ const EventForm = ({
     'Ladakh', 'Lakshadweep', 'Puducherry'
   ];
 
-  // Popular sports for dropdown
-  const popularSports = [
-    'Football', 'Cricket', 'Basketball', 'Tennis', 'Badminton', 'Table Tennis',
-    'Swimming', 'Athletics', 'Volleyball', 'Hockey', 'Boxing', 'Wrestling',
-    'Kabaddi', 'Kho Kho', 'Chess', 'Carrom', 'Archery', 'Shooting', 'Cycling',
-    'Gymnastics', 'Weightlifting', 'Judo', 'Taekwondo', 'Yoga'
-  ];
+  // Use comprehensive sports list from constants
+  const popularSports = SORTED_SPORTS;
 
   return (
     <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-md">
