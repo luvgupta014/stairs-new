@@ -7,7 +7,7 @@ import PaymentPopup from '../../components/PaymentPopup';
 import usePaymentStatus from '../../hooks/usePaymentStatus';
 import { useNavigate, Link } from 'react-router-dom';
 import { FaExclamationTriangle, FaCreditCard, FaMapMarkerAlt } from 'react-icons/fa';
-import { SORTED_SPORTS } from '../../constants/sports';
+import { SORTED_SPORTS } from '@constants/sports';
 
 // Multi-Sport Selector Component
 const MultiSportSelector = ({ selected = [], onChange, className = '' }) => {
