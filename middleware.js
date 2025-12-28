@@ -1,5 +1,7 @@
 // Vercel Edge Middleware for bot detection and routing
-// This middleware intercepts requests to /event/:uniqueId and redirects bots to the preview endpoint
+// This middleware intercepts ALL requests and redirects bots accessing event pages to the preview endpoint
+// IMPORTANT: This runs BEFORE routes, so it can intercept bot requests before static files are served
+
 export default function middleware(request) {
   try {
     const url = new URL(request.url);
@@ -9,63 +11,75 @@ export default function middleware(request) {
     // Only process event pages - match /event/{uniqueId} pattern
     const eventMatch = pathname.match(/^\/event\/([^\/\?]+)/);
     if (!eventMatch) {
-      return; // Not an event page, continue normally
+      // Not an event page, continue normally
+      return;
     }
     
     const uniqueId = eventMatch[1];
     
-    // Comprehensive bot detection pattern
-    // Matches all major social media crawlers and bots
+    // Comprehensive bot detection - check for ANY bot indicator
+    const userAgentLower = userAgent.toLowerCase();
     const botPatterns = [
       'bot', 'crawler', 'spider', 'scraper',
       'facebookexternalhit', 'facebookcatalog',
-      'Twitterbot', 'Twitter',
-      'LinkedInBot', 'LinkedIn',
-      'WhatsApp', 'whatsapp',
-      'Slackbot', 'Slack',
-      'TelegramBot', 'Telegram',
-      'SkypeUriPreview',
-      'Discordbot', 'Discord',
-      'Googlebot', 'Google',
-      'Bingbot', 'Bing',
-      'Slurp', // Yahoo
-      'DuckDuckBot',
-      'Baiduspider',
-      'YandexBot',
-      'Sogou',
-      'Exabot',
+      'twitterbot', 'twitter',
+      'linkedinbot', 'linkedin',
+      'whatsapp',
+      'slackbot', 'slack',
+      'telegrambot', 'telegram',
+      'skypeuripreview',
+      'discordbot', 'discord',
+      'googlebot', 'google',
+      'bingbot', 'bing',
+      'slurp',
+      'duckduckbot',
+      'baiduspider',
+      'yandexbot',
+      'sogou',
+      'exabot',
       'facebot',
-      'ia_archiver', // Wayback Machine
-      'Pinterestbot', 'Pinterest',
+      'ia_archiver',
+      'pinterestbot', 'pinterest',
       'redditbot', 'reddit',
-      'Applebot',
-      'Line',
-      'Kik',
-      'Viber',
-      'WeChat',
-      'Snapchat',
-      'TikTok',
-      'PostmanRuntime', // For testing
-      'curl', // For testing
-      'wget' // For testing
+      'applebot',
+      'line',
+      'kik',
+      'viber',
+      'wechat',
+      'snapchat',
+      'tiktok',
+      'postmanruntime',
+      'curl',
+      'wget',
+      'axios',
+      'node-fetch'
     ];
     
-    const isBot = botPatterns.some(pattern => 
-      userAgent.toLowerCase().includes(pattern.toLowerCase())
-    );
+    const isBot = botPatterns.some(pattern => userAgentLower.includes(pattern));
     
-    if (isBot) {
-      // Redirect to backend preview endpoint
+    if (isBot && uniqueId) {
+      // Redirect bot to backend preview endpoint
+      const baseUrl = url.origin;
       const previewPath = `/api/events/preview/${encodeURIComponent(uniqueId)}`;
-      const previewUrl = new URL(previewPath, request.url);
+      const previewUrl = `${baseUrl}${previewPath}`;
+      
+      // Return redirect response
       return Response.redirect(previewUrl, 307);
     }
     
-    // Continue with normal request
+    // Continue with normal request for non-bots
     return;
   } catch (error) {
     // If middleware fails, allow request to continue normally
-    console.error('[Middleware Error]:', error);
+    console.error('[Middleware Error]:', error.message);
     return;
   }
 }
+
+// Export config to specify which paths to run middleware on
+export const config = {
+  matcher: [
+    '/event/:path*',
+    // Optional: Add other paths if needed
+  ],
+};
