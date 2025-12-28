@@ -173,13 +173,13 @@ const CheckoutModal = ({
                       </p>
                       {eventDetails.perStudentFee && eventDetails.perStudentFee > 0 && (
                         <>
-                          <p className="text-sm text-blue-700">
+                    <p className="text-sm text-blue-700">
                             <strong>Per Student Fee:</strong> ₹{eventDetails.perStudentFee.toFixed(2)}
                           </p>
                           <div className="pt-2 border-t border-blue-300">
                             <p className="text-sm font-semibold text-blue-900">
                               Calculation: {eventDetails.participants} participants × ₹{eventDetails.perStudentFee.toFixed(2)} = ₹{(eventDetails.participants * eventDetails.perStudentFee).toFixed(2)}
-                            </p>
+                    </p>
                           </div>
                         </>
                       )}
@@ -314,26 +314,26 @@ const CheckoutModal = ({
 
                 {/* Calculations */}
                 {!(paymentType === 'event' && eventDetails?.perStudentFee && eventDetails.perStudentFee > 0) && (
-                  <div className="space-y-2 pt-4 border-t border-gray-200">
-                    {subtotal > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Subtotal:</span>
-                        <span className="text-gray-900">{formatAmount(subtotal)}</span>
-                      </div>
-                    )}
-                    {tax > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Tax:</span>
-                        <span className="text-gray-900">{formatAmount(tax)}</span>
-                      </div>
-                    )}
-                    {discount > 0 && (
-                      <div className="flex justify-between text-sm text-emerald-600">
-                        <span>Discount:</span>
-                        <span>-{formatAmount(discount)}</span>
-                      </div>
-                    )}
-                  </div>
+                <div className="space-y-2 pt-4 border-t border-gray-200">
+                  {subtotal > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Subtotal:</span>
+                      <span className="text-gray-900">{formatAmount(subtotal)}</span>
+                    </div>
+                  )}
+                  {tax > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Tax:</span>
+                      <span className="text-gray-900">{formatAmount(tax)}</span>
+                    </div>
+                  )}
+                  {discount > 0 && (
+                    <div className="flex justify-between text-sm text-emerald-600">
+                      <span>Discount:</span>
+                      <span>-{formatAmount(discount)}</span>
+                    </div>
+                  )}
+                </div>
                 )}
               </div>
 
@@ -341,7 +341,7 @@ const CheckoutModal = ({
               <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg p-4 mb-6 border-2 border-emerald-200">
                 <div className="flex justify-between items-center">
                   <div>
-                    <span className="text-lg font-semibold text-gray-900">Total Amount:</span>
+                  <span className="text-lg font-semibold text-gray-900">Total Amount:</span>
                     {paymentType === 'event' && eventDetails && (() => {
                       const participants = Number(eventDetails.participants) || 0;
                       let perStudentFee = null;

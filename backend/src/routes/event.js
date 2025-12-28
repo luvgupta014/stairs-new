@@ -166,8 +166,26 @@ router.get('/preview/:uniqueId', async (req, res) => {
         enhancedDescription = enhancedDescription.substring(0, 297) + '...';
       }
       
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      // Get frontend URL - prioritize environment variable, then construct from request
+      let frontendUrl = process.env.FRONTEND_URL;
+      
+      if (!frontendUrl) {
+        // Construct from request
+        const protocol = req.protocol || (req.secure ? 'https' : 'http');
+        const host = req.get('host') || req.headers.host || 'portal.stairs.org.in';
+        frontendUrl = `${protocol}://${host}`.replace(/\/api$/, '');
+      }
+      
+      // Ensure HTTPS in production
+      if (process.env.NODE_ENV === 'production') {
+        frontendUrl = frontendUrl.replace(/^http:/, 'https:');
+      }
+      
+      // Remove trailing slash
+      frontendUrl = frontendUrl.replace(/\/$/, '');
+      
       const eventUrl = `${frontendUrl}/event/${event.uniqueId}`;
+      // Logo URL - use absolute HTTPS URL
       const logoUrl = `${frontendUrl}/logo.png`;
       
       // Escape HTML special characters
@@ -237,8 +255,12 @@ router.get('/preview/:uniqueId', async (req, res) => {
   </body>
 </html>`;
       
+      // Set headers for proper caching and content type
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+      res.setHeader('X-Robots-Tag', 'noindex'); // Don't index preview pages
+      
+      // Ensure no errors in HTML
       res.send(html);
     } catch (error) {
       console.error(`❌ Event not found: ${uniqueId}`, error.message);

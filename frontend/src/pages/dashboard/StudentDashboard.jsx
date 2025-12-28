@@ -119,7 +119,7 @@ const StudentDashboard = () => {
       }, 100);
     }
   }, [searchParams]);
-
+    
   useEffect(() => {
     loadDashboardData();
     loadCoaches();

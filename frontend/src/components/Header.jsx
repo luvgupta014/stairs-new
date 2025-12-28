@@ -71,7 +71,7 @@ const Header = () => {
     }
     // Smooth close animation
     setTimeout(() => {
-      setShowNotifications(false);
+    setShowNotifications(false);
     }, 150);
 
     // Parse notification data if available
@@ -420,14 +420,14 @@ const Header = () => {
                             Clear all
                           </button>
                         )}
-                        {unreadCount > 0 && (
-                          <button
-                            onClick={handleMarkAllAsRead}
-                            className="text-xs text-blue-600 hover:text-blue-800"
-                          >
-                            Mark all as read
-                          </button>
-                        )}
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={handleMarkAllAsRead}
+                          className="text-xs text-blue-600 hover:text-blue-800"
+                        >
+                          Mark all as read
+                        </button>
+                      )}
                         <button
                           onClick={() => setShowNotifications(false)}
                           className="text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
