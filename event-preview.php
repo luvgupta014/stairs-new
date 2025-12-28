@@ -61,10 +61,10 @@ curl_close($ch);
 
 // If backend returns valid HTML, serve it
 if ($httpCode === 200 && $html && strpos($html, '<meta property="og:title"') !== false) {
-    // Set proper headers
+    // Set proper headers for embeds
     header('Content-Type: text/html; charset=utf-8');
     header('Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400');
-    header('X-Robots-Tag: noindex');
+    header('X-Robots-Tag: noindex'); // Don't index preview pages
     
     echo $html;
     exit;
@@ -95,6 +95,9 @@ function serveDefaultPreview() {
 function serveFallbackPreview($uniqueId, $error = null) {
     header('Content-Type: text/html; charset=utf-8');
     $eventName = 'Event ' . htmlspecialchars($uniqueId, ENT_QUOTES, 'UTF-8');
+    $eventUrl = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . 
+                $_SERVER['HTTP_HOST'] . '/event/' . urlencode($uniqueId);
+    
     echo '<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -104,10 +107,14 @@ function serveFallbackPreview($uniqueId, $error = null) {
     <meta property="og:title" content="' . htmlspecialchars($eventName, ENT_QUOTES, 'UTF-8') . '" />
     <meta property="og:description" content="Join this exciting event on STAIRS Talent Hub" />
     <meta property="og:site_name" content="STAIRS Talent Hub" />
+    <meta property="og:url" content="' . htmlspecialchars($eventUrl, ENT_QUOTES, 'UTF-8') . '" />
+    <!-- Redirect users to React app -->
+    <meta http-equiv="refresh" content="0; url=' . htmlspecialchars($eventUrl, ENT_QUOTES, 'UTF-8') . '" />
 </head>
-<body>
+<body style="text-align: center; font-family: Arial, sans-serif; padding: 40px;">
     <h1>' . htmlspecialchars($eventName, ENT_QUOTES, 'UTF-8') . '</h1>
     <p>Join this exciting event on STAIRS Talent Hub</p>
+    <p><a href="' . htmlspecialchars($eventUrl, ENT_QUOTES, 'UTF-8') . '">View Event</a></p>
 </body>
 </html>';
 }

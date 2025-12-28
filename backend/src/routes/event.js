@@ -199,8 +199,9 @@ router.get('/preview/:uniqueId', async (req, res) => {
           .replace(/'/g, '&#039;');
       };
       
-      // Serve HTML with meta tags - NO redirect for bots, just show the content
-      // Comprehensive meta tags for all social platforms
+      // Serve HTML with meta tags for bots
+      // Users get redirected to React app automatically
+      // Bots (Discord/Twitter/WhatsApp) read OG tags but don't execute JS
       const html = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -237,21 +238,30 @@ router.get('/preview/:uniqueId', async (req, res) => {
     <!-- LinkedIn -->
     <meta property="linkedin:owner" content="STAIRS Talent Hub" />
     
-    <!-- WhatsApp specific -->
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    
     <!-- Canonical URL -->
     <link rel="canonical" href="${eventUrl}" />
     
-    <!-- Additional Meta Tags for better compatibility -->
+    <!-- Redirect users to React app (bots ignore this) -->
+    <meta http-equiv="refresh" content="0; url=${eventUrl}" />
+    
+    <!-- Additional Meta Tags -->
     <meta name="theme-color" content="#4f46e5" />
     <meta name="robots" content="index, follow" />
+    
+    <!-- JavaScript redirect fallback for users (if meta refresh doesn't work) -->
+    <script>
+      // Only redirect if user agent is not a bot
+      const botPattern = /bot|crawler|spider|facebookexternalhit|twitterbot|linkedinbot|whatsapp/i;
+      if (!botPattern.test(navigator.userAgent)) {
+        window.location.href = '${eventUrl}';
+      }
+    </script>
   </head>
-  <body style="font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto;">
+  <body style="font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; text-align: center;">
     <h1>${escapeHtml(event.name)}</h1>
     <p>${escapeHtml(enhancedDescription)}</p>
     <p><a href="${eventUrl}">View full event details</a></p>
+    <p style="color: #666; font-size: 14px;">Redirecting to event page...</p>
   </body>
 </html>`;
       
