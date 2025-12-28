@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { SORTED_SPORTS } from '../../constants/sports';
+import { SORTED_SPORTS } from '../../constants/sports.js';
 import { 
   FaBuilding, 
   FaIdCard, 

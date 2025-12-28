@@ -5,7 +5,7 @@ import Spinner from '../components/Spinner';
 import Modal from '../components/Modal';
 import TermsAgreementStep from '../components/TermsAgreementStep';
 import { TERMS, TERMS_VERSION } from '../content/terms';
-import { SORTED_SPORTS } from '../constants/sports';
+import { SORTED_SPORTS } from '../constants/sports.js';
 
 const StudentRegister = () => {
   const navigate = useNavigate();
