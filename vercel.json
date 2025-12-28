@@ -19,26 +19,26 @@
       "dest": "backend/src/index.js"
     },
     {
-      "src": "/event/(.*)",
-      "headers": {
-        "Cache-Control": "s-maxage=3600"
-      },
-      "continue": true
-    },
+      "src": "/(.*)",
+      "dest": "frontend/dist/$1"
+    }
+  ],
+  "functions": {
+    "middleware.js": {
+      "runtime": "edge"
+    }
+  },
+  "rewrites": [
     {
-      "src": "/event/([^/]+)",
+      "source": "/event/:uniqueId",
       "has": [
         {
           "type": "header",
           "key": "user-agent",
-          "value": "(?i)(bot|crawler|spider|facebookexternalhit|Twitterbot|LinkedInBot|WhatsApp|Slackbot|TelegramBot|SkypeUriPreview|Discordbot)"
+          "value": "(?i).*(bot|crawler|spider|facebookexternalhit|Twitterbot|LinkedInBot|WhatsApp|Slackbot|TelegramBot|SkypeUriPreview|Discordbot|Googlebot|Bingbot|Slurp|DuckDuckBot|Baiduspider|YandexBot|Sogou|Exabot|facebot|ia_archiver|Pinterestbot|redditbot|Applebot|Slack|Line|Kik|Viber|WeChat|Snapchat|TikTok).*"
         }
       ],
-      "dest": "/api/events/preview/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "frontend/dist/$1"
+      "destination": "/api/events/preview/:uniqueId"
     }
   ],
   "installCommand": "cd frontend && npm install && cd ../backend && npm install",

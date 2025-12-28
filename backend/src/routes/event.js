@@ -111,11 +111,19 @@ router.get('/public/:uniqueId', eventController.getPublicEventByUniqueId.bind(ev
 router.get('/preview/:uniqueId', async (req, res) => {
   try {
     const { uniqueId } = req.params;
+    const userAgent = req.headers['user-agent'] || '';
+    console.log(`🤖 Bot preview request for event: ${uniqueId}, User-Agent: ${userAgent.substring(0, 100)}`);
+    
+    // Set CORS headers to allow bots to fetch
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
+    
     const EventService = require('../services/eventService');
     const eventService = new EventService();
     
     try {
       const event = await eventService.getPublicEventByUniqueId(uniqueId);
+      console.log(`✅ Event found: ${event.name}`);
       
       // Build event details for description
       const eventDetails = [];
@@ -162,49 +170,79 @@ router.get('/preview/:uniqueId', async (req, res) => {
       const eventUrl = `${frontendUrl}/event/${event.uniqueId}`;
       const logoUrl = `${frontendUrl}/logo.png`;
       
-      // Serve HTML with meta tags
+      // Escape HTML special characters
+      const escapeHtml = (str) => {
+        if (!str) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      };
+      
+      // Serve HTML with meta tags - NO redirect for bots, just show the content
+      // Comprehensive meta tags for all social platforms
       const html = `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${event.name} | STAIRS Talent Hub</title>
-    <meta name="description" content="${enhancedDescription.replace(/"/g, '&quot;')}" />
     
-    <!-- Open Graph / Facebook -->
+    <!-- Primary Meta Tags -->
+    <title>${escapeHtml(event.name)} | STAIRS Talent Hub</title>
+    <meta name="title" content="${escapeHtml(event.name)} | STAIRS Talent Hub" />
+    <meta name="description" content="${escapeHtml(enhancedDescription)}" />
+    
+    <!-- Open Graph / Facebook / WhatsApp / LinkedIn -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${eventUrl}" />
-    <meta property="og:title" content="${event.name.replace(/"/g, '&quot;')}" />
-    <meta property="og:description" content="${enhancedDescription.replace(/"/g, '&quot;')}" />
+    <meta property="og:title" content="${escapeHtml(event.name)}" />
+    <meta property="og:description" content="${escapeHtml(enhancedDescription)}" />
     <meta property="og:image" content="${logoUrl}" />
+    <meta property="og:image:secure_url" content="${logoUrl.replace('http://', 'https://')}" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="${event.name.replace(/"/g, '&quot;')} - STAIRS Talent Hub Event" />
+    <meta property="og:image:alt" content="${escapeHtml(event.name)} - STAIRS Talent Hub Event" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:site_name" content="STAIRS Talent Hub" />
+    <meta property="og:locale" content="en_IN" />
     
-    <!-- Twitter -->
+    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="${eventUrl}" />
-    <meta name="twitter:title" content="${event.name.replace(/"/g, '&quot;')}" />
-    <meta name="twitter:description" content="${enhancedDescription.replace(/"/g, '&quot;')}" />
+    <meta name="twitter:title" content="${escapeHtml(event.name)}" />
+    <meta name="twitter:description" content="${escapeHtml(enhancedDescription)}" />
     <meta name="twitter:image" content="${logoUrl}" />
+    <meta name="twitter:image:alt" content="${escapeHtml(event.name)} - STAIRS Talent Hub Event" />
     
-    <!-- Redirect to actual page -->
-    <meta http-equiv="refresh" content="0;url=${eventUrl}" />
+    <!-- LinkedIn -->
+    <meta property="linkedin:owner" content="STAIRS Talent Hub" />
+    
+    <!-- WhatsApp specific -->
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    
+    <!-- Canonical URL -->
     <link rel="canonical" href="${eventUrl}" />
+    
+    <!-- Additional Meta Tags for better compatibility -->
+    <meta name="theme-color" content="#4f46e5" />
+    <meta name="robots" content="index, follow" />
   </head>
-  <body>
-    <script>
-      window.location.href = '${eventUrl}';
-    </script>
-    <p>Redirecting to <a href="${eventUrl}">${event.name}</a>...</p>
+  <body style="font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto;">
+    <h1>${escapeHtml(event.name)}</h1>
+    <p>${escapeHtml(enhancedDescription)}</p>
+    <p><a href="${eventUrl}">View full event details</a></p>
   </body>
 </html>`;
       
-      res.setHeader('Content-Type', 'text/html');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
       res.send(html);
     } catch (error) {
-      // If event not found, serve default HTML
+      console.error(`❌ Event not found: ${uniqueId}`, error.message);
+      // If event not found, serve default HTML with STAIRS branding
       const defaultHtml = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -212,18 +250,22 @@ router.get('/preview/:uniqueId', async (req, res) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Event Not Found | STAIRS Talent Hub</title>
     <meta name="description" content="The event you're looking for doesn't exist or is no longer available." />
+    <meta property="og:title" content="Event Not Found | STAIRS Talent Hub" />
+    <meta property="og:description" content="The event you're looking for doesn't exist or is no longer available." />
+    <meta property="og:site_name" content="STAIRS Talent Hub" />
   </head>
-  <body>
+  <body style="font-family: Arial, sans-serif; padding: 20px;">
     <h1>Event Not Found</h1>
     <p>The event you're looking for doesn't exist or is no longer available.</p>
   </body>
 </html>`;
-      res.setHeader('Content-Type', 'text/html');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.status(404).send(defaultHtml);
     }
   } catch (error) {
-    console.error('Error serving event preview:', error);
-    res.status(500).send('Internal server error');
+    console.error('❌ Error serving event preview:', error);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.status(500).send(`<!DOCTYPE html><html><head><title>Error</title></head><body><h1>Internal Server Error</h1><p>An error occurred while loading the event preview.</p></body></html>`);
   }
 });
 
