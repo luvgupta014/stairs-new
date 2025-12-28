@@ -1,6 +1,10 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
     
+    # CRITICAL: Don't route PHP files to React - serve them directly
+    RewriteCond %{REQUEST_FILENAME} \.php$ [NC]
+    RewriteRule . - [L]
+    
     # Bot detection for event link previews - Route bots to PHP handler
     # PHP will fetch from backend and serve HTML with meta tags
     # This works WITHOUT requiring Apache proxy configuration!
