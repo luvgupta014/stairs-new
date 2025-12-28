@@ -1,0 +1,23 @@
+# ALTERNATIVE .htaccess Configuration
+# Use this if your API is NOT under /subdirectory (i.e., API is at root /api/events)
+# Copy the relevant section to your .htaccess file
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /subdirectory
+    
+    # Bot detection for event link previews - MUST BE BEFORE React routing
+    # API at ROOT level (not under subdirectory)
+    RewriteCond %{HTTP_USER_AGENT} (bot|crawler|spider|scraper|facebookexternalhit|facebookcatalog|Twitterbot|Twitter|LinkedInBot|LinkedIn|WhatsApp|whatsapp|Slackbot|Slack|TelegramBot|Telegram|SkypeUriPreview|Discordbot|Discord|Googlebot|Google|Bingbot|Bing|Slurp|DuckDuckBot|Baiduspider|YandexBot|Sogou|Exabot|facebot|ia_archiver|Pinterestbot|Pinterest|redditbot|reddit|Applebot|Line|Kik|Viber|WeChat|Snapchat|TikTok|PostmanRuntime|curl|wget) [NC]
+    RewriteRule ^event/([^/]+)$ /api/events/preview/$1 [R=307,L]
+    
+    # Skip rewriting for index.html
+    RewriteRule ^index\.html$ - [L]
+    
+    # For regular users, serve React app (standard SPA routing)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-l
+    RewriteRule . /subdirectory/index.html [L]
+</IfModule>
+

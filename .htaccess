@@ -1,9 +1,9 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /subdirectory
+    # RewriteBase /subdirectory  # Commented out - site doesn't use subdirectory in URL
     
     # Bot detection for event link previews - MUST BE BEFORE React routing
-    # Redirect bots to preview endpoint (backend will handle the request)
+    # This redirects bots to the preview endpoint which serves HTML with meta tags
     RewriteCond %{HTTP_USER_AGENT} (bot|crawler|spider|scraper|facebookexternalhit|facebookcatalog|Twitterbot|Twitter|LinkedInBot|LinkedIn|WhatsApp|whatsapp|Slackbot|Slack|TelegramBot|Telegram|SkypeUriPreview|Discordbot|Discord|Googlebot|Google|Bingbot|Bing|Slurp|DuckDuckBot|Baiduspider|YandexBot|Sogou|Exabot|facebot|ia_archiver|Pinterestbot|Pinterest|redditbot|reddit|Applebot|Line|Kik|Viber|WeChat|Snapchat|TikTok|PostmanRuntime|curl|wget) [NC]
     RewriteRule ^event/([^/]+)$ /api/events/preview/$1 [R=307,L]
     
