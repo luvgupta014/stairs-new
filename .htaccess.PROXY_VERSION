@@ -1,11 +1,15 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
     
-    # Bot detection for event link previews - Route bots to PHP handler
-    # PHP will fetch from backend and serve HTML with meta tags
-    # This works WITHOUT requiring Apache proxy configuration!
+    # Proxy API requests to backend (if mod_proxy is enabled)
+    # This allows .htaccess to proxy /api requests to Node.js backend
+    RewriteCond %{REQUEST_URI} ^/api
+    RewriteRule ^api/(.*)$ http://localhost:5000/api/$1 [P,L]
+    
+    # Bot detection for event link previews - MUST BE AFTER API proxy
+    # Redirect bots to preview endpoint which serves HTML with meta tags
     RewriteCond %{HTTP_USER_AGENT} (bot|crawler|spider|scraper|facebookexternalhit|facebookcatalog|Twitterbot|Twitter|LinkedInBot|LinkedIn|WhatsApp|whatsapp|Slackbot|Slack|TelegramBot|Telegram|SkypeUriPreview|Discordbot|Discord|Googlebot|Google|Bingbot|Bing|Slurp|DuckDuckBot|Baiduspider|YandexBot|Sogou|Exabot|facebot|ia_archiver|Pinterestbot|Pinterest|redditbot|reddit|Applebot|Line|Kik|Viber|WeChat|Snapchat|TikTok|PostmanRuntime|curl|wget) [NC]
-    RewriteRule ^event/([^/]+)$ /event-preview.php?id=$1 [L]
+    RewriteRule ^event/([^/]+)$ /api/events/preview/$1 [R=307,L]
     
     # Skip rewriting for index.html
     RewriteRule ^index\.html$ - [L]
@@ -35,3 +39,4 @@
     ExpiresByType text/css "access plus 30 days"
     ExpiresByType application/javascript "access plus 30 days"
 </IfModule>
+
