@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SORTED_SPORTS } from '../constants/sports.js';
+import { SORTED_SPORTS } from '../constants/sports';
 
 /**
  * EventForm Component

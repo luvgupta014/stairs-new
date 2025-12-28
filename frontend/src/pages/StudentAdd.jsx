@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { addStudentManually } from '../api';
 import Spinner from '../components/Spinner';
 import { useNavigate } from 'react-router-dom';
-import { SORTED_SPORTS } from '../constants/sports.js';
+import { SORTED_SPORTS } from '../constants/sports';
 
 const StudentAdd = () => {
   const [formData, setFormData] = useState({
