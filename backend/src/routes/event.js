@@ -107,6 +107,126 @@ const clearExpressFileUpload = (req, res, next) => {
 // Public route: Get event by uniqueId (no authentication required)
 router.get('/public/:uniqueId', eventController.getPublicEventByUniqueId.bind(eventController));
 
+// Serve HTML with meta tags for social media crawlers
+router.get('/preview/:uniqueId', async (req, res) => {
+  try {
+    const { uniqueId } = req.params;
+    const EventService = require('../services/eventService');
+    const eventService = new EventService();
+    
+    try {
+      const event = await eventService.getPublicEventByUniqueId(uniqueId);
+      
+      // Build event details for description
+      const eventDetails = [];
+      if (event.sport) eventDetails.push(event.sport);
+      if (event.level) eventDetails.push(`${event.level} Level`);
+      if (event.startDate) {
+        const date = new Date(event.startDate);
+        const formattedDate = date.toLocaleDateString('en-IN', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        eventDetails.push(formattedDate);
+      }
+      if (event.venue) {
+        let venueInfo = event.venue;
+        if (event.city) venueInfo += `, ${event.city}`;
+        if (event.state) venueInfo += `, ${event.state}`;
+        eventDetails.push(venueInfo);
+      }
+      
+      const organizerName = event.createdByAdmin
+        ? 'STAIRS Talent Hub'
+        : (event.coach?.name || 'STAIRS Talent Hub');
+      
+      const cleanDescription = event.description
+        ? event.description.replace(/\n+/g, ' ').trim().substring(0, 200)
+        : '';
+      
+      let enhancedDescription = '';
+      if (cleanDescription) {
+        enhancedDescription = `${cleanDescription} | ${eventDetails.join(' • ')} | Organized by ${organizerName}`;
+      } else {
+        enhancedDescription = `${event.name} - ${eventDetails.join(' • ')} | Organized by ${organizerName} on STAIRS Talent Hub`;
+      }
+      
+      if (enhancedDescription.length > 300) {
+        enhancedDescription = enhancedDescription.substring(0, 297) + '...';
+      }
+      
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const eventUrl = `${frontendUrl}/event/${event.uniqueId}`;
+      const logoUrl = `${frontendUrl}/logo.png`;
+      
+      // Serve HTML with meta tags
+      const html = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${event.name} | STAIRS Talent Hub</title>
+    <meta name="description" content="${enhancedDescription.replace(/"/g, '&quot;')}" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="${eventUrl}" />
+    <meta property="og:title" content="${event.name.replace(/"/g, '&quot;')}" />
+    <meta property="og:description" content="${enhancedDescription.replace(/"/g, '&quot;')}" />
+    <meta property="og:image" content="${logoUrl}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="${event.name.replace(/"/g, '&quot;')} - STAIRS Talent Hub Event" />
+    <meta property="og:site_name" content="STAIRS Talent Hub" />
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="${eventUrl}" />
+    <meta name="twitter:title" content="${event.name.replace(/"/g, '&quot;')}" />
+    <meta name="twitter:description" content="${enhancedDescription.replace(/"/g, '&quot;')}" />
+    <meta name="twitter:image" content="${logoUrl}" />
+    
+    <!-- Redirect to actual page -->
+    <meta http-equiv="refresh" content="0;url=${eventUrl}" />
+    <link rel="canonical" href="${eventUrl}" />
+  </head>
+  <body>
+    <script>
+      window.location.href = '${eventUrl}';
+    </script>
+    <p>Redirecting to <a href="${eventUrl}">${event.name}</a>...</p>
+  </body>
+</html>`;
+      
+      res.setHeader('Content-Type', 'text/html');
+      res.send(html);
+    } catch (error) {
+      // If event not found, serve default HTML
+      const defaultHtml = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Event Not Found | STAIRS Talent Hub</title>
+    <meta name="description" content="The event you're looking for doesn't exist or is no longer available." />
+  </head>
+  <body>
+    <h1>Event Not Found</h1>
+    <p>The event you're looking for doesn't exist or is no longer available.</p>
+  </body>
+</html>`;
+      res.setHeader('Content-Type', 'text/html');
+      res.status(404).send(defaultHtml);
+    }
+  } catch (error) {
+    console.error('Error serving event preview:', error);
+    res.status(500).send('Internal server error');
+  }
+});
+
 // Public event listing (for students)
 router.get('/', authenticate, eventController.getEvents.bind(eventController));
 

@@ -19,6 +19,24 @@
       "dest": "backend/src/index.js"
     },
     {
+      "src": "/event/(.*)",
+      "headers": {
+        "Cache-Control": "s-maxage=3600"
+      },
+      "continue": true
+    },
+    {
+      "src": "/event/([^/]+)",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i)(bot|crawler|spider|facebookexternalhit|Twitterbot|LinkedInBot|WhatsApp|Slackbot|TelegramBot|SkypeUriPreview|Discordbot)"
+        }
+      ],
+      "dest": "/api/events/preview/$1"
+    },
+    {
       "src": "/(.*)",
       "dest": "frontend/dist/$1"
     }
