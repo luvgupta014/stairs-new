@@ -4,6 +4,31 @@ const router = express.Router();
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
+// CORS middleware for maps routes - ensure portal.stairs.org.in is allowed
+router.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    'https://portal.stairs.org.in',
+    'https://www.portal.stairs.org.in',
+    'https://stairs.astroraag.com',
+    'http://localhost:5173',
+    'http://localhost:5174'
+  ];
+  
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
+  next();
+});
+
 // Proxy endpoint for Google Places Autocomplete
 router.get('/places/autocomplete', async (req, res) => {
   try {
