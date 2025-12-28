@@ -1,15 +1,14 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
     
-    # CRITICAL: Don't route PHP files to React - serve them directly
-    RewriteCond %{REQUEST_FILENAME} \.php$ [NC]
+    # CRITICAL: Serve PHP files directly - don't route to React
+    RewriteCond %{REQUEST_URI} \.php$ [NC]
     RewriteRule . - [L]
     
-    # Bot detection for event link previews - Route bots to PHP handler
-    # PHP will fetch from backend and serve HTML with meta tags
-    # This works WITHOUT requiring Apache proxy configuration!
-    RewriteCond %{HTTP_USER_AGENT} (bot|crawler|spider|scraper|facebookexternalhit|facebookcatalog|Twitterbot|Twitter|LinkedInBot|LinkedIn|WhatsApp|whatsapp|Slackbot|Slack|TelegramBot|Telegram|SkypeUriPreview|Discordbot|Discord|Googlebot|Google|Bingbot|Bing|Slurp|DuckDuckBot|Baiduspider|YandexBot|Sogou|Exabot|facebot|ia_archiver|Pinterestbot|Pinterest|redditbot|reddit|Applebot|Line|Kik|Viber|WeChat|Snapchat|TikTok|PostmanRuntime|curl|wget) [NC]
-    RewriteRule ^event/([^/]+)$ /event-preview.php?id=$1 [L]
+    # Bot detection for event link previews - MUST BE BEFORE React routing
+    # Route bots accessing /event/EVT-XXXX to PHP handler
+    RewriteCond %{HTTP_USER_AGENT} (bot|crawler|spider|scraper|facebookexternalhit|facebookcatalog|Twitterbot|Twitter|LinkedInBot|LinkedIn|WhatsApp|whatsapp|Slackbot|Slack|TelegramBot|Telegram|SkypeUriPreview|Discordbot|Discord|Googlebot|Google|Bingbot|Bing|Slurp|DuckDuckBot|Baiduspider|YandexBot|Sogou|Exabot|facebot|ia_archiver|Pinterestbot|Pinterest|redditbot|reddit|Applebot|Line|Kik|Viber|WeChat|Snapchat|TikTok|PostmanRuntime|curl|wget|linkedin) [NC]
+    RewriteRule ^event/(.+)$ /event-preview.php?id=$1 [L,QSA]
     
     # Skip rewriting for index.html
     RewriteRule ^index\.html$ - [L]
