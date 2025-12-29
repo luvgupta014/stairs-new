@@ -30,8 +30,7 @@ const GoogleMapsPlacesAutocomplete = ({
     }
 
     if (!checkGoogleMapsAvailability()) {
-      console.error("❌ Google Maps API not available");
-      setLoadError("Google Maps API not properly loaded.");
+      console.log("⚠️ Google Maps API not available - using fallback venue search");
       setIsManualMode(true);
       return;
     }
@@ -93,8 +92,7 @@ const GoogleMapsPlacesAutocomplete = ({
 
       console.log("✅ Autocomplete initialized successfully");
     } catch (err) {
-      console.error("❌ Autocomplete initialization error:", err);
-      setLoadError(`Failed to initialize: ${err.message}`);
+      console.log("⚠️ Autocomplete initialization error - using fallback:", err.message);
       setIsManualMode(true);
     }
   };
@@ -119,8 +117,7 @@ const GoogleMapsPlacesAutocomplete = ({
     console.log("- Full URL:", window.location.href);
 
     if (!apiKey) {
-      console.error("❌ Google Maps API key missing");
-      setLoadError("Google Maps API key not configured.");
+      console.log("⚠️ Google Maps API key missing - using fallback venue search");
       setIsManualMode(true);
       setIsApiReady(true); // Set to true so component shows input
       return;
@@ -129,10 +126,7 @@ const GoogleMapsPlacesAutocomplete = ({
     // If auth fails (bad key, billing disabled, referrer not allowed), Google triggers this callback.
     // We can then gracefully fall back to server-proxy suggestions instead of leaving a broken UI.
     window.gm_authFailure = () => {
-      console.error("❌ Google Maps authentication failed (gm_authFailure).");
-      setLoadError(
-        "Google Maps authentication failed (key/billing/referrer). Using fallback venue search."
-      );
+      console.log("⚠️ Google Maps authentication failed - using fallback venue search");
       setIsManualMode(true);
       setIsApiReady(true);
     };
@@ -163,8 +157,7 @@ const GoogleMapsPlacesAutocomplete = ({
 
       timeoutRef.current = setTimeout(() => {
         clearInterval(intervalRef.current);
-        console.warn("⚠️ Timeout waiting for existing script");
-        setLoadError("Google Maps failed to load. Please refresh.");
+        console.log("⚠️ Timeout waiting for Google Maps - using fallback venue search");
         setIsManualMode(true);
         setIsApiReady(true); // Show input anyway
       }, 20000);
@@ -186,8 +179,7 @@ const GoogleMapsPlacesAutocomplete = ({
           console.log("✅ Places API confirmed available");
           setIsApiReady(true);
         } else {
-          console.error("❌ Places API not available after callback");
-          setLoadError("Places library failed to load");
+          console.log("⚠️ Places API not available after callback - using fallback venue search");
           setIsManualMode(true);
           setIsApiReady(true);
         }
@@ -202,21 +194,15 @@ const GoogleMapsPlacesAutocomplete = ({
     script.defer = true;
 
     script.onerror = () => {
-      console.error("❌ Script failed to load");
-      console.error("Check:");
-      console.error("1. API key validity");
-      console.error("2. Domain restrictions in Google Cloud Console");
-      console.error("3. Billing enabled");
+      console.log("⚠️ Google Maps script failed to load - using fallback venue search");
       clearTimeout(timeoutRef.current);
-      setLoadError("Failed to load Google Maps API. Using fallback venue search.");
       setIsManualMode(true);
       setIsApiReady(true); // Show input anyway
       delete window[callbackName];
     };
 
     timeoutRef.current = setTimeout(() => {
-      console.warn("⚠️ Script load timeout");
-      setLoadError("Google Maps API load timeout");
+      console.log("⚠️ Google Maps script load timeout - using fallback venue search");
       setIsManualMode(true);
       setIsApiReady(true); // Show input anyway
       delete window[callbackName];
@@ -270,25 +256,16 @@ const GoogleMapsPlacesAutocomplete = ({
   }
 
   // If Google Maps JS/Places fails (or key missing), fallback to backend-proxy search UI
-  if (isManualMode && loadError) {
+  if (isManualMode) {
     return (
-      <div>
-        <FallbackVenueSearch
-          onPlaceSelect={onPlaceSelect}
-          placeholder={placeholder}
-          value={value}
-          onChange={onChange}
-          className={className}
-          disabled={disabled}
-        />
-        <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-          <div className="font-semibold">⚠️ Google Maps JS unavailable</div>
-          <div className="mt-1">{loadError}</div>
-          <div className="mt-1 text-gray-600">
-            Using server-based venue suggestions (no browser Maps key required).
-          </div>
-        </div>
-      </div>
+      <FallbackVenueSearch
+        onPlaceSelect={onPlaceSelect}
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        className={className}
+        disabled={disabled}
+      />
     );
   }
 
