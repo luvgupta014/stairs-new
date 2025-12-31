@@ -1473,34 +1473,56 @@ const AdminEventsManagement = () => {
   const saveEditedEvent = async () => {
     try {
       const ev = eventDetailsModal?.event;
-      if (!ev?.id) return;
+      if (!ev?.id) {
+        console.error('❌ No event ID found');
+        setEditErr('No event selected.');
+        return;
+      }
+      
+      console.log('💾 Saving event changes...', {
+        eventId: ev.id,
+        editPatch,
+        editEventForm,
+        editValidation
+      });
+      
       setEditSaving(true);
       setEditErr('');
       setEditMsg('');
 
       const patch = editPatch;
+      console.log('📦 Patch to send:', patch);
+      
       if (!patch || Object.keys(patch).length === 0) {
+        console.log('⚠️ No changes detected');
         setEditMsg('No changes to save.');
+        setEditSaving(false);
         return;
       }
 
-      if (!editValidation.isValid) {
-        const first = Object.values(editValidation.errors || {})[0] || 'Please fix the highlighted fields.';
+      if (!editValidation || !editValidation.isValid) {
+        const first = Object.values(editValidation?.errors || {})[0] || 'Please fix the highlighted fields.';
+        console.error('❌ Validation failed:', editValidation?.errors);
         setEditErr(first);
+        setEditSaving(false);
         return;
       }
 
       // Basic client-side guardrails
       if (patch.name !== undefined && !patch.name.trim()) {
         setEditErr('Event name is required.');
+        setEditSaving(false);
         return;
       }
       if (patch.sport !== undefined && !patch.sport.trim()) {
         setEditErr('Sport is required.');
+        setEditSaving(false);
         return;
       }
 
+      console.log('🚀 Calling adminUpdateEvent API...');
       const res = await adminUpdateEvent(ev.id, patch);
+      console.log('✅ API response:', res);
       if (!res?.success) {
         setEditErr(res?.message || 'Failed to update event.');
         return;
@@ -2268,18 +2290,39 @@ const AdminEventsManagement = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={saveEditedEvent}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('🔘 Save button clicked', {
+                            editSaving,
+                            hasEditChanges,
+                            isValid: editValidation?.isValid,
+                            errors: editValidation?.errors,
+                            patch: editPatch
+                          });
+                          saveEditedEvent();
+                        }}
                         disabled={editSaving || !hasEditChanges || !editValidation?.isValid}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-60"
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
                         title={
                           !hasEditChanges
                             ? 'No changes to save'
                             : !editValidation?.isValid
-                              ? 'Fix validation errors before saving'
+                              ? `Please fix validation errors: ${Object.keys(editValidation?.errors || {}).join(', ')}`
                               : 'Save changes'
                         }
                       >
-                        {editSaving ? 'Saving...' : 'Save Changes'}
+                        {editSaving ? (
+                          <span className="flex items-center">
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Saving...
+                          </span>
+                        ) : (
+                          'Save Changes'
+                        )}
                       </button>
                     </div>
                   </div>

@@ -261,7 +261,9 @@ const EventCreate = ({ adminMode = false }) => {
         startDate: formData.startDate ? formData.startDate + ':00' : '',
         endDate: formData.endDate ? formData.endDate + ':00' : null,
         maxParticipants: formData.maxParticipants ? parseInt(formData.maxParticipants) : null,
-        level: formData.level || 'DISTRICT'
+        level: formData.level || 'DISTRICT',
+        // Ensure categoriesAvailable is included
+        categoriesAvailable: formData.categoriesAvailable || null
       };
       
       // Remove the sports array since we're sending sport string
@@ -269,7 +271,8 @@ const EventCreate = ({ adminMode = false }) => {
       
       console.log('📅 Event data being sent:', {
         ...eventData,
-        sport: eventData.sport
+        sport: eventData.sport,
+        categoriesAvailable: eventData.categoriesAvailable
       });
 
       const result = await createEvent(eventData, adminMode);

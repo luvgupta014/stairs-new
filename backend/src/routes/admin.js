@@ -4264,7 +4264,8 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
       startDate,
       endDate,
       maxParticipants,
-      level
+      level,
+      categoriesAvailable
     } = req.body;
 
     // Validation
@@ -4392,6 +4393,7 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
         status: 'APPROVED', // Admin events are auto-approved
         uniqueId: eventUniqueId,
         coachId: systemCoach.id,
+        categoriesAvailable: categoriesAvailable && categoriesAvailable.trim() ? categoriesAvailable.trim() : null,
         createdAt: new Date(),
         updatedAt: new Date()
       },
