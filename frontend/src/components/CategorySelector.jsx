@@ -5,9 +5,23 @@ import { FaPlus, FaTimes } from 'react-icons/fa';
  * CategorySelector Component
  * Provides an easy-to-use interface for adding event categories
  * Replaces the free-form textarea with structured inputs
+ * 
+ * @param {string} value - Current categories text value
+ * @param {function} onChange - Callback when categories change
+ * @param {string} className - Additional CSS classes
+ * @param {string} ageGroupLabel - Custom label for age groups section (default: "Age Groups")
+ * @param {string} strokeLabel - Custom label for strokes section (default: "Strokes / Event Types")
+ * @param {string} distanceLabel - Custom label for distances section (default: "Distances")
  */
-const CategorySelector = ({ value = '', onChange, className = '' }) => {
-  // Parse existing value into structured data
+const CategorySelector = ({ 
+  value = '', 
+  onChange, 
+  className = '',
+  ageGroupLabel = 'Age Groups',
+  strokeLabel = 'Strokes / Event Types',
+  distanceLabel = 'Distances'
+}) => {
+  // Parse existing value into structured data (flexible parsing for different label names)
   const parseCategories = (text) => {
     if (!text) return { ageGroups: [], strokes: [], distances: [] };
     
@@ -16,20 +30,47 @@ const CategorySelector = ({ value = '', onChange, className = '' }) => {
     
     lines.forEach(line => {
       const lower = line.toLowerCase();
-      if (lower.includes('age group')) {
-        const match = line.match(/Age Groups?:\s*(.+)/i);
-        if (match) {
+      // Flexible parsing - check for common variations
+      // Age Groups section (first section typically)
+      if (lower.includes('age group') || lower.includes('age') || lower.includes('group') || 
+          lower.includes('division') || lower.includes('category') || lower.includes('class')) {
+        // Match pattern: "Label: value1, value2, ..."
+        const match = line.match(/^[^:]+:\s*(.+)/i);
+        if (match && !result.ageGroups.length) { // Only if not already filled
           result.ageGroups = match[1].split(',').map(g => g.trim()).filter(Boolean);
         }
-      } else if (lower.includes('stroke') || lower.includes('event type')) {
-        const match = line.match(/(?:Strokes?|Event Types?):\s*(.+)/i);
-        if (match) {
+      } 
+      // Strokes/Event Types section (middle section typically)
+      else if (lower.includes('stroke') || lower.includes('event type') || 
+               lower.includes('style') || lower.includes('type') || lower.includes('event')) {
+        const match = line.match(/^[^:]+:\s*(.+)/i);
+        if (match && !result.strokes.length) {
           result.strokes = match[1].split(',').map(s => s.trim()).filter(Boolean);
         }
-      } else if (lower.includes('distance')) {
-        const match = line.match(/Distances?:\s*(.+)/i);
-        if (match) {
+      } 
+      // Distances section (last section typically)
+      else if (lower.includes('distance') || lower.includes('length') || 
+               lower.includes('meter') || lower.includes('metre') || lower.includes('km')) {
+        const match = line.match(/^[^:]+:\s*(.+)/i);
+        if (match && !result.distances.length) {
           result.distances = match[1].split(',').map(d => d.trim()).filter(Boolean);
+        }
+      }
+      // Fallback: if line has ":" and values, try to parse
+      else if (line.includes(':')) {
+        const match = line.match(/^([^:]+):\s*(.+)/i);
+        if (match) {
+          const label = match[1].trim().toLowerCase();
+          const values = match[2].split(',').map(v => v.trim()).filter(Boolean);
+          
+          // Try to categorize based on label
+          if (!result.ageGroups.length && (label.includes('age') || label.includes('group') || label.includes('division'))) {
+            result.ageGroups = values;
+          } else if (!result.strokes.length && (label.includes('stroke') || label.includes('type') || label.includes('event'))) {
+            result.strokes = values;
+          } else if (!result.distances.length && (label.includes('distance') || label.includes('length'))) {
+            result.distances = values;
+          }
         }
       }
     });
@@ -41,6 +82,15 @@ const CategorySelector = ({ value = '', onChange, className = '' }) => {
   const [newAgeGroup, setNewAgeGroup] = useState('');
   const [newStroke, setNewStroke] = useState('');
   const [newDistance, setNewDistance] = useState('');
+  const [showCustomNames, setShowCustomNames] = useState(false);
+  const [customAgeGroupLabel, setCustomAgeGroupLabel] = useState(ageGroupLabel);
+  const [customStrokeLabel, setCustomStrokeLabel] = useState(strokeLabel);
+  const [customDistanceLabel, setCustomDistanceLabel] = useState(distanceLabel);
+  
+  // Use custom labels if set, otherwise use props
+  const finalAgeGroupLabel = customAgeGroupLabel || ageGroupLabel;
+  const finalStrokeLabel = customStrokeLabel || strokeLabel;
+  const finalDistanceLabel = customDistanceLabel || distanceLabel;
 
   // Update when value prop changes
   useEffect(() => {
@@ -49,17 +99,17 @@ const CategorySelector = ({ value = '', onChange, className = '' }) => {
     }
   }, [value]);
 
-  // Format categories back to text
+  // Format categories back to text (using custom labels if provided)
   const formatCategories = (cats) => {
     const parts = [];
     if (cats.ageGroups.length > 0) {
-      parts.push(`Age Groups: ${cats.ageGroups.join(', ')}`);
+      parts.push(`${finalAgeGroupLabel}: ${cats.ageGroups.join(', ')}`);
     }
     if (cats.strokes.length > 0) {
-      parts.push(`Strokes: ${cats.strokes.join(', ')}`);
+      parts.push(`${finalStrokeLabel}: ${cats.strokes.join(', ')}`);
     }
     if (cats.distances.length > 0) {
-      parts.push(`Distances: ${cats.distances.join(', ')}`);
+      parts.push(`${finalDistanceLabel}: ${cats.distances.join(', ')}`);
     }
     return parts.join('\n');
   };
@@ -128,10 +178,64 @@ const CategorySelector = ({ value = '', onChange, className = '' }) => {
 
   return (
     <div className={`space-y-4 ${className}`}>
+      {/* Custom Section Names Toggle */}
+      <div className="mb-4 pb-4 border-b border-gray-200">
+        <button
+          type="button"
+          onClick={() => setShowCustomNames(!showCustomNames)}
+          className="text-sm text-blue-600 hover:text-blue-800 underline flex items-center gap-1"
+        >
+          {showCustomNames ? '▼' : '▶'} Customize Section Names
+        </button>
+        {showCustomNames && (
+          <div className="mt-3 space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                First Section Name (default: "Age Groups")
+              </label>
+              <input
+                type="text"
+                value={customAgeGroupLabel}
+                onChange={(e) => setCustomAgeGroupLabel(e.target.value)}
+                placeholder="e.g., Weight Classes, Age Divisions, Categories"
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Second Section Name (default: "Strokes / Event Types")
+              </label>
+              <input
+                type="text"
+                value={customStrokeLabel}
+                onChange={(e) => setCustomStrokeLabel(e.target.value)}
+                placeholder="e.g., Divisions, Event Categories, Match Types"
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Third Section Name (default: "Distances")
+              </label>
+              <input
+                type="text"
+                value={customDistanceLabel}
+                onChange={(e) => setCustomDistanceLabel(e.target.value)}
+                placeholder="e.g., Rounds, Sets, Attempts, Lengths"
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              💡 Customize section names to match your sport's terminology. Leave empty to use defaults.
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* Age Groups Section */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Age Groups
+          {finalAgeGroupLabel}
         </label>
         <div className="flex gap-2 mb-2">
           <input
@@ -153,7 +257,7 @@ const CategorySelector = ({ value = '', onChange, className = '' }) => {
           </button>
         </div>
         <p className="text-xs text-gray-500 mb-2">
-          💡 You can add any custom age group. Examples: "Group I (11-12)", "U-14", "Senior (18+)", "Open Category"
+          💡 You can add any custom {finalAgeGroupLabel.toLowerCase()}. Examples: "Group I (11-12)", "U-14", "Senior (18+)", "Open Category", or any format you need
         </p>
         {categories.ageGroups.length > 0 && (
           <div className="flex flex-wrap gap-2">
@@ -179,7 +283,7 @@ const CategorySelector = ({ value = '', onChange, className = '' }) => {
       {/* Strokes/Event Types Section */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Strokes / Event Types
+          {finalStrokeLabel}
         </label>
         <div className="flex gap-2 mb-2">
           <input
@@ -201,7 +305,7 @@ const CategorySelector = ({ value = '', onChange, className = '' }) => {
           </button>
         </div>
         <p className="text-xs text-gray-500 mb-2">
-          💡 Quick-add common strokes below, or type any custom stroke/event type above
+          💡 Quick-add common items below, or type any custom {finalStrokeLabel.toLowerCase()} above (e.g., "Relay", "Mixed", "Synchronized")
         </p>
         {/* Quick add buttons for common strokes */}
         <div className="mb-2 flex flex-wrap gap-2">
@@ -247,7 +351,7 @@ const CategorySelector = ({ value = '', onChange, className = '' }) => {
       {/* Distances Section */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Distances
+          {finalDistanceLabel}
         </label>
         <div className="flex gap-2 mb-2">
           <input
@@ -269,7 +373,7 @@ const CategorySelector = ({ value = '', onChange, className = '' }) => {
           </button>
         </div>
         <p className="text-xs text-gray-500 mb-2">
-          💡 Quick-add common distances below, or type any custom distance above (e.g., "1km", "Marathon", "Sprint")
+          💡 Quick-add common items below, or type any custom {finalDistanceLabel.toLowerCase()} above (e.g., "1km", "Marathon", "Sprint", or any format you need)
         </p>
         {/* Quick add buttons for common distances */}
         <div className="mb-2 flex flex-wrap gap-2">
