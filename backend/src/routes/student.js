@@ -686,7 +686,8 @@ router.get('/events/:eventId', authenticate, requireStudent, async (req, res) =>
             id: true,
             status: true,
             createdAt: true,
-            message: true
+            message: true,
+            selectedCategory: true
           }
         },
         _count: {
@@ -746,6 +747,7 @@ router.get('/events/:eventId', authenticate, requireStudent, async (req, res) =>
       registrationStatus: event.registrations.length > 0 ? event.registrations[0].status : null,
       registrationDate: event.registrations.length > 0 ? event.registrations[0].createdAt : null,
       registrationMessage: event.registrations.length > 0 ? event.registrations[0].message : null,
+      selectedCategory: event.registrations.length > 0 ? (event.registrations[0].selectedCategory || null) : null,
       
       // Check if registration is still possible
       canRegister: event.registrations.length === 0 && 

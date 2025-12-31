@@ -465,6 +465,57 @@ router.delete('/:eventId/register',
 );
 
 /**
+ * Update selected category for an existing registration (students only)
+ * PATCH /api/events/:eventId/register/selected-category
+ * Body: { selectedCategory: string }
+ *
+ * Notes:
+ * - Useful to backfill old registrations created before category selection was enforced.
+ */
+router.patch('/:eventId/register/selected-category', authenticate, requireStudent, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const raw = req.body?.selectedCategory;
+    const selectedCategory = typeof raw === 'string' ? raw.trim() : '';
+
+    if (!selectedCategory) {
+      return res.status(400).json(errorResponse('selectedCategory is required.', 400));
+    }
+
+    // Resolve student id (middleware may attach req.student in some flows)
+    let studentId = req.student?.id || null;
+    if (!studentId) {
+      const student = await prisma.student.findUnique({ where: { userId: req.user.id }, select: { id: true } });
+      studentId = student?.id || null;
+    }
+
+    if (!studentId) {
+      return res.status(404).json(errorResponse('Student profile not found.', 404));
+    }
+
+    // Ensure registration exists for this student + event
+    const existing = await prisma.eventRegistration.findFirst({
+      where: { eventId, studentId },
+      select: { id: true }
+    });
+
+    if (!existing) {
+      return res.status(404).json(errorResponse('You are not registered for this event.', 404));
+    }
+
+    const updated = await prisma.eventRegistration.update({
+      where: { id: existing.id },
+      data: { selectedCategory }
+    });
+
+    return res.json(successResponse({ id: updated.id, selectedCategory: updated.selectedCategory }, 'Selected category updated.'));
+  } catch (error) {
+    console.error('❌ Update selected category error:', error);
+    return res.status(500).json(errorResponse('Failed to update selected category.', 500));
+  }
+});
+
+/**
  * Bulk add/register students to an event (Event Incharge with studentManagement)
  * POST /api/events/:eventId/registrations/bulk
  * Body: { identifiers: string[] }

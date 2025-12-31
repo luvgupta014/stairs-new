@@ -1214,7 +1214,28 @@ export const downloadSampleResultSheet = async (eventId, isAdmin = false) => {
     return { success: true, message: 'Sample sheet downloaded successfully' };
   } catch (error) {
     console.error('Download sample sheet error:', error);
-    throw error.response?.data || error.message;
+    // When responseType is 'blob', server errors may also come as a Blob.
+    const blob = error?.response?.data;
+    if (blob instanceof Blob) {
+      try {
+        const text = await blob.text();
+        try {
+          const json = JSON.parse(text);
+          throw new Error(json?.message || 'Failed to download sample sheet');
+        } catch {
+          throw new Error(text || 'Failed to download sample sheet');
+        }
+      } catch (e) {
+        throw new Error(e?.message || 'Failed to download sample sheet');
+      }
+    }
+
+    const msg =
+      error?.response?.data?.message ||
+      (typeof error?.response?.data === 'string' ? error.response.data : null) ||
+      error?.message ||
+      'Failed to download sample sheet';
+    throw new Error(msg);
   }
 };
 

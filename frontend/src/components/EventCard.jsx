@@ -13,6 +13,23 @@ const EventCard = ({
 }) => {
   if (!event) return null;
 
+  const parseCategoryPreview = (text) => {
+    if (!text || typeof text !== 'string' || !text.trim()) return [];
+    // Prefer showing Age Groups if present; otherwise show the first section.
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const findLine = (keywords) =>
+      lines.find(l => {
+        const lower = l.toLowerCase();
+        return keywords.some(k => lower.includes(k));
+      });
+    const ageLine = findLine(['age group', 'age', 'group', 'division', 'category', 'class', 'weight']);
+    const target = ageLine || lines[0] || '';
+    const match = target.match(/^([^:]+):\s*(.+)$/);
+    if (!match) return [];
+    const values = match[2].split(',').map(v => v.trim()).filter(Boolean);
+    return values.slice(0, 4);
+  };
+
   const getLevelBadge = () => {
     const lvl = (event.level || 'DISTRICT').toString().toUpperCase();
     const label = lvl === 'DISTRICT' ? 'District'
@@ -205,6 +222,20 @@ const EventCard = ({
           <p className="text-sm text-gray-600 mt-3 line-clamp-2">
             {event.description}
           </p>
+        )}
+
+        {/* Category preview (public list) */}
+        {event.categoriesAvailable && event.categoriesAvailable.trim() && (
+          <div className="mt-3">
+            <p className="text-xs font-semibold text-gray-500 mb-2">Categories</p>
+            <div className="flex flex-wrap gap-2">
+              {parseCategoryPreview(event.categoriesAvailable).map((c) => (
+                <span key={c} className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs border border-blue-100">
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 

@@ -6,7 +6,6 @@ import Spinner from '../../components/Spinner';
 import Button from '../../components/Button';
 import BackButton from '../../components/BackButton';
 import CheckoutModal from '../../components/CheckoutModal';
-import CategorySelector from '../../components/CategorySelector';
 import CategoryPicker from '../../components/CategoryPicker';
 import { FaShare, FaCopy, FaEnvelope } from 'react-icons/fa';
 
@@ -29,7 +28,7 @@ const EventDetails = () => {
   const [pendingEventId, setPendingEventId] = useState(null);
   const [payingEventId, setPayingEventId] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [updatingCategory, setUpdatingCategory] = useState(false);
 
   // Event Incharge permissions (per-event)
   const [inchargeAssignment, setInchargeAssignment] = useState(null);
@@ -103,6 +102,7 @@ const EventDetails = () => {
         console.log('✅ Student API response:', response);
         loadedEvent = response.data;
         setEvent(loadedEvent);
+        setSelectedCategory(loadedEvent?.selectedCategory || '');
       } else {
         // Use dedicated event details endpoint for other roles (includes proper access checks)
         console.log('🌐 Using event details API for role:', user?.role);
@@ -111,6 +111,7 @@ const EventDetails = () => {
         if (!eventData) throw new Error('Event not found');
         loadedEvent = eventData;
         setEvent(loadedEvent);
+        setSelectedCategory('');
       }
 
       console.log('✅ Event details loaded successfully');
@@ -537,6 +538,47 @@ const EventDetails = () => {
       
       alert(`Registration failed: ${errorMessage}`);
       setIsRegistering(false);
+    }
+  };
+
+  // Backfill/update selected category for an already-registered student
+  const handleUpdateSelectedCategory = async () => {
+    try {
+      if (!event?.categoriesAvailable || !event.categoriesAvailable.trim()) return;
+      const trimmed = selectedCategory?.trim() || '';
+      if (!trimmed) {
+        alert('Please complete your category selection first.');
+        return;
+      }
+
+      setUpdatingCategory(true);
+      const token = localStorage.getItem('authToken');
+      if (!token) throw new Error('Missing auth token. Please login again.');
+
+      const resp = await fetch(
+        `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/events/${eventId}/register/selected-category`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ selectedCategory: trimmed })
+        }
+      );
+
+      const data = await resp.json();
+      if (!resp.ok || !data?.success) {
+        throw new Error(data?.message || 'Failed to update selected category');
+      }
+
+      alert('✅ Category saved successfully.');
+      await loadEventDetails();
+    } catch (e) {
+      console.error('❌ Failed to update selected category:', e);
+      alert(e?.message || 'Failed to update selected category');
+    } finally {
+      setUpdatingCategory(false);
     }
   };
 
@@ -1114,6 +1156,30 @@ const EventDetails = () => {
                         </div>
                       </div>
                     </div>
+
+                    {/* If event has categories and registration is missing selectedCategory, allow backfill via picker */}
+                    {event.categoriesAvailable && event.categoriesAvailable.trim() && (!event.selectedCategory || !event.selectedCategory.trim()) && (
+                      <div className="bg-white border-2 border-amber-200 rounded-xl p-5 shadow-sm">
+                        <div className="mb-3">
+                          <p className="text-sm font-bold text-gray-900">Select your category (required)</p>
+                          <p className="text-xs text-gray-600">Your registration is missing category details. Please choose from the options below and save.</p>
+                        </div>
+
+                        <CategoryPicker
+                          categoriesText={event.categoriesAvailable}
+                          value={selectedCategory}
+                          onChange={(value) => setSelectedCategory(value)}
+                        />
+
+                        <Button
+                          onClick={handleUpdateSelectedCategory}
+                          disabled={updatingCategory || !selectedCategory || !selectedCategory.trim()}
+                          className="w-full mt-4 bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {updatingCategory ? 'Saving...' : 'Save Category'}
+                        </Button>
+                      </div>
+                    )}
                     
                     {/* Show unregister button if user can still unregister */}
                     {canUnregister() && (
@@ -1140,13 +1206,6 @@ const EventDetails = () => {
                               Choose your age group, stroke/event type, and distance
                             </p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setShowCategoryModal(true)}
-                            className="text-xs text-blue-600 hover:text-blue-800 font-medium px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-                          >
-                            📋 View All
-                          </button>
                         </div>
                         
                         <CategoryPicker
@@ -1401,58 +1460,7 @@ const EventDetails = () => {
         />
       )}
 
-      {/* Categories Modal */}
-      {showCategoryModal && event?.categoriesAvailable && event.categoriesAvailable.trim() && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">Categories Available</h2>
-                <p className="text-sm text-gray-600 mt-1">Select your category from the options below</p>
-              </div>
-              <button
-                onClick={() => setShowCategoryModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="px-6 py-4 overflow-y-auto flex-1">
-              <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-5 border border-blue-200">
-                <CategorySelector
-                  value={event.categoriesAvailable}
-                  onChange={() => {}} // No-op in read-only mode
-                  readOnly={true}
-                />
-              </div>
-              <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-gray-700 mb-2">
-                  <span className="font-semibold text-blue-900">How to use:</span>
-                </p>
-                <ol className="text-sm text-gray-700 space-y-1 list-decimal list-inside">
-                  <li>Review the categories above</li>
-                  <li>Select one item from each section (if applicable)</li>
-                  <li>Copy the format: <span className="font-mono bg-white px-2 py-1 rounded">Section 1 | Section 2 | Section 3</span></li>
-                  <li>Paste it in the registration form</li>
-                </ol>
-                <p className="text-xs text-gray-600 mt-3 italic">
-                  Note: Category selection is optional. You can still register without it if it doesn't apply to you.
-                </p>
-              </div>
-            </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
-              <button
-                onClick={() => setShowCategoryModal(false)}
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Categories modal removed per UX requirement (no "View All" for athletes). */}
     </div>
   );
 };

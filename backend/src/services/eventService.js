@@ -450,6 +450,7 @@ class EventService {
           maxParticipants: true,
           currentParticipants: true,
           eventFee: true,
+          categoriesAvailable: true,
           studentFeeEnabled: true,
           studentFeeAmount: true,
           studentFeeUnit: true,

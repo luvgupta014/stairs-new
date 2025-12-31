@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getPublicEventByUniqueId } from '../../api';
 import Spinner from '../../components/Spinner';
 import Footer from '../../components/Footer';
+import CategorySelector from '../../components/CategorySelector';
 import logo from '../../assets/logo.png';
 import { FaCalendar, FaMapMarkerAlt, FaUsers, FaTrophy, FaClock, FaArrowRight, FaLock, FaGlobe, FaRupeeSign, FaDumbbell } from 'react-icons/fa';
 
@@ -383,6 +384,20 @@ const PublicEventDetails = () => {
                       <div className="flex-1">
                         <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">Registration Fee</p>
                         <p className="text-2xl font-bold text-gray-900">₹{event.studentFeeAmount}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Categories Available (Public) */}
+                  {event.categoriesAvailable && event.categoriesAvailable.trim() && (
+                    <div className="pt-6 border-t border-gray-100">
+                      <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Categories Available</p>
+                      <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-5 border border-blue-200">
+                        <CategorySelector
+                          value={event.categoriesAvailable}
+                          onChange={() => {}}
+                          readOnly={true}
+                        />
                       </div>
                     </div>
                   )}
