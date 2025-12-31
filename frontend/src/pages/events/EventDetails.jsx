@@ -6,6 +6,7 @@ import Spinner from '../../components/Spinner';
 import Button from '../../components/Button';
 import BackButton from '../../components/BackButton';
 import CheckoutModal from '../../components/CheckoutModal';
+import CategorySelector from '../../components/CategorySelector';
 import CategoryPicker from '../../components/CategoryPicker';
 import { FaShare, FaCopy, FaEnvelope } from 'react-icons/fa';
 
