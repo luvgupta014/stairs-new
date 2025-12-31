@@ -871,7 +871,7 @@ const EventDetails = () => {
                     </pre>
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    Please select your category from the options above during registration.
+                    Please select your category from the options above during registration. If category information is not available or doesn't apply to you, you can still register without it.
                   </p>
                 </div>
               )}
@@ -1062,7 +1062,7 @@ const EventDetails = () => {
                     {event.categoriesAvailable && (
                       <div>
                         <label htmlFor="selectedCategory" className="block text-sm font-medium text-gray-700 mb-1">
-                          Selected Category <span className="text-red-500">*</span>
+                          Selected Category <span className="text-gray-500 text-xs">(Optional but recommended)</span>
                         </label>
                         <input
                           type="text"
@@ -1071,10 +1071,9 @@ const EventDetails = () => {
                           onChange={(e) => setSelectedCategory(e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                           placeholder="e.g., Group II (13-14) | Freestyle | 50m"
-                          required
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                          Please select your category from the event details above and enter it here.
+                          Please select your category from the event details above and enter it here. This helps organizers manage the event better.
                         </p>
                         <button
                           type="button"
@@ -1087,7 +1086,7 @@ const EventDetails = () => {
                     )}
                     <Button
                       onClick={handleRegister}
-                      disabled={isRegistering || (event.categoriesAvailable && !selectedCategory.trim())}
+                      disabled={isRegistering}
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                     >
                       {isRegistering ? 'Registering...' : 'Register Now'}

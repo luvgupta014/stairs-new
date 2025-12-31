@@ -228,17 +228,19 @@ const ParticipantsModal = ({
                     </div>
 
                     {/* Selected Category */}
-                    {participant.selectedCategory && (
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        <div className="flex items-start">
-                          <FaMedal className="text-blue-500 w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="text-sm font-medium text-gray-700">Selected Category:</p>
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="flex items-start">
+                        <FaMedal className="text-blue-500 w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-700">Selected Category:</p>
+                          {participant.selectedCategory ? (
                             <p className="text-sm text-gray-900 font-semibold mt-1">{participant.selectedCategory}</p>
-                          </div>
+                          ) : (
+                            <p className="text-sm text-gray-500 italic mt-1">Not specified</p>
+                          )}
                         </div>
                       </div>
-                    )}
+                    </div>
 
                     {/* Additional Information */}
                     {participant.student?.bio && (

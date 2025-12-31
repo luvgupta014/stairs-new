@@ -5,6 +5,7 @@ import Spinner from '../../components/Spinner';
 import BackButton from '../../components/BackButton';
 import GoogleMapsPlacesAutocomplete from '../../components/GoogleMapsPlacesAutocomplete';
 import { FaMapMarkerAlt, FaSave, FaTimes } from 'react-icons/fa';
+import CategorySelector from '../../components/CategorySelector';
 
 const EventEdit = () => {
   const { eventId } = useParams();
@@ -440,21 +441,13 @@ const EventEdit = () => {
 
           {/* Categories Available */}
           <div>
-            <label htmlFor="categoriesAvailable" className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Categories Available (Optional)
             </label>
-            <textarea
-              id="categoriesAvailable"
-              name="categoriesAvailable"
-              rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-              placeholder="List available categories for this event. Example format:&#10;Age Groups: Group I (11-12), Group II (13-14), Group III (15-16)&#10;Strokes: Freestyle, Backstroke, Breaststroke, Butterfly&#10;Distances: 25m, 50m, 100m"
+            <CategorySelector
               value={formData.categoriesAvailable}
-              onChange={handleChange}
+              onChange={(value) => setFormData(prev => ({ ...prev, categoriesAvailable: value }))}
             />
-            <p className="text-xs text-gray-500 mt-1">
-              This information will be displayed to athletes during registration. They can copy and paste their selected category.
-            </p>
           </div>
 
           {/* Submit Buttons */}
