@@ -235,10 +235,10 @@ const EventDetails = () => {
 
       // Create payment order with selectedCategory if available
       setPayingEventId(eventId);
-      const orderData = event.categoriesAvailable && selectedCategory.trim() 
+      const paymentData = event.categoriesAvailable && selectedCategory.trim() 
         ? { selectedCategory: selectedCategory.trim() }
         : {};
-      const orderResponse = await createStudentEventPaymentOrder(eventId, orderData);
+      const orderResponse = await createStudentEventPaymentOrder(eventId, paymentData);
       
       if (!orderResponse.success || !orderResponse.data) {
         throw new Error(orderResponse.message || 'Failed to create payment order');
