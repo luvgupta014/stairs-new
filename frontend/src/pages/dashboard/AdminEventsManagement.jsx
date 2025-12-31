@@ -1743,7 +1743,10 @@ const AdminEventsManagement = () => {
         className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
         onClick={handleBackdropClick}
       >
-        <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col">
+        <div 
+          className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
           {/* Header - Fixed */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-5 rounded-t-xl flex-shrink-0">
             <div className="flex items-center justify-between">
@@ -2100,11 +2103,12 @@ const AdminEventsManagement = () => {
                         <input
                           type="text"
                           name="name"
-                          value={editEventForm.name}
+                          value={editEventForm.name || ''}
                           onChange={handleEditEventChange}
+                          disabled={editSaving}
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editValidation?.errors?.name ? 'border-red-300' : 'border-gray-300'
-                          }`}
+                          } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                         />
                         {editValidation?.errors?.name && (
                           <div className="mt-1 text-xs text-red-600">{editValidation.errors.name}</div>
@@ -2269,10 +2273,16 @@ const AdminEventsManagement = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Categories Available (Optional)
                     </label>
-                    <CategorySelector
-                      value={editEventForm.categoriesAvailable || ''}
-                      onChange={(value) => setEditEventForm(prev => ({ ...prev, categoriesAvailable: value }))}
-                    />
+                    <div className={editSaving ? 'pointer-events-none opacity-60' : ''}>
+                      <CategorySelector
+                        value={editEventForm.categoriesAvailable || ''}
+                        onChange={(value) => {
+                          if (!editSaving) {
+                            setEditEventForm(prev => ({ ...prev, categoriesAvailable: value }));
+                          }
+                        }}
+                      />
+                    </div>
                     <p className="text-xs text-gray-500 mt-2">
                       Define age groups, strokes/event types, and distances for this event. Athletes can select from these during registration.
                     </p>
