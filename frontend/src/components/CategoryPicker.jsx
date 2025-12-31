@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaChevronDown, FaCheck, FaInfoCircle } from 'react-icons/fa';
+import { FaChevronDown, FaCheck } from 'react-icons/fa';
 
 /**
  * CategoryPicker Component - Redesigned for better UX
@@ -64,7 +64,6 @@ const CategoryPicker = ({
 
   const [selected, setSelected] = useState(() => parseCurrentValue(value));
   const [isOpen, setIsOpen] = useState({ ageGroup: false, stroke: false, distance: false });
-  const [manualInput, setManualInput] = useState(false);
 
   useEffect(() => {
     const parsed = parseCurrentValue(value);
@@ -79,16 +78,24 @@ const CategoryPicker = ({
     return parts.join(' | ');
   };
 
+  const isSelectionComplete = (sel) => {
+    const needsAge = categories.ageGroups.length > 0;
+    const needsStroke = categories.strokes.length > 0;
+    const needsDistance = categories.distances.length > 0;
+    return (!needsAge || !!sel.ageGroup) && (!needsStroke || !!sel.stroke) && (!needsDistance || !!sel.distance);
+  };
+
   const handleSelectionChange = (type, selectedValue) => {
     const newSelected = { ...selected, [type]: selectedValue };
     setSelected(newSelected);
-    
-    const categoryString = buildCategoryString(
-      newSelected.ageGroup,
-      newSelected.stroke,
-      newSelected.distance
-    );
-    
+
+    // Only emit a final selectedCategory when ALL required sections are selected.
+    // This prevents partial selections from being saved as "selectedCategory" in registrations.
+    const complete = isSelectionComplete(newSelected);
+    const categoryString = complete
+      ? buildCategoryString(newSelected.ageGroup, newSelected.stroke, newSelected.distance)
+      : '';
+
     onChange(categoryString);
     setIsOpen({ ...isOpen, [type]: false });
   };
@@ -105,39 +112,7 @@ const CategoryPicker = ({
     );
   }
 
-  if (manualInput) {
-    return (
-      <div className={className}>
-        <div className="flex items-center justify-between mb-3">
-          <label className="block text-sm font-semibold text-gray-700">
-            Enter Category Manually
-          </label>
-          <button
-            type="button"
-            onClick={() => setManualInput(false)}
-            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-          >
-            ← Use Selector
-          </button>
-        </div>
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm"
-          placeholder="e.g., Group II (13-14) | Freestyle | 50m"
-        />
-        <p className="mt-2 text-xs text-gray-500 flex items-center">
-          <FaInfoCircle className="mr-1" />
-          Format: Age Group | Stroke/Event Type | Distance
-        </p>
-      </div>
-    );
-  }
-
-  const isComplete = (categories.ageGroups.length === 0 || selected.ageGroup) &&
-                     (categories.strokes.length === 0 || selected.stroke) &&
-                     (categories.distances.length === 0 || selected.distance);
+  const isComplete = isSelectionComplete(selected);
 
   return (
     <div className={`space-y-4 ${className}`}>
@@ -339,18 +314,6 @@ const CategoryPicker = ({
           </div>
         </div>
       )}
-
-      {/* Manual input option - Better styling */}
-      <div className="pt-2 border-t border-gray-200">
-        <button
-          type="button"
-          onClick={() => setManualInput(true)}
-          className="text-sm text-gray-600 hover:text-blue-600 font-medium flex items-center"
-        >
-          <FaInfoCircle className="mr-2" />
-          Need a custom category? Enter manually
-        </button>
-      </div>
     </div>
   );
 };

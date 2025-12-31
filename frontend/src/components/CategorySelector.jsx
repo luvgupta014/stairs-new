@@ -179,6 +179,16 @@ const CategorySelector = ({
   // Common strokes for swimming
   const commonStrokes = ['Freestyle', 'Backstroke', 'Breaststroke', 'Butterfly', 'Individual Medley'];
   const commonDistances = ['25m', '50m', '100m', '200m', '400m', '800m', '1500m'];
+  const commonAgeGroups = [
+    'U-8',
+    'U-10',
+    'U-12',
+    'U-14',
+    'U-16',
+    'U-18',
+    'Senior (18+)',
+    'Open'
+  ];
 
   // Read-only display mode
   if (readOnly) {
@@ -348,6 +358,26 @@ const CategorySelector = ({
         <p className="text-xs text-gray-500 mb-2">
           💡 You can add any custom {finalAgeGroupLabel.toLowerCase()}. Examples: "Group I (11-12)", "U-14", "Senior (18+)", "Open Category", or any format you need
         </p>
+        {/* Quick add buttons for common age groups */}
+        <div className="mb-2 flex flex-wrap gap-2">
+          {commonAgeGroups.map((grp) => (
+            !categories.ageGroups.includes(grp) && (
+              <button
+                key={grp}
+                type="button"
+                onClick={() => {
+                  setCategories(prev => ({
+                    ...prev,
+                    ageGroups: [...prev.ageGroups, grp]
+                  }));
+                }}
+                className="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
+              >
+                + {grp}
+              </button>
+            )
+          ))}
+        </div>
         {categories.ageGroups.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {categories.ageGroups.map((group, index) => (
