@@ -286,7 +286,7 @@ const EventCard = ({
                   >
                     {event.currentParticipants >= event.maxParticipants
                       ? 'Full'
-                      : (hasCategories ? 'Select Category' : 'Register')}
+                      : 'Register'}
                   </button>
                 )
               )}

@@ -573,8 +573,10 @@ const EventDetails = () => {
         throw new Error(data?.message || 'Failed to update selected category');
       }
 
+      // Update local event state immediately so UI doesn't re-prompt
+      setEvent((prev) => (prev ? { ...prev, selectedCategory: trimmed } : prev));
+      setSelectedCategory(trimmed);
       alert('✅ Category saved successfully.');
-      await loadEventDetails();
     } catch (e) {
       console.error('❌ Failed to update selected category:', e);
       alert(e?.message || 'Failed to update selected category');
