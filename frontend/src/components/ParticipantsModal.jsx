@@ -239,7 +239,6 @@ const ParticipantsModal = ({
                         </div>
                       </div>
                     )}
-                  </div>
 
                     {/* Additional Information */}
                     {participant.student?.bio && (
@@ -257,6 +256,7 @@ const ParticipantsModal = ({
                         </p>
                       </div>
                     )}
+                  </div>
                   </div>
                 ))}
               </div>
