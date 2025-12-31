@@ -1368,7 +1368,12 @@ const AdminEventsManagement = () => {
     setIfChanged('address', next.address?.trim() || '', original.address || '');
     setIfChanged('city', next.city?.trim() || '', original.city || '');
     setIfChanged('state', next.state?.trim() || '', original.state || '');
-    setIfChanged('categoriesAvailable', next.categoriesAvailable?.trim() || '', original.categoriesAvailable || '');
+    // Handle categoriesAvailable: normalize empty strings to null for comparison
+    const nextCat = next.categoriesAvailable?.trim() || null;
+    const origCat = original.categoriesAvailable?.trim() || null;
+    if (nextCat !== origCat) {
+      patch.categoriesAvailable = nextCat || null; // Send null instead of empty string
+    }
 
     // maxParticipants
     const nextMax = next.maxParticipants === '' ? null : Number(next.maxParticipants);
@@ -1406,7 +1411,8 @@ const AdminEventsManagement = () => {
       address: ev.address || '',
       city: ev.city || '',
       state: ev.state || '',
-      maxParticipants: ev.maxParticipants ?? ''
+      maxParticipants: ev.maxParticipants ?? '',
+      categoriesAvailable: ev.categoriesAvailable || ''
     });
     setEditErr('');
     setEditMsg('');
@@ -1501,12 +1507,57 @@ const AdminEventsManagement = () => {
       }
 
       const updated = res.data || res;
-      setEditMsg('Event updated successfully.');
+      setEditMsg('Event updated successfully. Refreshing event details...');
+
+      // Normalize categoriesAvailable: empty string becomes null
+      const normalizedUpdated = {
+        ...updated,
+        categoriesAvailable: updated.categoriesAvailable && updated.categoriesAvailable.trim() 
+          ? updated.categoriesAvailable.trim() 
+          : null
+      };
 
       // Update in-memory lists so UI is instantly consistent
-      setEvents((prev) => prev.map((x) => (x.id === ev.id ? { ...x, ...updated } : x)));
-      setEventDetailsModal((prev) => ({ ...prev, event: { ...(prev.event || {}), ...updated } }));
-      setEditEventOriginal((prev) => ({ ...(prev || {}), ...updated }));
+      setEvents((prev) => prev.map((x) => (x.id === ev.id ? { ...x, ...normalizedUpdated } : x)));
+      setEventDetailsModal((prev) => ({ ...prev, event: { ...(prev.event || {}), ...normalizedUpdated } }));
+      setEditEventOriginal((prev) => ({ ...(prev || {}), ...normalizedUpdated }));
+      
+      // Update edit form with fresh data
+      setEditEventForm((prev) => ({
+        ...prev,
+        ...Object.keys(patch).reduce((acc, key) => {
+          if (key === 'categoriesAvailable') {
+            acc[key] = normalizedUpdated.categoriesAvailable || '';
+          } else if (normalizedUpdated[key] !== undefined) {
+            acc[key] = normalizedUpdated[key];
+          }
+          return acc;
+        }, {})
+      }));
+      
+      // Refresh event from API to get latest data including categoriesAvailable
+      try {
+        const { getEventById } = await import('../../api');
+        const freshEventResponse = await getEventById(ev.id);
+        if (freshEventResponse?.success && freshEventResponse?.data) {
+          const freshEvent = freshEventResponse.data;
+          // Update all state with fresh data
+          setEvents((prev) => prev.map((x) => (x.id === ev.id ? { ...x, ...freshEvent } : x)));
+          setEventDetailsModal((prev) => ({ ...prev, event: { ...(prev.event || {}), ...freshEvent } }));
+          setEditEventOriginal((prev) => ({ ...(prev || {}), ...freshEvent }));
+          setEditEventForm((prev) => ({
+            ...prev,
+            categoriesAvailable: freshEvent.categoriesAvailable || ''
+          }));
+        }
+      } catch (refreshError) {
+        console.warn('Failed to refresh event after save:', refreshError);
+      }
+      
+      // Clear success message after a delay
+      setTimeout(() => {
+        setEditMsg('Event updated successfully.');
+      }, 2000);
     } catch (error) {
       setEditErr(getErrorMessage(error, 'Failed to update event.'));
     } finally {
