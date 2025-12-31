@@ -96,8 +96,8 @@ const CategorySelector = ({
 
   // Update when value prop changes
   useEffect(() => {
-    if (value) {
-      setCategories(parseCategories(value));
+    if (value !== undefined && value !== null) {
+      setCategories(parseCategories(value || ''));
     }
   }, [value]);
 

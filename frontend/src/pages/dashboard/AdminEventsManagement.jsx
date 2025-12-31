@@ -2269,24 +2269,26 @@ const AdminEventsManagement = () => {
                   </div>
 
                   {/* Categories Available */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Categories Available (Optional)
-                    </label>
-                    <div className={editSaving ? 'pointer-events-none opacity-60' : ''}>
-                      <CategorySelector
-                        value={editEventForm.categoriesAvailable || ''}
-                        onChange={(value) => {
-                          if (!editSaving) {
-                            setEditEventForm(prev => ({ ...prev, categoriesAvailable: value }));
-                          }
-                        }}
-                      />
+                  {editEventForm && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Categories Available (Optional)
+                      </label>
+                      <div className={editSaving ? 'pointer-events-none opacity-60' : ''}>
+                        <CategorySelector
+                          value={editEventForm.categoriesAvailable || ''}
+                          onChange={(value) => {
+                            if (!editSaving && editEventForm) {
+                              setEditEventForm(prev => ({ ...prev, categoriesAvailable: value }));
+                            }
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Define age groups, strokes/event types, and distances for this event. Athletes can select from these during registration.
+                      </p>
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Define age groups, strokes/event types, and distances for this event. Athletes can select from these during registration.
-                    </p>
-                  </div>
+                  )}
 
                   <div className="flex items-center justify-end gap-3 pt-2">
                       <button

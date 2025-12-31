@@ -902,28 +902,42 @@ const EventDetails = () => {
                 </dl>
               </div>
 
-              {/* Categories Available - Always show section */}
-              <div className="px-6 py-4 border-t border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900 mb-3">Categories Available</h3>
+              {/* Categories Available - Modern Display */}
+              <div className="px-6 py-5 border-t border-gray-200 bg-gradient-to-br from-gray-50 to-blue-50">
+                <div className="flex items-center mb-4">
+                  <div className="w-1 h-6 bg-blue-600 rounded-full mr-3"></div>
+                  <h3 className="text-lg font-bold text-gray-900">Available Categories</h3>
+                </div>
                 {event.categoriesAvailable && event.categoriesAvailable.trim() ? (
                   <>
-                    <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-5 border-2 border-blue-300">
+                    <div className="bg-white rounded-xl p-6 border-2 border-blue-200 shadow-sm">
                       <CategorySelector
                         value={event.categoriesAvailable}
                         onChange={() => {}} // No-op in read-only mode
                         readOnly={true}
                       />
                     </div>
-                    <div className="mt-3 bg-amber-50 border-2 border-amber-300 rounded-md p-3">
-                      <p className="text-sm font-semibold text-amber-900 mb-1">⚠️ Category Selection Required</p>
-                      <p className="text-xs text-amber-800">
-                        You <strong>must</strong> select your category (Age Group + Stroke + Distance) during registration. 
-                        Format: <span className="font-mono bg-white px-2 py-1 rounded">Group II (13-14) | Freestyle | 50m</span>
-                      </p>
+                    <div className="mt-4 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg p-4">
+                      <div className="flex items-start">
+                        <div className="flex-shrink-0">
+                          <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
+                            <span className="text-white text-sm font-bold">!</span>
+                          </div>
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm font-semibold text-blue-900 mb-1">Category Selection Required</p>
+                          <p className="text-xs text-blue-800">
+                            You'll need to select your category during registration. The format is: 
+                            <span className="font-mono bg-white px-2 py-1 rounded ml-1 border border-blue-200">
+                              Age Group | Stroke/Event Type | Distance
+                            </span>
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </>
                 ) : (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <div className="bg-white border border-gray-200 rounded-lg p-4">
                     <p className="text-sm text-gray-600">
                       <span className="font-medium">No categories specified</span> for this event. You can register without selecting a category.
                     </p>
@@ -1113,48 +1127,45 @@ const EventDetails = () => {
                     )}
                   </div>
                 ) : canRegister() ? (
-                  <div className="space-y-3">
-                    {/* Category Selection - MANDATORY when categories are available */}
+                  <div className="space-y-4">
+                    {/* Category Selection - Modern, Clean Design */}
                     {event.categoriesAvailable && event.categoriesAvailable.trim() ? (
-                      <div className="bg-red-50 border-2 border-red-400 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <label className="block text-sm font-bold text-gray-900">
-                            Selected Category (Age Group + Stroke + Distance) <span className="text-red-600 text-lg">* REQUIRED</span>
-                          </label>
+                      <div className="bg-white border-2 border-blue-200 rounded-xl p-5 shadow-sm">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <label className="block text-base font-bold text-gray-900 mb-1">
+                              Select Your Category
+                            </label>
+                            <p className="text-xs text-gray-600">
+                              Choose your age group, stroke/event type, and distance
+                            </p>
+                          </div>
                           <button
                             type="button"
                             onClick={() => setShowCategoryModal(true)}
-                            className="text-xs text-blue-700 hover:text-blue-900 underline font-medium"
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
                           >
-                            📋 View All Categories
+                            📋 View All
                           </button>
                         </div>
+                        
                         <CategoryPicker
                           categoriesText={event.categoriesAvailable}
                           value={selectedCategory}
                           onChange={(value) => setSelectedCategory(value)}
                         />
+                        
                         {!selectedCategory || !selectedCategory.trim() ? (
-                          <div className="mt-3 p-3 bg-red-100 border-2 border-red-400 rounded-md">
-                            <p className="text-sm text-red-800 font-bold">
-                              ⚠️ Category selection is MANDATORY. Please select your category from the dropdowns above before registering.
+                          <div className="mt-4 p-3 bg-amber-50 border-l-4 border-amber-400 rounded-r-lg">
+                            <p className="text-sm text-amber-800 flex items-start">
+                              <span className="mr-2">⚠️</span>
+                              <span>Please complete your category selection above to proceed with registration.</span>
                             </p>
                           </div>
-                        ) : (
-                          <div className="mt-3 p-3 bg-green-100 border-2 border-green-400 rounded-md">
-                            <p className="text-sm text-green-800 font-semibold">
-                              ✓ Category selected: <span className="font-mono bg-white px-2 py-1 rounded">{selectedCategory}</span>
-                            </p>
-                          </div>
-                        )}
-                        <p className="text-xs text-gray-700 mt-3 font-medium">
-                          💡 Format: <span className="font-mono bg-white px-2 py-1 rounded border">Age Group | Stroke/Event Type | Distance</span>
-                          <br />
-                          Example: <span className="font-mono bg-white px-2 py-1 rounded border">Group II (13-14) | Freestyle | 50m</span>
-                        </p>
+                        ) : null}
                       </div>
                     ) : (
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                         <p className="text-sm text-gray-600">
                           💡 No categories specified for this event. You can proceed with registration.
                         </p>
