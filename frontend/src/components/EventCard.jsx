@@ -12,6 +12,7 @@ const EventCard = ({
   onAction = () => {} 
 }) => {
   if (!event) return null;
+  const hasCategories = !!(event.categoriesAvailable && event.categoriesAvailable.trim());
 
   const parseCategoryPreview = (text) => {
     if (!text || typeof text !== 'string' || !text.trim()) return [];
@@ -278,11 +279,14 @@ const EventCard = ({
                 // Show register button if user is not registered and registration is open
                 isRegistrationOpen() && (
                   <button
-                    onClick={() => handleAction('register')}
+                    onClick={() => handleAction(hasCategories ? 'view' : 'register')}
                     disabled={event.currentParticipants >= event.maxParticipants}
                     className="bg-green-600 text-white px-3 py-2 rounded-md text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title={hasCategories ? 'Select your category on the event details page to register' : 'Register for this event'}
                   >
-                    {event.currentParticipants >= event.maxParticipants ? 'Full' : 'Register'}
+                    {event.currentParticipants >= event.maxParticipants
+                      ? 'Full'
+                      : (hasCategories ? 'Select Category' : 'Register')}
                   </button>
                 )
               )}

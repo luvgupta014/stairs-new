@@ -303,6 +303,12 @@ const Events = () => {
       if (user?.role === 'STUDENT') {
         const eventResponse = await getStudentEventDetails(eventId);
         const eventDetails = eventResponse.data || eventResponse;
+        const requiresCategorySelection = !!(eventDetails?.categoriesAvailable && eventDetails.categoriesAvailable.trim());
+        if (requiresCategorySelection) {
+          alert('This event requires selecting a category. Please select your category on the event details page to continue.');
+          navigate(`/events/${eventId}`);
+          return;
+        }
         const requiresPayment = !!(eventDetails.createdByAdmin && eventDetails.studentFeeEnabled && (eventDetails.studentFeeAmount || 0) > 0);
 
         if (requiresPayment) {
@@ -418,6 +424,12 @@ const Events = () => {
         handleEventView(event.id);
         break;
       case 'register':
+        // Production safety: if categories exist, block quick-register and force details flow
+        if (user?.role === 'STUDENT' && event?.categoriesAvailable && event.categoriesAvailable.trim()) {
+          alert('This event requires selecting a category. Please select your category on the event details page to continue.');
+          handleEventView(event.id);
+          return;
+        }
         handleEventRegister(event.id);
         break;
       case 'unregister':

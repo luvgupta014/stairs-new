@@ -5210,12 +5210,8 @@ router.get('/events/:eventId/results/sample-sheet', authenticate, requireAdmin, 
       }
     });
 
-    // Build an Excel sheet using array-of-arrays so header/instructions are clean
-    const rows = [
-      ['studentId*', 'studentUID', 'name', 'selectedCategory', 'score*', 'remarks'],
-      ['REQUIRED', 'OPTIONAL', 'OPTIONAL', 'AUTO (do not edit)', 'REQUIRED', 'OPTIONAL'],
-      ['Student DB ID', 'STAIRS UID', 'Student Name', 'Group II (13-14) | Freestyle | 50m', 'Numeric score', 'Any notes']
-    ];
+    // Clean Results sheet: header row + participant rows only (no extra "instructions" rows)
+    const rows = [['studentId', 'studentUID', 'name', 'selectedCategory', 'score', 'remarks']];
 
     if (registrations.length > 0) {
       registrations.forEach((reg) => {
@@ -5229,7 +5225,7 @@ router.get('/events/:eventId/results/sample-sheet', authenticate, requireAdmin, 
         ]);
       });
     } else {
-      // No registrations yet: include a few blank rows so admin understands format
+      // No registrations yet: include a few blank rows so the file is still editable immediately
       for (let i = 0; i < 10; i++) {
         rows.push(['', '', '', '', '', '']);
       }
@@ -5246,6 +5242,23 @@ router.get('/events/:eventId/results/sample-sheet', authenticate, requireAdmin, 
       { wch: 28 }  // remarks
     ];
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Results');
+
+    // Add an Instructions sheet (keeps Results clean)
+    const instructionRows = [
+      ['Instructions'],
+      [''],
+      ['Required columns:', 'studentId, score'],
+      ['Do not edit:', 'selectedCategory is auto-filled from registration (if available)'],
+      ['Optional columns:', 'studentUID, name, remarks'],
+      [''],
+      ['Notes:'],
+      ['- Keep "studentId" exactly as provided (do not change it).'],
+      ['- Enter numeric values in "score".'],
+      ['- You can leave "remarks" blank.'],
+    ];
+    const instrSheet = XLSX.utils.aoa_to_sheet(instructionRows);
+    instrSheet['!cols'] = [{ wch: 22 }, { wch: 80 }];
+    XLSX.utils.book_append_sheet(workbook, instrSheet, 'Instructions');
 
     // Add a "Categories" sheet for quick reference
     const catText = (eventMeta?.categoriesAvailable || '').trim();
