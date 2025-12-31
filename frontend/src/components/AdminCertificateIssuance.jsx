@@ -57,7 +57,15 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
       }
 
       if (participantsResponse.status === 'fulfilled' && participantsResponse.value?.success) {
-        setParticipants(participantsResponse.value.data.registrations || []);
+        // Backend shape: { success: true, data: { event, participants } }
+        const pv = participantsResponse.value;
+        const list =
+          pv?.data?.participants ||
+          pv?.data?.registrations ||
+          pv?.participants ||
+          pv?.registrations ||
+          [];
+        setParticipants(Array.isArray(list) ? list : []);
       } else {
         setParticipants([]);
       }

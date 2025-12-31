@@ -2180,6 +2180,20 @@ const AdminEventsManagement = () => {
                               {getStatusBadge(participant)}
                             </div>
 
+                            {/* Selected Category */}
+                            <div className="mb-3">
+                              <div className="text-xs text-gray-600 mb-1 font-medium">Selected Category</div>
+                              {participant.selectedCategory && String(participant.selectedCategory).trim() ? (
+                                <div className="inline-block text-sm text-blue-900 bg-blue-50 border border-blue-200 rounded-md px-3 py-2 font-semibold">
+                                  {participant.selectedCategory}
+                                </div>
+                              ) : (
+                                <div className="inline-block text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 italic">
+                                  Not specified
+                                </div>
+                              )}
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3 pt-3 border-t border-gray-200">
                               <div className="flex items-center">
                                 <svg className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -2509,7 +2523,9 @@ const AdminEventsManagement = () => {
                     Upload Excel/CSV file with student results. System will automatically update scores and calculate winners.
                   </p>
                   <p className="text-sm text-gray-500 mb-4">
-                    <strong>File Format:</strong> Excel (.xlsx, .xls) or CSV with columns: studentId, name, score
+                    <strong>File Format:</strong> Excel (.xlsx, .xls) or CSV. Recommended columns:
+                    <span className="font-mono ml-2">studentId, studentUID, name, selectedCategory, score, remarks</span>
+                    <span className="ml-2">(studentId + score required)</span>
                   </p>
                   <div className="mt-3">
                     <button

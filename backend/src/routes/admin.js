@@ -5186,76 +5186,84 @@ router.get('/events/:eventId/results/sample-sheet', authenticate, requireAdmin, 
       return res.status(404).json(errorResponse('Event not found.', 404));
     }
 
-    // Get registered students for this event to populate sample data
+    // Fetch event metadata needed for filename + categories sheet
+    const eventMeta = await prisma.event.findUnique({
+      where: { id: event.id },
+      select: { id: true, uniqueId: true, name: true, categoriesAvailable: true }
+    });
+
+    // Pull ALL registrations (so the template is pre-filled with actual participants)
+    // Note: still safe for typical event sizes; increase cap if needed.
     const registrations = await prisma.eventRegistration.findMany({
       where: { eventId: event.id },
-      include: {
+      orderBy: { registeredAt: 'asc' },
+      take: 5000,
+      select: {
+        selectedCategory: true,
         student: {
           select: {
             id: true,
             name: true,
-            user: {
-              select: {
-                uniqueId: true
-              }
-            }
+            user: { select: { uniqueId: true } }
           }
         }
-      },
-      take: 10 // Limit to 10 sample rows
+      }
     });
 
-    // Create sample data
-    const sampleData = [
-      // Header row
-      { studentId: 'studentId', name: 'name', score: 'score', remarks: 'remarks (optional)' },
-      // Instructions row
-      { studentId: 'REQUIRED', name: 'OPTIONAL', score: 'REQUIRED', remarks: 'OPTIONAL' },
-      { studentId: 'Student Database ID', name: 'Student Name', score: 'Numeric Score', remarks: 'Any notes' }
+    // Build an Excel sheet using array-of-arrays so header/instructions are clean
+    const rows = [
+      ['studentId*', 'studentUID', 'name', 'selectedCategory', 'score*', 'remarks'],
+      ['REQUIRED', 'OPTIONAL', 'OPTIONAL', 'AUTO (do not edit)', 'REQUIRED', 'OPTIONAL'],
+      ['Student DB ID', 'STAIRS UID', 'Student Name', 'Group II (13-14) | Freestyle | 50m', 'Numeric score', 'Any notes']
     ];
 
-    // Add sample student data if available
     if (registrations.length > 0) {
-      registrations.forEach((reg, index) => {
-        sampleData.push({
-          studentId: reg.student.id, // Use actual student ID (database ID)
-          name: reg.student.name || `Student ${index + 1}`,
-          score: (100 - index * 5).toFixed(2), // Sample scores decreasing
-          remarks: index === 0 ? 'Winner' : index === 1 ? 'Runner-up' : ''
-        });
+      registrations.forEach((reg) => {
+        rows.push([
+          reg.student?.id || '',
+          reg.student?.user?.uniqueId || '',
+          reg.student?.name || '',
+          reg.selectedCategory || '',
+          '', // score to be filled by admin
+          ''  // remarks optional
+        ]);
       });
     } else {
-      // Add dummy data if no registrations
-      for (let i = 1; i <= 5; i++) {
-        sampleData.push({
-          studentId: `STU-${String(i).padStart(6, '0')}`,
-          name: `Sample Student ${i}`,
-          score: (100 - i * 5).toFixed(2),
-          remarks: i === 1 ? 'Winner' : i === 2 ? 'Runner-up' : ''
-        });
+      // No registrations yet: include a few blank rows so admin understands format
+      for (let i = 0; i < 10; i++) {
+        rows.push(['', '', '', '', '', '']);
       }
     }
 
-    // Create workbook and worksheet
     const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(sampleData, { skipHeader: false });
-
-    // Set column widths
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
     worksheet['!cols'] = [
-      { wch: 20 }, // studentId
-      { wch: 25 }, // name
-      { wch: 15 }, // score
-      { wch: 30 }  // remarks
+      { wch: 22 }, // studentId
+      { wch: 18 }, // studentUID
+      { wch: 26 }, // name
+      { wch: 40 }, // selectedCategory
+      { wch: 12 }, // score
+      { wch: 28 }  // remarks
     ];
-
-    // Add worksheet to workbook
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Results');
 
-    // Generate buffer
+    // Add a "Categories" sheet for quick reference
+    const catText = (eventMeta?.categoriesAvailable || '').trim();
+    const catRows = [
+      ['Event', eventMeta?.name || ''],
+      ['Event ID', eventMeta?.uniqueId || eventMeta?.id || ''],
+      [''],
+      ['Categories Available (copied from event):'],
+      [catText || 'No categories specified for this event.']
+    ];
+    const catSheet = XLSX.utils.aoa_to_sheet(catRows);
+    catSheet['!cols'] = [{ wch: 30 }, { wch: 80 }];
+    XLSX.utils.book_append_sheet(workbook, catSheet, 'Categories');
+
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
     // Set response headers
-    const filename = `Sample_Result_Sheet_${event.uniqueId || event.id}_${Date.now()}.xlsx`;
+    const filename = `Results_Template_${eventMeta?.uniqueId || eventMeta?.id || event.id}_${Date.now()}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', buffer.length);
