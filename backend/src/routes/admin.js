@@ -1522,6 +1522,7 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
             e.city, e.state, e.latitude, e.longitude, e."startDate", e."endDate",
             e."maxParticipants", e."currentParticipants", e."eventFee", e.status,
             e."adminNotes", e."createdAt", e."updatedAt", e."coachId", e.level,
+            e."categoriesAvailable",
             c.id as "coach_id", c.name as "coach_name", c."primarySport" as "coach_primarySport", c.city as "coach_city",
             u.id as "user_id", u."uniqueId" as "user_uniqueId", u.email as "user_email", u.phone as "user_phone", u.role as "user_role"
           FROM events e
@@ -1582,6 +1583,7 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
             eventFee: row.eventFee ? parseFloat(row.eventFee) : 0,
             status: row.status,
             adminNotes: row.adminNotes,
+            categoriesAvailable: row.categoriesAvailable || null,
             createdAt: row.createdAt,
             updatedAt: row.updatedAt,
             coachId: row.coachId,
@@ -1754,6 +1756,7 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
       eventCategory: event.eventCategory || null,
       status: event.status,
       adminNotes: event.adminNotes,
+      categoriesAvailable: event.categoriesAvailable || null,
       createdAt: event.createdAt,
       paymentSummary: event.paymentSummary || { // Include payment summary from registration orders
         totalAmount: 0,
@@ -2089,6 +2092,7 @@ router.get('/pending-events', authenticate, requireAdmin, async (req, res) => {
       registrationFee: event.eventFee,
       eventFee: event.eventFee,
       status: event.status,
+      categoriesAvailable: event.categoriesAvailable || null,
       createdAt: event.createdAt,
       organizer: {
         id: event.coach?.user?.id,

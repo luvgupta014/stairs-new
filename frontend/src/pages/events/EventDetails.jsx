@@ -114,6 +114,9 @@ const EventDetails = () => {
       }
 
       console.log('✅ Event details loaded successfully');
+      console.log('📋 Event categoriesAvailable:', loadedEvent?.categoriesAvailable);
+      console.log('📋 Event categoriesAvailable type:', typeof loadedEvent?.categoriesAvailable);
+      console.log('📋 Event categoriesAvailable trimmed:', loadedEvent?.categoriesAvailable?.trim());
 
       // Load incharge per-event permissions for management UI
       if (user?.role === 'EVENT_INCHARGE') {
@@ -410,6 +413,19 @@ const EventDetails = () => {
     try {
       setIsRegistering(true);
       console.log('🔄 Starting registration process for event:', eventId);
+      console.log('📋 Current event categoriesAvailable:', event?.categoriesAvailable);
+      console.log('📋 Current selectedCategory:', selectedCategory);
+
+      // STEP 0: Validate category selection FIRST (before any other checks)
+      if (event?.categoriesAvailable && event.categoriesAvailable.trim()) {
+        const trimmedCategory = selectedCategory?.trim() || '';
+        if (!trimmedCategory) {
+          alert('❌ Category selection is MANDATORY for this event.\n\nPlease select your category (Age Group + Stroke + Distance) from the dropdowns above before registering.');
+          setIsRegistering(false);
+          return;
+        }
+        console.log('✅ Category validation passed:', trimmedCategory);
+      }
 
       // STEP 1: Get event details to check if payment is required
       let eventDetails;
@@ -425,7 +441,8 @@ const EventDetails = () => {
           name: eventDetails.name,
           createdByAdmin: eventDetails.createdByAdmin,
           studentFeeEnabled: eventDetails.studentFeeEnabled,
-          studentFeeAmount: eventDetails.studentFeeAmount
+          studentFeeAmount: eventDetails.studentFeeAmount,
+          categoriesAvailable: eventDetails.categoriesAvailable
         });
       } catch (eventError) {
         console.error('❌ Failed to fetch event details:', eventError);
@@ -885,28 +902,34 @@ const EventDetails = () => {
                 </dl>
               </div>
 
-              {/* Categories Available - Always show if data exists */}
-              {event.categoriesAvailable ? (
-                <div className="px-6 py-4 border-t border-gray-200">
-                  <h3 className="text-lg font-medium text-gray-900 mb-3">Categories Available</h3>
-                  {event.categoriesAvailable.trim() ? (
-                    <>
-                      <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-5 border border-blue-200">
-                        <CategorySelector
-                          value={event.categoriesAvailable}
-                          onChange={() => {}} // No-op in read-only mode
-                          readOnly={true}
-                        />
-                      </div>
-                      <p className="text-xs text-gray-600 mt-3 bg-blue-50 border border-blue-200 rounded-md p-2">
-                        <span className="font-medium text-blue-900">💡 Registration Tip:</span> Please select your category from the options above during registration. If category information is not available or doesn't apply to you, you can still register without it.
+              {/* Categories Available - Always show section */}
+              <div className="px-6 py-4 border-t border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900 mb-3">Categories Available</h3>
+                {event.categoriesAvailable && event.categoriesAvailable.trim() ? (
+                  <>
+                    <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-5 border-2 border-blue-300">
+                      <CategorySelector
+                        value={event.categoriesAvailable}
+                        onChange={() => {}} // No-op in read-only mode
+                        readOnly={true}
+                      />
+                    </div>
+                    <div className="mt-3 bg-amber-50 border-2 border-amber-300 rounded-md p-3">
+                      <p className="text-sm font-semibold text-amber-900 mb-1">⚠️ Category Selection Required</p>
+                      <p className="text-xs text-amber-800">
+                        You <strong>must</strong> select your category (Age Group + Stroke + Distance) during registration. 
+                        Format: <span className="font-mono bg-white px-2 py-1 rounded">Group II (13-14) | Freestyle | 50m</span>
                       </p>
-                    </>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">No categories specified for this event.</p>
-                  )}
-                </div>
-              ) : null}
+                    </div>
+                  </>
+                ) : (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">No categories specified</span> for this event. You can register without selecting a category.
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {/* Fee Management (Admin/Coach Owner/Incharge with feeManagement) */}
               {feePanelVisible && (
@@ -1093,10 +1116,10 @@ const EventDetails = () => {
                   <div className="space-y-3">
                     {/* Category Selection - MANDATORY when categories are available */}
                     {event.categoriesAvailable && event.categoriesAvailable.trim() ? (
-                      <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
+                      <div className="bg-red-50 border-2 border-red-400 rounded-lg p-4">
                         <div className="flex items-center justify-between mb-3">
-                          <label className="block text-sm font-medium text-gray-900">
-                            Selected Category (Age Group + Stroke + Distance) <span className="text-red-600">*</span>
+                          <label className="block text-sm font-bold text-gray-900">
+                            Selected Category (Age Group + Stroke + Distance) <span className="text-red-600 text-lg">* REQUIRED</span>
                           </label>
                           <button
                             type="button"
@@ -1112,23 +1135,36 @@ const EventDetails = () => {
                           onChange={(value) => setSelectedCategory(value)}
                         />
                         {!selectedCategory || !selectedCategory.trim() ? (
-                          <p className="text-xs text-red-600 mt-2 font-medium">
-                            ⚠️ Category selection is required. Please select your category from the dropdowns above.
-                          </p>
+                          <div className="mt-3 p-3 bg-red-100 border-2 border-red-400 rounded-md">
+                            <p className="text-sm text-red-800 font-bold">
+                              ⚠️ Category selection is MANDATORY. Please select your category from the dropdowns above before registering.
+                            </p>
+                          </div>
                         ) : (
-                          <p className="text-xs text-green-700 mt-2 font-medium">
-                            ✓ Category selected: {selectedCategory}
-                          </p>
+                          <div className="mt-3 p-3 bg-green-100 border-2 border-green-400 rounded-md">
+                            <p className="text-sm text-green-800 font-semibold">
+                              ✓ Category selected: <span className="font-mono bg-white px-2 py-1 rounded">{selectedCategory}</span>
+                            </p>
+                          </div>
                         )}
-                        <p className="text-xs text-gray-600 mt-2">
-                          💡 Format: Age Group | Stroke/Event Type | Distance (e.g., Group II (13-14) | Freestyle | 50m)
+                        <p className="text-xs text-gray-700 mt-3 font-medium">
+                          💡 Format: <span className="font-mono bg-white px-2 py-1 rounded border">Age Group | Stroke/Event Type | Distance</span>
+                          <br />
+                          Example: <span className="font-mono bg-white px-2 py-1 rounded border">Group II (13-14) | Freestyle | 50m</span>
                         </p>
                       </div>
-                    ) : null}
+                    ) : (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        <p className="text-sm text-gray-600">
+                          💡 No categories specified for this event. You can proceed with registration.
+                        </p>
+                      </div>
+                    )}
                     <Button
                       onClick={handleRegister}
                       disabled={isRegistering || (event.categoriesAvailable && event.categoriesAvailable.trim() && (!selectedCategory || !selectedCategory.trim()))}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400"
+                      title={event.categoriesAvailable && event.categoriesAvailable.trim() && (!selectedCategory || !selectedCategory.trim()) ? 'Please select a category first' : ''}
                     >
                       {isRegistering ? (
                         <span className="flex items-center justify-center">

@@ -1800,23 +1800,25 @@ const AdminEventsManagement = () => {
                     </div>
                   </div>
                   
-                  {/* Categories Available Display */}
-                  {event.categoriesAvailable ? (
-                    <div className="mt-5 pt-5 border-t border-gray-200">
-                      <h5 className="text-md font-semibold text-gray-900 mb-3">Categories Available</h5>
-                      {event.categoriesAvailable.trim() ? (
-                        <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-200">
-                          <CategorySelector
-                            value={event.categoriesAvailable}
-                            onChange={() => {}} // Read-only in details view
-                            readOnly={true}
-                          />
-                        </div>
-                      ) : (
-                        <p className="text-sm text-gray-500 italic">No categories specified for this event.</p>
-                      )}
-                    </div>
-                  ) : null}
+                  {/* Categories Available Display - Always show */}
+                  <div className="mt-5 pt-5 border-t border-gray-200">
+                    <h5 className="text-md font-semibold text-gray-900 mb-3">Categories Available</h5>
+                    {event.categoriesAvailable && event.categoriesAvailable.trim() ? (
+                      <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4 border-2 border-blue-300">
+                        <CategorySelector
+                          value={event.categoriesAvailable}
+                          onChange={() => {}} // Read-only in details view
+                          readOnly={true}
+                        />
+                      </div>
+                    ) : (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <p className="text-sm text-gray-600">
+                          <span className="font-medium">No categories specified</span> for this event. Athletes can register without category selection.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Participants Section (keeps existing UI) */}

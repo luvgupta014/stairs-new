@@ -98,7 +98,8 @@ class EventService {
         longitude,
         maxParticipants,
         eventFee = 0,
-        registrationDeadline
+        registrationDeadline,
+        categoriesAvailable
       } = eventData;
 
       // Validate dates
@@ -142,6 +143,7 @@ class EventService {
         maxParticipants: parseInt(maxParticipants),
         eventFee: parseFloat(eventFee),
         registrationDeadline: registrationDeadline ? new Date(registrationDeadline) : null,
+        categoriesAvailable: categoriesAvailable && categoriesAvailable.trim() ? categoriesAvailable.trim() : null,
         status: 'PENDING', // All events start as pending approval
         currentParticipants: 0
       };
@@ -1078,7 +1080,7 @@ class EventService {
     const allowedFields = [
       'name', 'description', 'sport', 'startDate', 'endDate', 'venue',
       'address', 'city', 'state', 'latitude', 'longitude', 'maxParticipants',
-      'eventFee', 'registrationDeadline', 'level'
+      'eventFee', 'registrationDeadline', 'level', 'categoriesAvailable'
     ];
 
     allowedFields.forEach(field => {
@@ -1130,6 +1132,15 @@ class EventService {
         throw new Error(`Invalid event level. Must be one of: ${validLevels.join(', ')}`);
       }
       validatedData.level = normalizedLevel;
+    }
+
+    // Validate and normalize categoriesAvailable if provided
+    if (validatedData.categoriesAvailable !== undefined) {
+      if (validatedData.categoriesAvailable === null || validatedData.categoriesAvailable === '') {
+        validatedData.categoriesAvailable = null;
+      } else if (typeof validatedData.categoriesAvailable === 'string') {
+        validatedData.categoriesAvailable = validatedData.categoriesAvailable.trim() || null;
+      }
     }
 
     return validatedData;

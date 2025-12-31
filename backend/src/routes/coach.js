@@ -1159,7 +1159,8 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
       longitude,
       startDate,
       endDate,
-      maxParticipants
+      maxParticipants,
+      categoriesAvailable
       // Removed eventFee parameter
     } = req.body;
 
@@ -1248,6 +1249,7 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
         endDate: endDateObj || null,
         maxParticipants: maxParticipants ? parseInt(maxParticipants) : 50,
         eventFee: 0, // Set to 0 since we're not collecting fees anymore
+        categoriesAvailable: categoriesAvailable && categoriesAvailable.trim() ? categoriesAvailable.trim() : null,
         status: 'PENDING',
         uniqueId: eventUniqueId
       }
@@ -1459,7 +1461,8 @@ router.put('/events/:eventId', authenticate, requireCoach, async (req, res) => {
       longitude,
       startDate,
       endDate,
-      maxParticipants
+      maxParticipants,
+      categoriesAvailable
     } = req.body;
 
     // Get coach
@@ -1553,6 +1556,9 @@ router.put('/events/:eventId', authenticate, requireCoach, async (req, res) => {
     if (startDate !== undefined) updateData.startDate = parseAsIST(startDate);
     if (endDate !== undefined) updateData.endDate = parseAsIST(endDate);
     if (maxParticipants !== undefined) updateData.maxParticipants = parseInt(maxParticipants);
+    if (categoriesAvailable !== undefined) {
+      updateData.categoriesAvailable = categoriesAvailable && categoriesAvailable.trim() ? categoriesAvailable.trim() : null;
+    }
     
     // Reset to PENDING if it was APPROVED/ACTIVE and significant changes were made
     if (existingEvent.status === 'APPROVED' || existingEvent.status === 'ACTIVE') {

@@ -616,6 +616,7 @@ router.get('/events', authenticate, requireStudent, async (req, res) => {
       studentFeeAmount: event.studentFeeAmount,
       studentFeeUnit: event.studentFeeUnit,
       paymentRequired: !!(event.createdByAdmin && event.studentFeeEnabled),
+      categoriesAvailable: event.categoriesAvailable || null,
       organizer: {                          // Use coach as organizer
         id: event.coach?.id,
         firstName: event.coach?.name?.split(' ')[0] || 'Unknown',
