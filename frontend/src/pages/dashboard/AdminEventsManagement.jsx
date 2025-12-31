@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { getAdminEvents, moderateEvent, getEventParticipants, getEventPayments, getGlobalPaymentSettings, updateGlobalPaymentSettings, updateEventAssignments, getEventAssignments, getEventInchargePermissions, updateEventInchargePermissions, getAllUsers, createEventInchargeInvite, getEventInchargeInvites, revokeEventInchargeInvite, resendEventInchargeInvite, adminUpdateEvent, shareEventViaEmail } from '../../api';
 import ParticipantsModal from '../../components/ParticipantsModal';
 import AdminCertificateIssuance from '../../components/AdminCertificateIssuance';
+import CategorySelector from '../../components/CategorySelector';
 
 const AdminEventsManagement = () => {
   const location = useLocation();
@@ -187,7 +188,8 @@ const AdminEventsManagement = () => {
       address: ev.address || '',
       city: ev.city || '',
       state: ev.state || '',
-      maxParticipants: ev.maxParticipants ?? ''
+      maxParticipants: ev.maxParticipants ?? '',
+      categoriesAvailable: ev.categoriesAvailable || ''
     });
     setEditMsg('');
     setEditErr('');
@@ -1366,6 +1368,7 @@ const AdminEventsManagement = () => {
     setIfChanged('address', next.address?.trim() || '', original.address || '');
     setIfChanged('city', next.city?.trim() || '', original.city || '');
     setIfChanged('state', next.state?.trim() || '', original.state || '');
+    setIfChanged('categoriesAvailable', next.categoriesAvailable?.trim() || '', original.categoriesAvailable || '');
 
     // maxParticipants
     const nextMax = next.maxParticipants === '' ? null : Number(next.maxParticipants);
@@ -1767,8 +1770,54 @@ const AdminEventsManagement = () => {
             {/* Details Tab */}
             {modalTab === 'details' && (
               <>
-                {/* (event details markup unchanged...) */}
-                {/* ...existing event details content omitted for brevity in this snippet (keeps UI identical) ... */}
+                {/* Event Information Section */}
+                <div className="px-6 py-5 bg-white border-b border-gray-200">
+                  <h4 className="text-lg font-bold text-gray-900 mb-4">Event Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-700">Sport:</span>
+                      <span className="ml-2 text-gray-900">{event.sport || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Venue:</span>
+                      <span className="ml-2 text-gray-900">{event.venue || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Start Date:</span>
+                      <span className="ml-2 text-gray-900">{formatDateTime(event.startDate)}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">End Date:</span>
+                      <span className="ml-2 text-gray-900">{formatDateTime(event.endDate)}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Max Participants:</span>
+                      <span className="ml-2 text-gray-900">{event.maxParticipants || 'Unlimited'}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Current Participants:</span>
+                      <span className="ml-2 text-gray-900">{event.currentParticipants || 0}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Categories Available Display */}
+                  {event.categoriesAvailable ? (
+                    <div className="mt-5 pt-5 border-t border-gray-200">
+                      <h5 className="text-md font-semibold text-gray-900 mb-3">Categories Available</h5>
+                      {event.categoriesAvailable.trim() ? (
+                        <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-200">
+                          <CategorySelector
+                            value={event.categoriesAvailable}
+                            onChange={() => {}} // Read-only in details view
+                            readOnly={true}
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500 italic">No categories specified for this event.</p>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
 
                 {/* Participants Section (keeps existing UI) */}
                 <div className="px-6 py-5 bg-white">
@@ -2123,24 +2172,38 @@ const AdminEventsManagement = () => {
                           <div className="mt-1 text-xs text-red-600">{editValidation.errors.city}</div>
                         )}
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
-                        <input
-                          type="text"
-                          name="state"
-                          value={editEventForm.state}
-                          onChange={handleEditEventChange}
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                            editValidation?.errors?.state ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                        />
-                        {editValidation?.errors?.state && (
-                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.state}</div>
-                        )}
-                      </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
+                      <input
+                        type="text"
+                        name="state"
+                        value={editEventForm.state}
+                        onChange={handleEditEventChange}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                          editValidation?.errors?.state ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                      />
+                      {editValidation?.errors?.state && (
+                        <div className="mt-1 text-xs text-red-600">{editValidation.errors.state}</div>
+                      )}
                     </div>
+                  </div>
 
-                    <div className="flex items-center justify-end gap-3 pt-2">
+                  {/* Categories Available */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Categories Available (Optional)
+                    </label>
+                    <CategorySelector
+                      value={editEventForm.categoriesAvailable || ''}
+                      onChange={(value) => setEditEventForm(prev => ({ ...prev, categoriesAvailable: value }))}
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                      Define age groups, strokes/event types, and distances for this event. Athletes can select from these during registration.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-2">
                       <button
                         type="button"
                         onClick={resetEditedEvent}

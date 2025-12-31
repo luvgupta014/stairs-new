@@ -166,7 +166,7 @@ const CategoryPicker = ({
       {categories.ageGroups.length > 0 && (
         <div className="relative">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            {categories.labels.ageGroup || 'Age Group'} <span className="text-gray-500 text-xs font-normal">(Optional)</span>
+            {categories.labels.ageGroup || 'Age Group'} <span className="text-red-600">*</span>
           </label>
           <div className="relative">
             <button
@@ -187,16 +187,6 @@ const CategoryPicker = ({
                   onClick={() => setIsOpen({ ...isOpen, ageGroup: false })}
                 />
                 <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectionChange('ageGroup', '')}
-                    className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
-                      !selected.ageGroup ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
-                    }`}
-                  >
-                    <span>None</span>
-                    {!selected.ageGroup && <FaCheck className="w-4 h-4" />}
-                  </button>
                   {categories.ageGroups.map((group, index) => (
                     <button
                       key={index}
@@ -221,7 +211,7 @@ const CategoryPicker = ({
       {categories.strokes.length > 0 && (
         <div className="relative">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            {categories.labels.stroke || 'Stroke / Event Type'} <span className="text-gray-500 text-xs font-normal">(Optional)</span>
+            {categories.labels.stroke || 'Stroke / Event Type'} <span className="text-red-600">*</span>
           </label>
           <div className="relative">
             <button
@@ -242,16 +232,6 @@ const CategoryPicker = ({
                   onClick={() => setIsOpen({ ...isOpen, stroke: false })}
                 />
                 <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectionChange('stroke', '')}
-                    className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
-                      !selected.stroke ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
-                    }`}
-                  >
-                    <span>None</span>
-                    {!selected.stroke && <FaCheck className="w-4 h-4" />}
-                  </button>
                   {categories.strokes.map((stroke, index) => (
                     <button
                       key={index}
@@ -276,7 +256,7 @@ const CategoryPicker = ({
       {categories.distances.length > 0 && (
         <div className="relative">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            {categories.labels.distance || 'Distance'} <span className="text-gray-500 text-xs font-normal">(Optional)</span>
+            {categories.labels.distance || 'Distance'} <span className="text-red-600">*</span>
           </label>
           <div className="relative">
             <button
@@ -297,16 +277,6 @@ const CategoryPicker = ({
                   onClick={() => setIsOpen({ ...isOpen, distance: false })}
                 />
                 <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectionChange('distance', '')}
-                    className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
-                      !selected.distance ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
-                    }`}
-                  >
-                    <span>None</span>
-                    {!selected.distance && <FaCheck className="w-4 h-4" />}
-                  </button>
                   {categories.distances.map((distance, index) => (
                     <button
                       key={index}

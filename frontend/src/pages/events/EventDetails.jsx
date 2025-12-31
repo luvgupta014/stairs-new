@@ -235,11 +235,20 @@ const EventDetails = () => {
         throw new Error('Invalid payment amount');
       }
 
-      // Create payment order with selectedCategory if available (optional)
-      // Normalize: only send if category is non-empty after trimming
+      // Validate category selection if categories are available (mandatory)
+      if (event.categoriesAvailable && event.categoriesAvailable.trim()) {
+        const trimmedCategory = selectedCategory?.trim() || '';
+        if (!trimmedCategory) {
+          alert('Please select your category before proceeding with payment. Category selection is mandatory for this event.');
+          setPayingEventId(null);
+          return;
+        }
+      }
+      
+      // Create payment order with selectedCategory (mandatory if categories exist)
       setPayingEventId(eventId);
       const trimmedCategory = selectedCategory?.trim() || '';
-      const paymentData = (event.categoriesAvailable && event.categoriesAvailable.trim() && trimmedCategory) 
+      const paymentData = (event.categoriesAvailable && event.categoriesAvailable.trim()) 
         ? { selectedCategory: trimmedCategory }
         : {};
       const orderResponse = await createStudentEventPaymentOrder(eventId, paymentData);
@@ -440,10 +449,19 @@ const EventDetails = () => {
       // STEP 3: No payment required - register directly
       console.log('✅ No payment required. Registering directly...');
       try {
-        // Prepare registration data with selectedCategory if available (optional)
-        // Normalize: only send if category is non-empty after trimming
+        // Validate category selection if categories are available
+        if (event.categoriesAvailable && event.categoriesAvailable.trim()) {
+          const trimmedCategory = selectedCategory?.trim() || '';
+          if (!trimmedCategory) {
+            alert('Please select your category before registering. Category selection is mandatory for this event.');
+            setIsRegistering(false);
+            return;
+          }
+        }
+        
+        // Prepare registration data with selectedCategory (mandatory if categories exist)
         const trimmedCategory = selectedCategory?.trim() || '';
-        const registrationData = (event.categoriesAvailable && event.categoriesAvailable.trim() && trimmedCategory) 
+        const registrationData = (event.categoriesAvailable && event.categoriesAvailable.trim()) 
           ? { selectedCategory: trimmedCategory }
           : {};
         
@@ -867,20 +885,26 @@ const EventDetails = () => {
                 </dl>
               </div>
 
-              {/* Categories Available */}
-              {event.categoriesAvailable && event.categoriesAvailable.trim() ? (
+              {/* Categories Available - Always show if data exists */}
+              {event.categoriesAvailable ? (
                 <div className="px-6 py-4 border-t border-gray-200">
                   <h3 className="text-lg font-medium text-gray-900 mb-3">Categories Available</h3>
-                  <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-5 border border-blue-200">
-                    <CategorySelector
-                      value={event.categoriesAvailable}
-                      onChange={() => {}} // No-op in read-only mode
-                      readOnly={true}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-600 mt-3 bg-blue-50 border border-blue-200 rounded-md p-2">
-                    <span className="font-medium text-blue-900">💡 Registration Tip:</span> Please select your category from the options above during registration. If category information is not available or doesn't apply to you, you can still register without it.
-                  </p>
+                  {event.categoriesAvailable.trim() ? (
+                    <>
+                      <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-5 border border-blue-200">
+                        <CategorySelector
+                          value={event.categoriesAvailable}
+                          onChange={() => {}} // No-op in read-only mode
+                          readOnly={true}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-600 mt-3 bg-blue-50 border border-blue-200 rounded-md p-2">
+                        <span className="font-medium text-blue-900">💡 Registration Tip:</span> Please select your category from the options above during registration. If category information is not available or doesn't apply to you, you can still register without it.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">No categories specified for this event.</p>
+                  )}
                 </div>
               ) : null}
 
@@ -1067,18 +1091,19 @@ const EventDetails = () => {
                   </div>
                 ) : canRegister() ? (
                   <div className="space-y-3">
+                    {/* Category Selection - MANDATORY when categories are available */}
                     {event.categoriesAvailable && event.categoriesAvailable.trim() ? (
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
                         <div className="flex items-center justify-between mb-3">
                           <label className="block text-sm font-medium text-gray-900">
-                            Select Your Category <span className="text-gray-600 text-xs font-normal">(Optional)</span>
+                            Selected Category (Age Group + Stroke + Distance) <span className="text-red-600">*</span>
                           </label>
                           <button
                             type="button"
                             onClick={() => setShowCategoryModal(true)}
                             className="text-xs text-blue-700 hover:text-blue-900 underline font-medium"
                           >
-                            📋 View All
+                            📋 View All Categories
                           </button>
                         </div>
                         <CategoryPicker
@@ -1086,15 +1111,24 @@ const EventDetails = () => {
                           value={selectedCategory}
                           onChange={(value) => setSelectedCategory(value)}
                         />
-                        <p className="text-xs text-gray-600 mt-3">
-                          💡 Select your category from the dropdowns above. You can still register without selecting a category if it doesn't apply to you.
+                        {!selectedCategory || !selectedCategory.trim() ? (
+                          <p className="text-xs text-red-600 mt-2 font-medium">
+                            ⚠️ Category selection is required. Please select your category from the dropdowns above.
+                          </p>
+                        ) : (
+                          <p className="text-xs text-green-700 mt-2 font-medium">
+                            ✓ Category selected: {selectedCategory}
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-600 mt-2">
+                          💡 Format: Age Group | Stroke/Event Type | Distance (e.g., Group II (13-14) | Freestyle | 50m)
                         </p>
                       </div>
                     ) : null}
                     <Button
                       onClick={handleRegister}
-                      disabled={isRegistering}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5"
+                      disabled={isRegistering || (event.categoriesAvailable && event.categoriesAvailable.trim() && (!selectedCategory || !selectedCategory.trim()))}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isRegistering ? (
                         <span className="flex items-center justify-center">
