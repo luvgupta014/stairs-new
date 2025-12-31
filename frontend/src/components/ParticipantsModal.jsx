@@ -112,8 +112,32 @@ const ParticipantsModal = ({
                 <div className="flex space-x-2">
                   <button
                     onClick={() => {
-                      // Export functionality can be implemented here
-                      console.log('Export participants:', participants);
+                      // Export participants to CSV
+                      const headers = ['Name', 'Email', 'Phone', 'UID', 'Status', 'Selected Category', 'Registered Date'];
+                      const rows = participants.map(p => [
+                        p.student?.name || 'N/A',
+                        p.student?.user?.email || p.student?.email || 'N/A',
+                        p.student?.user?.phone || p.student?.phone || 'N/A',
+                        p.student?.user?.uniqueId || 'N/A',
+                        p.status || 'N/A',
+                        p.selectedCategory || 'Not specified',
+                        p.registeredAt || p.createdAt ? new Date(p.registeredAt || p.createdAt).toLocaleDateString() : 'N/A'
+                      ]);
+
+                      const csvContent = [
+                        headers.join(','),
+                        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+                      ].join('\n');
+
+                      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                      const link = document.createElement('a');
+                      const url = URL.createObjectURL(blob);
+                      link.setAttribute('href', url);
+                      link.setAttribute('download', `event_participants_${eventData?.name?.replace(/[^a-z0-9]/gi, '_') || 'export'}_${new Date().toISOString().split('T')[0]}.csv`);
+                      link.style.visibility = 'hidden';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
                     }}
                     className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors"
                   >
@@ -202,6 +226,20 @@ const ParticipantsModal = ({
                         </div>
                       </div>
                     </div>
+
+                    {/* Selected Category */}
+                    {participant.selectedCategory && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <div className="flex items-start">
+                          <FaMedal className="text-blue-500 w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-700">Selected Category:</p>
+                            <p className="text-sm text-gray-900 font-semibold mt-1">{participant.selectedCategory}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                     {/* Additional Information */}
                     {participant.student?.bio && (

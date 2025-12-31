@@ -444,6 +444,9 @@ router.post('/create-order-student-event', authenticate, requireStudent, async (
       }
     });
 
+    // Extract selectedCategory from request body
+    const { selectedCategory } = req.body || {};
+
     if (!paymentRecord) {
       paymentRecord = await prisma.payment.create({
         data: {
@@ -460,10 +463,27 @@ router.post('/create-order-student-event', authenticate, requireStudent, async (
             registrationId: registrationId,
             unit: event.studentFeeUnit || 'PERSON',
             createdByAdmin: true,
-            pendingRegistration: !existingRegistration // Flag to create registration after payment
+            pendingRegistration: !existingRegistration, // Flag to create registration after payment
+            selectedCategory: selectedCategory || null
           })
         }
       });
+    } else {
+      // Update existing payment record with selectedCategory if provided
+      try {
+        const currentMeta = paymentRecord.metadata ? JSON.parse(paymentRecord.metadata) : {};
+        await prisma.payment.update({
+          where: { id: paymentRecord.id },
+          data: {
+            metadata: JSON.stringify({
+              ...currentMeta,
+              selectedCategory: selectedCategory || currentMeta.selectedCategory || null
+            })
+          }
+        });
+      } catch (metaError) {
+        console.warn('⚠️ Failed to update payment metadata with selectedCategory:', metaError);
+      }
     }
 
     // Create Razorpay order
@@ -1393,16 +1413,18 @@ async function handleStudentEventPaymentVerification(req, res, { razorpay_order_
       return res.status(404).json(errorResponse('Payment record not found.', 404));
     }
 
-    // STEP 3: Get student ID (from metadata or by userId lookup)
+    // STEP 3: Get student ID and selectedCategory (from metadata or by userId lookup)
     let registrationId = null;
     let studentId = null;
     let pendingRegistration = false;
+    let selectedCategory = null;
     
     try {
       const meta = paymentRecord?.metadata ? JSON.parse(paymentRecord.metadata) : {};
       registrationId = meta.registrationId;
       studentId = meta.studentId;
       pendingRegistration = meta.pendingRegistration === true;
+      selectedCategory = meta.selectedCategory || null;
     } catch (err) {
       console.warn('⚠️ Failed to parse payment metadata:', err);
     }
@@ -1437,20 +1459,25 @@ async function handleStudentEventPaymentVerification(req, res, { razorpay_order_
     });
 
     if (existingReg) {
-      // Registration exists - update to APPROVED
+      // Registration exists - update to APPROVED and selectedCategory if provided
       finalRegistrationId = existingReg.id;
+      const updateData = { status: 'APPROVED' };
+      if (selectedCategory) {
+        updateData.selectedCategory = selectedCategory;
+      }
       await prisma.eventRegistration.update({
         where: { id: finalRegistrationId },
-        data: { status: 'APPROVED' }
+        data: updateData
       });
-      console.log(`✅ Updated existing registration ${finalRegistrationId} to APPROVED`);
+      console.log(`✅ Updated existing registration ${finalRegistrationId} to APPROVED${selectedCategory ? ' with category' : ''}`);
     } else {
       // Registration doesn't exist - create new one
       const newRegistration = await prisma.eventRegistration.create({
         data: {
           studentId,
           eventId,
-          status: 'APPROVED'
+          status: 'APPROVED',
+          selectedCategory: selectedCategory || null
         }
       });
       finalRegistrationId = newRegistration.id;

@@ -758,9 +758,9 @@ export const getStudentEventRegistrations = async (params = {}) => {
   }
 };
 
-export const registerForEvent = async (eventId) => {
+export const registerForEvent = async (eventId, data = {}) => {
   try {
-    const response = await api.post(`/api/events/${eventId}/register`);
+    const response = await api.post(`/api/events/${eventId}/register`, data);
     return response.data;
   } catch (error) {
     console.error('Register for event error:', error);
@@ -796,10 +796,10 @@ export const unregisterFromEvent = async (eventId) => {
 };
 
 // Student event fee payment (admin-created events)
-export const createStudentEventPaymentOrder = async (eventId) => {
+export const createStudentEventPaymentOrder = async (eventId, data = {}) => {
   try {
     // Canonical backend route is /api/payment/* (backend also aliases /api/payments/* for compatibility)
-    const response = await api.post('/api/payment/create-order-student-event', { eventId });
+    const response = await api.post('/api/payment/create-order-student-event', { eventId, ...data });
     return response.data;
   } catch (error) {
     console.error('Create student event payment order error:', error);

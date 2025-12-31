@@ -737,6 +737,9 @@ router.get('/events/:eventId', authenticate, requireStudent, async (req, res) =>
       studentFeeAmount: event.studentFeeAmount || 0,
       studentFeeUnit: event.studentFeeUnit || 'PERSON',
       
+      // Categories available for this event
+      categoriesAvailable: event.categoriesAvailable || null,
+      
       // Registration info
       isRegistered: event.registrations.length > 0,
       registrationStatus: event.registrations.length > 0 ? event.registrations[0].status : null,
@@ -826,8 +829,11 @@ router.post('/events/:eventId/register', authenticate, requireStudent, async (re
       return res.status(404).json(errorResponse('Student profile not found.', 404));
     }
 
+    // Extract selectedCategory from request body
+    const { selectedCategory } = req.body || {};
+
     // Use consolidated service to handle registration + payment triggers
-    const registration = await eventService.registerForEvent(eventId, student.id);
+    const registration = await eventService.registerForEvent(eventId, student.id, selectedCategory);
 
     console.log(`✅ Student registered for event successfully`);
 

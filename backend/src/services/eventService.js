@@ -701,7 +701,7 @@ class EventService {
    * @param {string} eventId - Event ID
    * @param {string} studentId - Student ID
    */
-  async registerForEvent(eventId, studentId) {
+  async registerForEvent(eventId, studentId, selectedCategory = null) {
     try {
       // Ensure student exists (needed for payment linkage)
       const student = await prisma.student.findUnique({
@@ -817,7 +817,8 @@ class EventService {
         data: {
           studentId,
           eventId,
-          status: registrationStatus
+          status: registrationStatus,
+          selectedCategory: selectedCategory || null
         },
         include: {
           event: {
@@ -988,6 +989,7 @@ class EventService {
         id: registration.id,
         status: registration.status,
         registeredAt: registration.registeredAt,
+        selectedCategory: registration.selectedCategory || null,
         student: registration.student
       }));
 

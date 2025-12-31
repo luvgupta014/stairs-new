@@ -267,6 +267,9 @@ model Event {
   level               EventLevel          @default(DISTRICT)
   status              EventStatus         @default(PENDING)
   adminNotes          String?
+  // Categories available for this event (Age Groups, Distances, Strokes/Event types)
+  // Stored as JSON string or text format: e.g., "Group I (11-12), Group II (13-14) | Freestyle, Backstroke | 25m, 50m"
+  categoriesAvailable String?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   coachId             String
@@ -428,15 +431,17 @@ model EventPermission {
 }
 
 model EventRegistration {
-  id        String             @id @default(cuid())
-  eventId   String
-  studentId String
-  status    RegistrationStatus @default(PENDING)
-  message   String?
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  event     Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  student   Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  id              String             @id @default(cuid())
+  eventId         String
+  studentId       String
+  status          RegistrationStatus @default(PENDING)
+  message         String?
+  // Selected category by athlete: e.g., "Group II (13-14) | Freestyle | 50m"
+  selectedCategory String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  event           Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  student         Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, studentId])
   @@map("event_registrations")

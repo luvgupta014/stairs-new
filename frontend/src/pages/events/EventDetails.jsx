@@ -26,6 +26,8 @@ const EventDetails = () => {
   const [checkoutData, setCheckoutData] = useState(null);
   const [pendingEventId, setPendingEventId] = useState(null);
   const [payingEventId, setPayingEventId] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   // Event Incharge permissions (per-event)
   const [inchargeAssignment, setInchargeAssignment] = useState(null);
@@ -231,9 +233,12 @@ const EventDetails = () => {
         throw new Error('Invalid payment amount');
       }
 
-      // Create payment order
+      // Create payment order with selectedCategory if available
       setPayingEventId(eventId);
-      const orderResponse = await createStudentEventPaymentOrder(eventId);
+      const orderData = event.categoriesAvailable && selectedCategory.trim() 
+        ? { selectedCategory: selectedCategory.trim() }
+        : {};
+      const orderResponse = await createStudentEventPaymentOrder(eventId, orderData);
       
       if (!orderResponse.success || !orderResponse.data) {
         throw new Error(orderResponse.message || 'Failed to create payment order');
@@ -431,11 +436,17 @@ const EventDetails = () => {
       // STEP 3: No payment required - register directly
       console.log('✅ No payment required. Registering directly...');
       try {
-        const response = await registerForEvent(eventId);
+        // Prepare registration data with selectedCategory if available
+        const registrationData = event.categoriesAvailable && selectedCategory.trim() 
+          ? { selectedCategory: selectedCategory.trim() }
+          : {};
+        
+        const response = await registerForEvent(eventId, registrationData);
         
         if (response && response.success) {
           console.log('✅ Registration successful');
           alert('Successfully registered for the event!');
+          setSelectedCategory(''); // Reset category selection
           await loadEventDetails();
         } else {
           throw new Error(response?.message || 'Registration failed');
@@ -850,6 +861,21 @@ const EventDetails = () => {
                 </dl>
               </div>
 
+              {/* Categories Available */}
+              {event.categoriesAvailable && (
+                <div className="px-6 py-4 border-t border-gray-200">
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Categories Available</h3>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
+                      {event.categoriesAvailable}
+                    </pre>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Please select your category from the options above during registration.
+                  </p>
+                </div>
+              )}
+
               {/* Fee Management (Admin/Coach Owner/Incharge with feeManagement) */}
               {feePanelVisible && (
                 <div className="px-6 py-4 border-t border-gray-200">
@@ -1032,13 +1058,41 @@ const EventDetails = () => {
                     )}
                   </div>
                 ) : canRegister() ? (
-                  <Button
-                    onClick={handleRegister}
-                    disabled={isRegistering}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                  >
-                    {isRegistering ? 'Registering...' : 'Register Now'}
-                  </Button>
+                  <div className="space-y-3">
+                    {event.categoriesAvailable && (
+                      <div>
+                        <label htmlFor="selectedCategory" className="block text-sm font-medium text-gray-700 mb-1">
+                          Selected Category <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          id="selectedCategory"
+                          value={selectedCategory}
+                          onChange={(e) => setSelectedCategory(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                          placeholder="e.g., Group II (13-14) | Freestyle | 50m"
+                          required
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Please select your category from the event details above and enter it here.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setShowCategoryModal(true)}
+                          className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                        >
+                          View Categories
+                        </button>
+                      </div>
+                    )}
+                    <Button
+                      onClick={handleRegister}
+                      disabled={isRegistering || (event.categoriesAvailable && !selectedCategory.trim())}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {isRegistering ? 'Registering...' : 'Register Now'}
+                    </Button>
+                  </div>
                 ) : (
                   <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
                     <p className="text-sm text-gray-600">
@@ -1248,6 +1302,41 @@ const EventDetails = () => {
           paymentData={checkoutData}
           loading={payingEventId !== null}
         />
+      )}
+
+      {/* Categories Modal */}
+      {showCategoryModal && event?.categoriesAvailable && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Categories Available</h2>
+              <button
+                onClick={() => setShowCategoryModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
+                {event.categoriesAvailable}
+              </pre>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Please copy your selected category from above and paste it in the registration form.
+            </p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowCategoryModal(false)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

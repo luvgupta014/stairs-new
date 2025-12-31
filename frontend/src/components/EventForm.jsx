@@ -27,7 +27,8 @@ const EventForm = ({
     longitude: '',
     maxParticipants: '',
     eventFee: '',
-    registrationDeadline: ''
+    registrationDeadline: '',
+    categoriesAvailable: ''
   });
 
   const [errors, setErrors] = useState({});
@@ -64,7 +65,8 @@ const EventForm = ({
         longitude: initialData.longitude || '',
         maxParticipants: initialData.maxParticipants || '',
         eventFee: initialData.eventFee || '',
-        registrationDeadline: formatDateForInput(initialData.registrationDeadline)
+        registrationDeadline: formatDateForInput(initialData.registrationDeadline),
+        categoriesAvailable: initialData.categoriesAvailable || ''
       });
     }
   }, [initialData]);
@@ -460,6 +462,25 @@ const EventForm = ({
             />
             {errors.eventFee && <p className="text-red-500 text-xs mt-1">{errors.eventFee}</p>}
           </div>
+        </div>
+
+        {/* Categories Available */}
+        <div>
+          <label htmlFor="categoriesAvailable" className="block text-sm font-medium text-gray-700 mb-1">
+            Categories Available (Optional)
+          </label>
+          <textarea
+            id="categoriesAvailable"
+            name="categoriesAvailable"
+            value={formData.categoriesAvailable}
+            onChange={handleChange}
+            rows={4}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="List available categories for this event. Example format:&#10;Age Groups: Group I (11-12), Group II (13-14), Group III (15-16)&#10;Strokes: Freestyle, Backstroke, Breaststroke, Butterfly&#10;Distances: 25m, 50m, 100m"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            This information will be displayed to athletes during registration. They can copy and paste their selected category.
+          </p>
         </div>
 
         {/* Action Buttons */}
