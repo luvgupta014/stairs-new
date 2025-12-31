@@ -2192,13 +2192,15 @@ const AdminEventsManagement = () => {
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
+                        <label htmlFor="edit-event-name" className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
                         <input
                           type="text"
+                          id="edit-event-name"
                           name="name"
                           value={editEventForm.name || ''}
                           onChange={handleEditEventChange}
                           disabled={editSaving}
+                          autoComplete="off"
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editValidation?.errors?.name ? 'border-red-300' : 'border-gray-300'
                           } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
@@ -2208,13 +2210,15 @@ const AdminEventsManagement = () => {
                         )}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Sport *</label>
+                        <label htmlFor="edit-event-sport" className="block text-sm font-medium text-gray-700 mb-1">Sport *</label>
                         <input
                           type="text"
+                          id="edit-event-sport"
                           name="sport"
                           value={editEventForm.sport}
                           onChange={handleEditEventChange}
                           disabled={editSaving}
+                          autoComplete="off"
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editValidation?.errors?.sport ? 'border-red-300' : 'border-gray-300'
                           } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
@@ -2227,13 +2231,15 @@ const AdminEventsManagement = () => {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                      <label htmlFor="edit-event-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                       <textarea
+                        id="edit-event-description"
                         name="description"
                         rows={3}
                         value={editEventForm.description}
                         onChange={handleEditEventChange}
                         disabled={editSaving}
+                        autoComplete="off"
                         className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${
                           editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
                         }`}
@@ -2242,12 +2248,14 @@ const AdminEventsManagement = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Level</label>
+                        <label htmlFor="edit-event-level" className="block text-sm font-medium text-gray-700 mb-1">Level</label>
                         <select
+                          id="edit-event-level"
                           name="level"
                           value={editEventForm.level}
                           onChange={handleEditEventChange}
                           disabled={editSaving}
+                          autoComplete="off"
                           className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
                           }`}
@@ -2259,13 +2267,15 @@ const AdminEventsManagement = () => {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Date & Time *</label>
+                        <label htmlFor="edit-event-start-date" className="block text-sm font-medium text-gray-700 mb-1">Start Date & Time *</label>
                         <input
                           type="datetime-local"
+                          id="edit-event-start-date"
                           name="startDate"
                           value={editEventForm.startDate}
                           onChange={handleEditEventChange}
                           disabled={editSaving}
+                          autoComplete="off"
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editValidation?.errors?.startDate ? 'border-red-300' : 'border-gray-300'
                           } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
@@ -2275,13 +2285,15 @@ const AdminEventsManagement = () => {
                         )}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">End Date & Time</label>
+                        <label htmlFor="edit-event-end-date" className="block text-sm font-medium text-gray-700 mb-1">End Date & Time</label>
                         <input
                           type="datetime-local"
+                          id="edit-event-end-date"
                           name="endDate"
                           value={editEventForm.endDate}
                           onChange={handleEditEventChange}
                           disabled={editSaving}
+                          autoComplete="off"
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editValidation?.errors?.endDate ? 'border-red-300' : 'border-gray-300'
                           } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
@@ -2294,13 +2306,15 @@ const AdminEventsManagement = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Venue *</label>
+                        <label htmlFor="edit-event-venue" className="block text-sm font-medium text-gray-700 mb-1">Venue *</label>
                         <input
                           type="text"
+                          id="edit-event-venue"
                           name="venue"
                           value={editEventForm.venue}
                           onChange={handleEditEventChange}
                           disabled={editSaving}
+                          autoComplete="organization"
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editValidation?.errors?.venue ? 'border-red-300' : 'border-gray-300'
                           } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
@@ -2310,14 +2324,16 @@ const AdminEventsManagement = () => {
                         )}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Max Participants</label>
+                        <label htmlFor="edit-event-max-participants" className="block text-sm font-medium text-gray-700 mb-1">Max Participants</label>
                         <input
                           type="number"
+                          id="edit-event-max-participants"
                           min="1"
                           name="maxParticipants"
                           value={editEventForm.maxParticipants}
                           onChange={handleEditEventChange}
                           disabled={editSaving}
+                          autoComplete="off"
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editValidation?.errors?.maxParticipants ? 'border-red-300' : 'border-gray-300'
                           } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
@@ -2329,13 +2345,15 @@ const AdminEventsManagement = () => {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                      <label htmlFor="edit-event-address" className="block text-sm font-medium text-gray-700 mb-1">Address</label>
                       <input
                         type="text"
+                        id="edit-event-address"
                         name="address"
                         value={editEventForm.address}
                         onChange={handleEditEventChange}
                         disabled={editSaving}
+                        autoComplete="street-address"
                         className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${
                           editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
                         }`}
@@ -2344,13 +2362,15 @@ const AdminEventsManagement = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
+                        <label htmlFor="edit-event-city" className="block text-sm font-medium text-gray-700 mb-1">City *</label>
                         <input
                           type="text"
+                          id="edit-event-city"
                           name="city"
                           value={editEventForm.city}
                           onChange={handleEditEventChange}
                           disabled={editSaving}
+                          autoComplete="address-level2"
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editValidation?.errors?.city ? 'border-red-300' : 'border-gray-300'
                           } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
@@ -2360,13 +2380,15 @@ const AdminEventsManagement = () => {
                         )}
                       </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
+                      <label htmlFor="edit-event-state" className="block text-sm font-medium text-gray-700 mb-1">State *</label>
                       <input
                         type="text"
+                        id="edit-event-state"
                         name="state"
                         value={editEventForm.state}
                         onChange={handleEditEventChange}
                         disabled={editSaving}
+                        autoComplete="address-level1"
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                           editValidation?.errors?.state ? 'border-red-300' : 'border-gray-300'
                         } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
@@ -2380,10 +2402,10 @@ const AdminEventsManagement = () => {
                   {/* Categories Available */}
                   {editEventForm && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label htmlFor="edit-event-categories" className="block text-sm font-medium text-gray-700 mb-2">
                         Categories Available (Optional)
                       </label>
-                      <div className={editSaving ? 'pointer-events-none opacity-60' : ''}>
+                      <div id="edit-event-categories" className={editSaving ? 'pointer-events-none opacity-60' : ''}>
                         <CategorySelector
                           value={editEventForm.categoriesAvailable || ''}
                           onChange={(value) => {
