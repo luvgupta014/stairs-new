@@ -5196,7 +5196,7 @@ router.get('/events/:eventId/results/sample-sheet', authenticate, requireAdmin, 
     // Note: still safe for typical event sizes; increase cap if needed.
     const registrations = await prisma.eventRegistration.findMany({
       where: { eventId: event.id },
-      orderBy: { registeredAt: 'asc' },
+      orderBy: { createdAt: 'asc' },
       take: 5000,
       select: {
         selectedCategory: true,

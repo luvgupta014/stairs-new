@@ -650,7 +650,7 @@ router.get('/:eventId/participants', authenticate, async (req, res) => {
 
     const registrations = await prisma.eventRegistration.findMany({
       where: { eventId: ev.id },
-      orderBy: { registeredAt: 'desc' },
+      orderBy: { createdAt: 'desc' },
       include: {
         student: {
           select: {
@@ -666,7 +666,8 @@ router.get('/:eventId/participants', authenticate, async (req, res) => {
     const participants = registrations.map(r => ({
       id: r.id,
       status: r.status,
-      registeredAt: r.registeredAt,
+      // Keep legacy field name for frontend compatibility
+      registeredAt: r.createdAt,
       selectedCategory: r.selectedCategory || null,
       student: r.student
     }));
@@ -795,7 +796,7 @@ router.get('/:eventId/results/sample-sheet', authenticate, async (req, res, next
     // Get ALL registrations so the template matches current participants
     const registrations = await prisma.eventRegistration.findMany({
       where: { eventId: event.id },
-      orderBy: { registeredAt: 'asc' },
+      orderBy: { createdAt: 'asc' },
       take: 5000,
       select: {
         selectedCategory: true,

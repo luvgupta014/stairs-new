@@ -991,7 +991,8 @@ class EventService {
       const participants = event.registrations.map(registration => ({
         id: registration.id,
         status: registration.status,
-        registeredAt: registration.registeredAt,
+        // Keep legacy field name for frontend compatibility
+        registeredAt: registration.createdAt,
         selectedCategory: registration.selectedCategory || null,
         student: registration.student
       }));
