@@ -1325,6 +1325,38 @@ const AdminEventsManagement = () => {
       loading: false,
       paymentsLoading: false
     });
+    
+    // Initialize edit form immediately
+    setEditEventForm({
+      name: event.name || '',
+      description: event.description || '',
+      sport: event.sport || '',
+      level: event.level || 'DISTRICT',
+      startDate: formatDateForInput(event.startDate),
+      endDate: formatDateForInput(event.endDate),
+      venue: event.venue || '',
+      address: event.address || '',
+      city: event.city || '',
+      state: event.state || '',
+      maxParticipants: event.maxParticipants ?? '',
+      categoriesAvailable: event.categoriesAvailable || ''
+    });
+    setEditEventOriginal({
+      name: event.name || '',
+      description: event.description || '',
+      sport: event.sport || '',
+      level: event.level || 'DISTRICT',
+      startDate: event.startDate,
+      endDate: event.endDate,
+      venue: event.venue || '',
+      address: event.address || '',
+      city: event.city || '',
+      state: event.state || '',
+      maxParticipants: event.maxParticipants ?? '',
+      categoriesAvailable: event.categoriesAvailable || ''
+    });
+    setEditErr('');
+    setEditMsg('');
   };
 
   const closeEventDetailsModal = () => {
@@ -1428,47 +1460,58 @@ const AdminEventsManagement = () => {
 
     if (!editEventForm) return { isValid: false, errors, warnings };
 
+    // Only validate fields that are being changed (in the patch)
+    const patch = buildEventPatch(editEventForm, editEventOriginal);
+    const fieldsBeingChanged = Object.keys(patch || {});
+
     const required = (key, label) => {
-      const v = String(editEventForm[key] ?? '').trim();
-      if (!v) errors[key] = `${label} is required.`;
+      // Only validate if this field is being changed
+      if (fieldsBeingChanged.includes(key)) {
+        const v = String(editEventForm[key] ?? '').trim();
+        if (!v) errors[key] = `${label} is required.`;
+      }
     };
 
-    // Required fields per schema
-    required('name', 'Event name');
-    required('sport', 'Sport');
-    required('venue', 'Venue');
-    required('city', 'City');
-    required('state', 'State');
-    required('startDate', 'Start date');
+    // Required fields per schema - but only validate if being changed
+    if (fieldsBeingChanged.includes('name')) required('name', 'Event name');
+    if (fieldsBeingChanged.includes('sport')) required('sport', 'Sport');
+    if (fieldsBeingChanged.includes('venue')) required('venue', 'Venue');
+    if (fieldsBeingChanged.includes('city')) required('city', 'City');
+    if (fieldsBeingChanged.includes('state')) required('state', 'State');
+    if (fieldsBeingChanged.includes('startDate')) required('startDate', 'Start date');
 
-    // Dates
-    const start = editEventForm.startDate ? new Date(`${editEventForm.startDate}:00`) : null;
-    const end = editEventForm.endDate ? new Date(`${editEventForm.endDate}:00`) : null;
-    if (editEventForm.startDate && Number.isNaN(start?.getTime())) errors.startDate = 'Start date is invalid.';
-    if (editEventForm.endDate && Number.isNaN(end?.getTime())) errors.endDate = 'End date is invalid.';
-    if (start && end && end <= start) errors.endDate = 'End date must be after start date.';
+    // Dates - only validate if being changed
+    if (fieldsBeingChanged.includes('startDate') || fieldsBeingChanged.includes('endDate')) {
+      const start = editEventForm.startDate ? new Date(`${editEventForm.startDate}:00`) : null;
+      const end = editEventForm.endDate ? new Date(`${editEventForm.endDate}:00`) : null;
+      if (editEventForm.startDate && Number.isNaN(start?.getTime())) errors.startDate = 'Start date is invalid.';
+      if (editEventForm.endDate && Number.isNaN(end?.getTime())) errors.endDate = 'End date is invalid.';
+      if (start && end && end <= start) errors.endDate = 'End date must be after start date.';
 
-    // Backend edge case: startDate updates must be in the future
-    if (editPatch?.startDate && start && start <= new Date()) {
-      errors.startDate = 'Start date must be in the future (backend restriction).';
-    } else if (start && start <= new Date()) {
-      // If event is already in the past, warn that changing startDate won’t be allowed.
-      warnings.startDate = 'This event has already started/ended. Changing start date may be rejected by the backend.';
+      // Backend edge case: startDate updates must be in the future
+      if (patch?.startDate && start && start <= new Date()) {
+        errors.startDate = 'Start date must be in the future (backend restriction).';
+      } else if (start && start <= new Date() && fieldsBeingChanged.includes('startDate')) {
+        // If event is already in the past, warn that changing startDate won't be allowed.
+        warnings.startDate = 'This event has already started/ended. Changing start date may be rejected by the backend.';
+      }
     }
 
-    // Max participants: must be >= current participants (safety)
-    const currentParticipants =
-      Number(ev?.currentParticipants) ||
-      Number(ev?._count?.registrations) ||
-      0;
-    if (editEventForm.maxParticipants !== '' && editEventForm.maxParticipants !== null && editEventForm.maxParticipants !== undefined) {
-      const mp = Number(editEventForm.maxParticipants);
-      if (!Number.isFinite(mp) || mp < 1) errors.maxParticipants = 'Max participants must be a positive number.';
-      else if (mp < currentParticipants) errors.maxParticipants = `Max participants cannot be less than current participants (${currentParticipants}).`;
+    // Max participants: must be >= current participants (safety) - only if being changed
+    if (fieldsBeingChanged.includes('maxParticipants')) {
+      const currentParticipants =
+        Number(ev?.currentParticipants) ||
+        Number(ev?._count?.registrations) ||
+        0;
+      if (editEventForm.maxParticipants !== '' && editEventForm.maxParticipants !== null && editEventForm.maxParticipants !== undefined) {
+        const mp = Number(editEventForm.maxParticipants);
+        if (!Number.isFinite(mp) || mp < 1) errors.maxParticipants = 'Max participants must be a positive number.';
+        else if (mp < currentParticipants) errors.maxParticipants = `Max participants cannot be less than current participants (${currentParticipants}).`;
+      }
     }
 
     return { isValid: Object.keys(errors).length === 0, errors, warnings };
-  }, [editEventForm, eventDetailsModal?.event, editPatch]);
+  }, [editEventForm, editEventOriginal, eventDetailsModal?.event]);
 
   const saveEditedEvent = async () => {
     try {
@@ -1501,11 +1544,26 @@ const AdminEventsManagement = () => {
       }
 
       if (!editValidation || !editValidation.isValid) {
-        const first = Object.values(editValidation?.errors || {})[0] || 'Please fix the highlighted fields.';
-        console.error('❌ Validation failed:', editValidation?.errors);
-        setEditErr(first);
-        setEditSaving(false);
-        return;
+        const errorKeys = Object.keys(editValidation?.errors || {});
+        const errorMessages = Object.values(editValidation?.errors || {});
+        console.error('❌ Validation failed:', {
+          errors: editValidation?.errors,
+          warnings: editValidation?.warnings,
+          fieldsBeingChanged: Object.keys(patch),
+          formData: editEventForm
+        });
+        
+        if (errorKeys.length > 0) {
+          // Show first error, but allow saving if only warnings exist
+          const firstError = errorMessages[0];
+          setEditErr(firstError);
+          setEditSaving(false);
+          return;
+        }
+        // If only warnings, allow save but show warning
+        if (Object.keys(editValidation?.warnings || {}).length > 0) {
+          console.warn('⚠️ Validation warnings (but allowing save):', editValidation?.warnings);
+        }
       }
 
       // Basic client-side guardrails
@@ -1800,7 +1858,42 @@ const AdminEventsManagement = () => {
               </button>
             )}
             <button
-              onClick={() => setModalTab('edit')}
+              onClick={() => {
+                setModalTab('edit');
+                // Always initialize edit form when switching to edit tab to ensure fresh data
+                if (event) {
+                  setEditEventForm({
+                    name: event.name || '',
+                    description: event.description || '',
+                    sport: event.sport || '',
+                    level: event.level || 'DISTRICT',
+                    startDate: formatDateForInput(event.startDate),
+                    endDate: formatDateForInput(event.endDate),
+                    venue: event.venue || '',
+                    address: event.address || '',
+                    city: event.city || '',
+                    state: event.state || '',
+                    maxParticipants: event.maxParticipants ?? '',
+                    categoriesAvailable: event.categoriesAvailable || ''
+                  });
+                  setEditEventOriginal({
+                    name: event.name || '',
+                    description: event.description || '',
+                    sport: event.sport || '',
+                    level: event.level || 'DISTRICT',
+                    startDate: event.startDate,
+                    endDate: event.endDate,
+                    venue: event.venue || '',
+                    address: event.address || '',
+                    city: event.city || '',
+                    state: event.state || '',
+                    maxParticipants: event.maxParticipants ?? '',
+                    categoriesAvailable: event.categoriesAvailable || ''
+                  });
+                  setEditErr('');
+                  setEditMsg('');
+                }
+              }}
               className={`px-6 py-3 font-medium text-sm transition-colors ${
                 modalTab === 'edit'
                   ? 'text-blue-600 border-b-2 border-blue-600'
@@ -2121,9 +2214,10 @@ const AdminEventsManagement = () => {
                           name="sport"
                           value={editEventForm.sport}
                           onChange={handleEditEventChange}
+                          disabled={editSaving}
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editValidation?.errors?.sport ? 'border-red-300' : 'border-gray-300'
-                          }`}
+                          } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                           placeholder="e.g. Cricket (or Cricket, Football)"
                         />
                         {editValidation?.errors?.sport && (
@@ -2139,7 +2233,10 @@ const AdminEventsManagement = () => {
                         rows={3}
                         value={editEventForm.description}
                         onChange={handleEditEventChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        disabled={editSaving}
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                          editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                        }`}
                       />
                     </div>
 
@@ -2150,7 +2247,10 @@ const AdminEventsManagement = () => {
                           name="level"
                           value={editEventForm.level}
                           onChange={handleEditEventChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          disabled={editSaving}
+                          className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                            editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                          }`}
                         >
                           <option value="DISTRICT">DISTRICT</option>
                           <option value="STATE">STATE</option>
@@ -2165,9 +2265,10 @@ const AdminEventsManagement = () => {
                           name="startDate"
                           value={editEventForm.startDate}
                           onChange={handleEditEventChange}
+                          disabled={editSaving}
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editValidation?.errors?.startDate ? 'border-red-300' : 'border-gray-300'
-                          }`}
+                          } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                         />
                         {editValidation?.errors?.startDate && (
                           <div className="mt-1 text-xs text-red-600">{editValidation.errors.startDate}</div>
@@ -2180,9 +2281,10 @@ const AdminEventsManagement = () => {
                           name="endDate"
                           value={editEventForm.endDate}
                           onChange={handleEditEventChange}
+                          disabled={editSaving}
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editValidation?.errors?.endDate ? 'border-red-300' : 'border-gray-300'
-                          }`}
+                          } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                         />
                         {editValidation?.errors?.endDate && (
                           <div className="mt-1 text-xs text-red-600">{editValidation.errors.endDate}</div>
@@ -2198,9 +2300,10 @@ const AdminEventsManagement = () => {
                           name="venue"
                           value={editEventForm.venue}
                           onChange={handleEditEventChange}
+                          disabled={editSaving}
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editValidation?.errors?.venue ? 'border-red-300' : 'border-gray-300'
-                          }`}
+                          } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                         />
                         {editValidation?.errors?.venue && (
                           <div className="mt-1 text-xs text-red-600">{editValidation.errors.venue}</div>
@@ -2214,9 +2317,10 @@ const AdminEventsManagement = () => {
                           name="maxParticipants"
                           value={editEventForm.maxParticipants}
                           onChange={handleEditEventChange}
+                          disabled={editSaving}
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editValidation?.errors?.maxParticipants ? 'border-red-300' : 'border-gray-300'
-                          }`}
+                          } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                         />
                         {editValidation?.errors?.maxParticipants && (
                           <div className="mt-1 text-xs text-red-600">{editValidation.errors.maxParticipants}</div>
@@ -2231,7 +2335,10 @@ const AdminEventsManagement = () => {
                         name="address"
                         value={editEventForm.address}
                         onChange={handleEditEventChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        disabled={editSaving}
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                          editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                        }`}
                       />
                     </div>
 
@@ -2243,9 +2350,10 @@ const AdminEventsManagement = () => {
                           name="city"
                           value={editEventForm.city}
                           onChange={handleEditEventChange}
+                          disabled={editSaving}
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                             editValidation?.errors?.city ? 'border-red-300' : 'border-gray-300'
-                          }`}
+                          } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                         />
                         {editValidation?.errors?.city && (
                           <div className="mt-1 text-xs text-red-600">{editValidation.errors.city}</div>
@@ -2258,9 +2366,10 @@ const AdminEventsManagement = () => {
                         name="state"
                         value={editEventForm.state}
                         onChange={handleEditEventChange}
+                        disabled={editSaving}
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                           editValidation?.errors?.state ? 'border-red-300' : 'border-gray-300'
-                        }`}
+                        } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                       />
                       {editValidation?.errors?.state && (
                         <div className="mt-1 text-xs text-red-600">{editValidation.errors.state}</div>
