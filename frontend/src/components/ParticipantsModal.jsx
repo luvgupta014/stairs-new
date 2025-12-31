@@ -257,7 +257,6 @@ const ParticipantsModal = ({
                       </div>
                     )}
                   </div>
-                  </div>
                 ))}
               </div>
             </div>
