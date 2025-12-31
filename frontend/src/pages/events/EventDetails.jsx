@@ -6,6 +6,8 @@ import Spinner from '../../components/Spinner';
 import Button from '../../components/Button';
 import BackButton from '../../components/BackButton';
 import CheckoutModal from '../../components/CheckoutModal';
+import CategorySelector from '../../components/CategorySelector';
+import CategoryPicker from '../../components/CategoryPicker';
 import { FaShare, FaCopy, FaEnvelope } from 'react-icons/fa';
 
 /**
@@ -233,10 +235,12 @@ const EventDetails = () => {
         throw new Error('Invalid payment amount');
       }
 
-      // Create payment order with selectedCategory if available
+      // Create payment order with selectedCategory if available (optional)
+      // Normalize: only send if category is non-empty after trimming
       setPayingEventId(eventId);
-      const paymentData = event.categoriesAvailable && selectedCategory.trim() 
-        ? { selectedCategory: selectedCategory.trim() }
+      const trimmedCategory = selectedCategory?.trim() || '';
+      const paymentData = (event.categoriesAvailable && event.categoriesAvailable.trim() && trimmedCategory) 
+        ? { selectedCategory: trimmedCategory }
         : {};
       const orderResponse = await createStudentEventPaymentOrder(eventId, paymentData);
       
@@ -436,9 +440,11 @@ const EventDetails = () => {
       // STEP 3: No payment required - register directly
       console.log('✅ No payment required. Registering directly...');
       try {
-        // Prepare registration data with selectedCategory if available
-        const registrationData = event.categoriesAvailable && selectedCategory.trim() 
-          ? { selectedCategory: selectedCategory.trim() }
+        // Prepare registration data with selectedCategory if available (optional)
+        // Normalize: only send if category is non-empty after trimming
+        const trimmedCategory = selectedCategory?.trim() || '';
+        const registrationData = (event.categoriesAvailable && event.categoriesAvailable.trim() && trimmedCategory) 
+          ? { selectedCategory: trimmedCategory }
           : {};
         
         const response = await registerForEvent(eventId, registrationData);
@@ -862,19 +868,21 @@ const EventDetails = () => {
               </div>
 
               {/* Categories Available */}
-              {event.categoriesAvailable && (
+              {event.categoriesAvailable && event.categoriesAvailable.trim() ? (
                 <div className="px-6 py-4 border-t border-gray-200">
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Categories Available</h3>
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
-                      {event.categoriesAvailable}
-                    </pre>
+                  <h3 className="text-lg font-medium text-gray-900 mb-3">Categories Available</h3>
+                  <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-5 border border-blue-200">
+                    <CategorySelector
+                      value={event.categoriesAvailable}
+                      onChange={() => {}} // No-op in read-only mode
+                      readOnly={true}
+                    />
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Please select your category from the options above during registration. If category information is not available or doesn't apply to you, you can still register without it.
+                  <p className="text-xs text-gray-600 mt-3 bg-blue-50 border border-blue-200 rounded-md p-2">
+                    <span className="font-medium text-blue-900">💡 Registration Tip:</span> Please select your category from the options above during registration. If category information is not available or doesn't apply to you, you can still register without it.
                   </p>
                 </div>
-              )}
+              ) : null}
 
               {/* Fee Management (Admin/Coach Owner/Incharge with feeManagement) */}
               {feePanelVisible && (
@@ -1059,37 +1067,46 @@ const EventDetails = () => {
                   </div>
                 ) : canRegister() ? (
                   <div className="space-y-3">
-                    {event.categoriesAvailable && (
-                      <div>
-                        <label htmlFor="selectedCategory" className="block text-sm font-medium text-gray-700 mb-1">
-                          Selected Category <span className="text-gray-500 text-xs">(Optional but recommended)</span>
-                        </label>
-                        <input
-                          type="text"
-                          id="selectedCategory"
+                    {event.categoriesAvailable && event.categoriesAvailable.trim() ? (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <label className="block text-sm font-medium text-gray-900">
+                            Select Your Category <span className="text-gray-600 text-xs font-normal">(Optional)</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setShowCategoryModal(true)}
+                            className="text-xs text-blue-700 hover:text-blue-900 underline font-medium"
+                          >
+                            📋 View All
+                          </button>
+                        </div>
+                        <CategoryPicker
+                          categoriesText={event.categoriesAvailable}
                           value={selectedCategory}
-                          onChange={(e) => setSelectedCategory(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                          placeholder="e.g., Group II (13-14) | Freestyle | 50m"
+                          onChange={(value) => setSelectedCategory(value)}
                         />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Please select your category from the event details above and enter it here. This helps organizers manage the event better.
+                        <p className="text-xs text-gray-600 mt-3">
+                          💡 Select your category from the dropdowns above. You can still register without selecting a category if it doesn't apply to you.
                         </p>
-                        <button
-                          type="button"
-                          onClick={() => setShowCategoryModal(true)}
-                          className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
-                        >
-                          View Categories
-                        </button>
                       </div>
-                    )}
+                    ) : null}
                     <Button
                       onClick={handleRegister}
                       disabled={isRegistering}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5"
                     >
-                      {isRegistering ? 'Registering...' : 'Register Now'}
+                      {isRegistering ? (
+                        <span className="flex items-center justify-center">
+                          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Registering...
+                        </span>
+                      ) : (
+                        'Register Now'
+                      )}
                     </Button>
                   </div>
                 ) : (
@@ -1304,32 +1321,50 @@ const EventDetails = () => {
       )}
 
       {/* Categories Modal */}
-      {showCategoryModal && event?.categoriesAvailable && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Categories Available</h2>
+      {showCategoryModal && event?.categoriesAvailable && event.categoriesAvailable.trim() && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Categories Available</h2>
+                <p className="text-sm text-gray-600 mt-1">Select your category from the options below</p>
+              </div>
               <button
                 onClick={() => setShowCategoryModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div className="bg-gray-50 rounded-lg p-4 mb-4">
-              <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
-                {event.categoriesAvailable}
-              </pre>
+            <div className="px-6 py-4 overflow-y-auto flex-1">
+              <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-5 border border-blue-200">
+                <CategorySelector
+                  value={event.categoriesAvailable}
+                  onChange={() => {}} // No-op in read-only mode
+                  readOnly={true}
+                />
+              </div>
+              <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-gray-700 mb-2">
+                  <span className="font-semibold text-blue-900">How to use:</span>
+                </p>
+                <ol className="text-sm text-gray-700 space-y-1 list-decimal list-inside">
+                  <li>Review the categories above</li>
+                  <li>Select one item from each section (if applicable)</li>
+                  <li>Copy the format: <span className="font-mono bg-white px-2 py-1 rounded">Section 1 | Section 2 | Section 3</span></li>
+                  <li>Paste it in the registration form</li>
+                </ol>
+                <p className="text-xs text-gray-600 mt-3 italic">
+                  Note: Category selection is optional. You can still register without it if it doesn't apply to you.
+                </p>
+              </div>
             </div>
-            <p className="text-sm text-gray-600 mb-4">
-              Please copy your selected category from above and paste it in the registration form.
-            </p>
-            <div className="flex justify-end">
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
               <button
                 onClick={() => setShowCategoryModal(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
               >
                 Close
               </button>

@@ -233,10 +233,16 @@ const ParticipantsModal = ({
                         <FaMedal className="text-blue-500 w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
                         <div className="flex-1">
                           <p className="text-sm font-medium text-gray-700">Selected Category:</p>
-                          {participant.selectedCategory ? (
-                            <p className="text-sm text-gray-900 font-semibold mt-1">{participant.selectedCategory}</p>
+                          {participant.selectedCategory && participant.selectedCategory.trim() ? (
+                            <div className="mt-1">
+                              <p className="text-sm text-gray-900 font-semibold bg-blue-50 border border-blue-200 rounded-md px-3 py-2 inline-block">
+                                {participant.selectedCategory}
+                              </p>
+                            </div>
                           ) : (
-                            <p className="text-sm text-gray-500 italic mt-1">Not specified</p>
+                            <p className="text-sm text-gray-500 italic mt-1 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 inline-block">
+                              Not specified
+                            </p>
                           )}
                         </div>
                       </div>

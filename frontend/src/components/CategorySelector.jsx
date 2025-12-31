@@ -12,6 +12,7 @@ import { FaPlus, FaTimes } from 'react-icons/fa';
  * @param {string} ageGroupLabel - Custom label for age groups section (default: "Age Groups")
  * @param {string} strokeLabel - Custom label for strokes section (default: "Strokes / Event Types")
  * @param {string} distanceLabel - Custom label for distances section (default: "Distances")
+ * @param {boolean} readOnly - If true, displays categories in read-only mode (no editing)
  */
 const CategorySelector = ({ 
   value = '', 
@@ -19,7 +20,8 @@ const CategorySelector = ({
   className = '',
   ageGroupLabel = 'Age Groups',
   strokeLabel = 'Strokes / Event Types',
-  distanceLabel = 'Distances'
+  distanceLabel = 'Distances',
+  readOnly = false
 }) => {
   // Parse existing value into structured data (flexible parsing for different label names)
   const parseCategories = (text) => {
@@ -114,12 +116,14 @@ const CategorySelector = ({
     return parts.join('\n');
   };
 
-  // Update parent when categories change
+  // Update parent when categories change (only in edit mode)
   useEffect(() => {
-    const formatted = formatCategories(categories);
-    onChange(formatted);
+    if (!readOnly) {
+      const formatted = formatCategories(categories);
+      onChange(formatted);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categories]);
+  }, [categories, readOnly]);
 
   const addAgeGroup = () => {
     if (newAgeGroup.trim() && !categories.ageGroups.includes(newAgeGroup.trim())) {
@@ -175,6 +179,79 @@ const CategorySelector = ({
   // Common strokes for swimming
   const commonStrokes = ['Freestyle', 'Backstroke', 'Breaststroke', 'Butterfly', 'Individual Medley'];
   const commonDistances = ['25m', '50m', '100m', '200m', '400m', '800m', '1500m'];
+
+  // Read-only display mode
+  if (readOnly) {
+    if (!value || !value.trim()) {
+      return (
+        <div className={`${className}`}>
+          <p className="text-sm text-gray-500 italic">No categories specified for this event.</p>
+        </div>
+      );
+    }
+
+    // Parse and display in a nice formatted way
+    const parsed = parseCategories(value);
+    const hasAnyCategories = parsed.ageGroups.length > 0 || parsed.strokes.length > 0 || parsed.distances.length > 0;
+
+    if (!hasAnyCategories) {
+      return (
+        <div className={`${className}`}>
+          <p className="text-sm text-gray-500 italic">No categories specified for this event.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`space-y-3 ${className}`}>
+          {parsed.ageGroups.length > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">{finalAgeGroupLabel}:</h4>
+              <div className="flex flex-wrap gap-2">
+                {parsed.ageGroups.map((group, index) => (
+                  <span
+                    key={index}
+                    className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium"
+                  >
+                    {group}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {parsed.strokes.length > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">{finalStrokeLabel}:</h4>
+              <div className="flex flex-wrap gap-2">
+                {parsed.strokes.map((stroke, index) => (
+                  <span
+                    key={index}
+                    className="inline-flex items-center px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium"
+                  >
+                    {stroke}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {parsed.distances.length > 0 && (
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">{finalDistanceLabel}:</h4>
+              <div className="flex flex-wrap gap-2">
+                {parsed.distances.map((distance, index) => (
+                  <span
+                    key={index}
+                    className="inline-flex items-center px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium"
+                  >
+                    {distance}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+    );
+  }
 
   return (
     <div className={`space-y-4 ${className}`}>
