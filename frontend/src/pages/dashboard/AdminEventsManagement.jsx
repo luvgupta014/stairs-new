@@ -1252,10 +1252,20 @@ const AdminEventsManagement = () => {
 
       // Participants
       if (participantsResponse.status === 'fulfilled' && participantsResponse.value?.success) {
-        console.log('✅ Participants loaded:', participantsResponse.value.data.registrations?.length || 0);
+        const responseValue = participantsResponse.value;
+        // Backend shape: { success: true, data: { event: {...}, participants: [...] } }
+        const participantsList =
+          responseValue?.data?.participants ||
+          responseValue?.data?.registrations ||
+          responseValue?.participants ||
+          responseValue?.registrations ||
+          (Array.isArray(responseValue?.data) ? responseValue.data : []) ||
+          [];
+
+        console.log('✅ Participants loaded:', participantsList?.length || 0);
         setEventDetailsModal(prev => ({
           ...prev,
-          participants: participantsResponse.value.data.registrations || [],
+          participants: Array.isArray(participantsList) ? participantsList : [],
           loading: false
         }));
       } else {
@@ -1379,6 +1389,119 @@ const AdminEventsManagement = () => {
   const handleEditEventChange = (e) => {
     const { name, value } = e.target;
     setEditEventForm((prev) => ({ ...(prev || {}), [name]: value }));
+  };
+
+  // Ultra-stable admin edit: ref-based form submit (avoids freezes from heavy controlled state updates)
+  const handleEditEventSubmitStable = async (e) => {
+    e.preventDefault();
+    const ev = eventDetailsModal?.event;
+    if (!ev?.id) {
+      setEditErr('No event selected.');
+      return;
+    }
+
+    try {
+      setEditSaving(true);
+      setEditErr('');
+      setEditMsg('');
+
+      const formData = new FormData(e.currentTarget);
+      const getStr = (key) => String(formData.get(key) ?? '').trim();
+      const getStrOrNull = (key) => {
+        const v = getStr(key);
+        return v ? v : null;
+      };
+
+      const nextName = getStr('name');
+      const nextSport = getStr('sport');
+      const nextVenue = getStr('venue');
+      const nextCity = getStr('city');
+      const nextState = getStr('state');
+      const nextLevel = String(getStr('level') || (ev.level || 'DISTRICT')).toUpperCase();
+
+      const nextDescription = getStrOrNull('description');
+      const nextAddress = getStrOrNull('address');
+
+      const nextStartInput = getStr('startDate'); // datetime-local: YYYY-MM-DDTHH:mm
+      const nextEndInput = getStr('endDate'); // optional
+      const nextStartIsoish = nextStartInput ? `${nextStartInput}:00` : null;
+      const nextEndIsoish = nextEndInput ? `${nextEndInput}:00` : null;
+
+      const nextMaxRaw = getStr('maxParticipants');
+      const nextMax = nextMaxRaw ? Number(nextMaxRaw) : null;
+      const nextCategories = getStrOrNull('categoriesAvailable');
+
+      // Minimal required fields (HTML required covers most, but keep guardrails)
+      if (!nextName) throw new Error('Event name is required.');
+      if (!nextSport) throw new Error('Sport is required.');
+      if (!nextVenue) throw new Error('Venue is required.');
+      if (!nextCity) throw new Error('City is required.');
+      if (!nextState) throw new Error('State is required.');
+      if (!nextStartInput) throw new Error('Start date is required.');
+      if (nextMaxRaw && (!Number.isFinite(nextMax) || nextMax < 1)) throw new Error('Max participants must be a positive number.');
+
+      const patch = {};
+      const setIfChanged = (key, nextVal, origVal) => {
+        const n = String(nextVal ?? '');
+        const o = String(origVal ?? '');
+        if (n !== o) patch[key] = nextVal;
+      };
+
+      setIfChanged('name', nextName, (ev.name || '').trim());
+      setIfChanged('sport', nextSport, (ev.sport || '').trim());
+      setIfChanged('venue', nextVenue, (ev.venue || '').trim());
+      setIfChanged('city', nextCity, (ev.city || '').trim());
+      setIfChanged('state', nextState, (ev.state || '').trim());
+      setIfChanged('level', nextLevel, String(ev.level || 'DISTRICT').toUpperCase());
+
+      setIfChanged('description', nextDescription, (ev.description || '').trim() || null);
+      setIfChanged('address', nextAddress, (ev.address || '').trim() || null);
+
+      // Dates: compare by minute precision using existing helper
+      const origStartKey = ev.startDate ? formatDateForInput(ev.startDate) : '';
+      const origEndKey = ev.endDate ? formatDateForInput(ev.endDate) : '';
+      if (nextStartInput && nextStartInput !== origStartKey) patch.startDate = nextStartIsoish;
+      if ((nextEndInput || '') !== (origEndKey || '')) patch.endDate = nextEndIsoish;
+
+      // Max participants
+      const origMax = ev.maxParticipants === undefined || ev.maxParticipants === null ? null : Number(ev.maxParticipants);
+      if ((nextMax ?? null) !== (origMax ?? null)) patch.maxParticipants = nextMax;
+
+      // Categories Available
+      const origCat = ev.categoriesAvailable && String(ev.categoriesAvailable).trim() ? String(ev.categoriesAvailable).trim() : null;
+      const nextCatNorm = nextCategories && String(nextCategories).trim() ? String(nextCategories).trim() : null;
+      if (nextCatNorm !== origCat) patch.categoriesAvailable = nextCatNorm;
+
+      if (Object.keys(patch).length === 0) {
+        setEditMsg('No changes to save.');
+        return;
+      }
+
+      const res = await adminUpdateEvent(ev.id, patch);
+      if (!res?.success) {
+        throw new Error(res?.message || 'Failed to update event.');
+      }
+
+      const updated = res.data || res;
+      const normalizedUpdated = {
+        ...updated,
+        categoriesAvailable: updated.categoriesAvailable && String(updated.categoriesAvailable).trim()
+          ? String(updated.categoriesAvailable).trim()
+          : null
+      };
+
+      // Update lists + modal event so UI reflects immediately
+      setEvents((prev) => prev.map((x) => (x.id === ev.id ? { ...x, ...normalizedUpdated } : x)));
+      setEventDetailsModal((prev) => ({ ...prev, event: { ...(prev.event || {}), ...normalizedUpdated } }));
+      setEditMsg('Event updated successfully.');
+      pushToast('success', 'Saved', 'Event updated successfully.');
+    } catch (err) {
+      const msg = getErrorMessage(err, 'Failed to update event.');
+      setEditErr(msg);
+      pushToast('error', 'Save failed', msg);
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const buildEventPatch = (next, original) => {
@@ -2160,16 +2283,8 @@ const AdminEventsManagement = () => {
                 <div className="mb-4">
                   <h3 className="text-xl font-bold text-gray-900">Edit Event</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    Updates apply immediately. Only changed fields are saved (prevents date-validation issues).
+                    This editor uses a stable form-submit approach (no freezes). Only changed fields are sent to the backend.
                   </p>
-                  {hasEditChanges && (
-                    <div className="mt-3 bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded text-sm">
-                      <div className="font-semibold">Unsaved changes</div>
-                      <div className="mt-1">
-                        Changed fields: <span className="font-medium">{Object.keys(editPatch || {}).join(', ')}</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {editErr && (
@@ -2183,295 +2298,205 @@ const AdminEventsManagement = () => {
                   </div>
                 )}
 
-                {!editEventForm ? (
-                  <div className="text-gray-600">Loading...</div>
-                ) : (
-                  <div className="space-y-5">
-                    {editValidation?.warnings?.startDate && (
-                      <div className="bg-blue-50 border border-blue-200 text-blue-900 px-4 py-3 rounded text-sm">
-                        {editValidation.warnings.startDate}
-                      </div>
-                    )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label htmlFor="edit-event-name" className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
-                        <input
-                          type="text"
-                          id="edit-event-name"
-                          name="name"
-                          value={editEventForm.name || ''}
-                          onChange={handleEditEventChange}
-                          disabled={editSaving}
-                          autoComplete="off"
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                            editValidation?.errors?.name ? 'border-red-300' : 'border-gray-300'
-                          } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
-                        />
-                        {editValidation?.errors?.name && (
-                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.name}</div>
-                        )}
-                      </div>
-                      <div>
-                        <label htmlFor="edit-event-sport" className="block text-sm font-medium text-gray-700 mb-1">Sport *</label>
-                        <input
-                          type="text"
-                          id="edit-event-sport"
-                          name="sport"
-                          value={editEventForm.sport}
-                          onChange={handleEditEventChange}
-                          disabled={editSaving}
-                          autoComplete="off"
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                            editValidation?.errors?.sport ? 'border-red-300' : 'border-gray-300'
-                          } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
-                          placeholder="e.g. Cricket (or Cricket, Football)"
-                        />
-                        {editValidation?.errors?.sport && (
-                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.sport}</div>
-                        )}
-                      </div>
-                    </div>
-
+                <form
+                  key={event?.id}
+                  onSubmit={handleEditEventSubmitStable}
+                  className="space-y-5"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label htmlFor="edit-event-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                      <textarea
-                        id="edit-event-description"
-                        name="description"
-                        rows={3}
-                        value={editEventForm.description}
-                        onChange={handleEditEventChange}
+                      <label htmlFor="stable-edit-name" className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
+                      <input
+                        id="stable-edit-name"
+                        name="name"
+                        type="text"
+                        required
+                        defaultValue={event?.name || ''}
                         disabled={editSaving}
                         autoComplete="off"
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                          editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
-                        }`}
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                       />
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label htmlFor="edit-event-level" className="block text-sm font-medium text-gray-700 mb-1">Level</label>
-                        <select
-                          id="edit-event-level"
-                          name="level"
-                          value={editEventForm.level}
-                          onChange={handleEditEventChange}
-                          disabled={editSaving}
-                          autoComplete="off"
-                          className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                            editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
-                          }`}
-                        >
-                          <option value="DISTRICT">DISTRICT</option>
-                          <option value="STATE">STATE</option>
-                          <option value="NATIONAL">NATIONAL</option>
-                          <option value="SCHOOL">SCHOOL</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label htmlFor="edit-event-start-date" className="block text-sm font-medium text-gray-700 mb-1">Start Date & Time *</label>
-                        <input
-                          type="datetime-local"
-                          id="edit-event-start-date"
-                          name="startDate"
-                          value={editEventForm.startDate}
-                          onChange={handleEditEventChange}
-                          disabled={editSaving}
-                          autoComplete="off"
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                            editValidation?.errors?.startDate ? 'border-red-300' : 'border-gray-300'
-                          } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
-                        />
-                        {editValidation?.errors?.startDate && (
-                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.startDate}</div>
-                        )}
-                      </div>
-                      <div>
-                        <label htmlFor="edit-event-end-date" className="block text-sm font-medium text-gray-700 mb-1">End Date & Time</label>
-                        <input
-                          type="datetime-local"
-                          id="edit-event-end-date"
-                          name="endDate"
-                          value={editEventForm.endDate}
-                          onChange={handleEditEventChange}
-                          disabled={editSaving}
-                          autoComplete="off"
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                            editValidation?.errors?.endDate ? 'border-red-300' : 'border-gray-300'
-                          } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
-                        />
-                        {editValidation?.errors?.endDate && (
-                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.endDate}</div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label htmlFor="edit-event-venue" className="block text-sm font-medium text-gray-700 mb-1">Venue *</label>
-                        <input
-                          type="text"
-                          id="edit-event-venue"
-                          name="venue"
-                          value={editEventForm.venue}
-                          onChange={handleEditEventChange}
-                          disabled={editSaving}
-                          autoComplete="organization"
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                            editValidation?.errors?.venue ? 'border-red-300' : 'border-gray-300'
-                          } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
-                        />
-                        {editValidation?.errors?.venue && (
-                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.venue}</div>
-                        )}
-                      </div>
-                      <div>
-                        <label htmlFor="edit-event-max-participants" className="block text-sm font-medium text-gray-700 mb-1">Max Participants</label>
-                        <input
-                          type="number"
-                          id="edit-event-max-participants"
-                          min="1"
-                          name="maxParticipants"
-                          value={editEventForm.maxParticipants}
-                          onChange={handleEditEventChange}
-                          disabled={editSaving}
-                          autoComplete="off"
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                            editValidation?.errors?.maxParticipants ? 'border-red-300' : 'border-gray-300'
-                          } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
-                        />
-                        {editValidation?.errors?.maxParticipants && (
-                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.maxParticipants}</div>
-                        )}
-                      </div>
-                    </div>
-
                     <div>
-                      <label htmlFor="edit-event-address" className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                      <label htmlFor="stable-edit-sport" className="block text-sm font-medium text-gray-700 mb-1">Sport *</label>
                       <input
+                        id="stable-edit-sport"
+                        name="sport"
                         type="text"
-                        id="edit-event-address"
-                        name="address"
-                        value={editEventForm.address}
-                        onChange={handleEditEventChange}
+                        required
+                        defaultValue={event?.sport || ''}
                         disabled={editSaving}
-                        autoComplete="street-address"
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                          editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
-                        }`}
+                        autoComplete="off"
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                        placeholder="e.g. Cricket (or Cricket, Football)"
                       />
                     </div>
+                  </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label htmlFor="edit-event-city" className="block text-sm font-medium text-gray-700 mb-1">City *</label>
-                        <input
-                          type="text"
-                          id="edit-event-city"
-                          name="city"
-                          value={editEventForm.city}
-                          onChange={handleEditEventChange}
-                          disabled={editSaving}
-                          autoComplete="address-level2"
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                            editValidation?.errors?.city ? 'border-red-300' : 'border-gray-300'
-                          } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
-                        />
-                        {editValidation?.errors?.city && (
-                          <div className="mt-1 text-xs text-red-600">{editValidation.errors.city}</div>
-                        )}
-                      </div>
+                  <div>
+                    <label htmlFor="stable-edit-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea
+                      id="stable-edit-description"
+                      name="description"
+                      rows={3}
+                      defaultValue={event?.description || ''}
+                      disabled={editSaving}
+                      autoComplete="off"
+                      className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label htmlFor="edit-event-state" className="block text-sm font-medium text-gray-700 mb-1">State *</label>
+                      <label htmlFor="stable-edit-level" className="block text-sm font-medium text-gray-700 mb-1">Level</label>
+                      <select
+                        id="stable-edit-level"
+                        name="level"
+                        defaultValue={event?.level || 'DISTRICT'}
+                        disabled={editSaving}
+                        autoComplete="off"
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                      >
+                        <option value="DISTRICT">DISTRICT</option>
+                        <option value="STATE">STATE</option>
+                        <option value="NATIONAL">NATIONAL</option>
+                        <option value="SCHOOL">SCHOOL</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="stable-edit-start" className="block text-sm font-medium text-gray-700 mb-1">Start Date & Time *</label>
                       <input
+                        id="stable-edit-start"
+                        name="startDate"
+                        type="datetime-local"
+                        required
+                        defaultValue={formatDateForInput(event?.startDate)}
+                        disabled={editSaving}
+                        autoComplete="off"
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="stable-edit-end" className="block text-sm font-medium text-gray-700 mb-1">End Date & Time</label>
+                      <input
+                        id="stable-edit-end"
+                        name="endDate"
+                        type="datetime-local"
+                        defaultValue={formatDateForInput(event?.endDate)}
+                        disabled={editSaving}
+                        autoComplete="off"
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="stable-edit-venue" className="block text-sm font-medium text-gray-700 mb-1">Venue *</label>
+                      <input
+                        id="stable-edit-venue"
+                        name="venue"
                         type="text"
-                        id="edit-event-state"
+                        required
+                        defaultValue={event?.venue || ''}
+                        disabled={editSaving}
+                        autoComplete="organization"
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="stable-edit-max" className="block text-sm font-medium text-gray-700 mb-1">Max Participants</label>
+                      <input
+                        id="stable-edit-max"
+                        name="maxParticipants"
+                        type="number"
+                        min="1"
+                        defaultValue={event?.maxParticipants ?? ''}
+                        disabled={editSaving}
+                        autoComplete="off"
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="stable-edit-address" className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                    <input
+                      id="stable-edit-address"
+                      name="address"
+                      type="text"
+                      defaultValue={event?.address || ''}
+                      disabled={editSaving}
+                      autoComplete="street-address"
+                      className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="stable-edit-city" className="block text-sm font-medium text-gray-700 mb-1">City *</label>
+                      <input
+                        id="stable-edit-city"
+                        name="city"
+                        type="text"
+                        required
+                        defaultValue={event?.city || ''}
+                        disabled={editSaving}
+                        autoComplete="address-level2"
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="stable-edit-state" className="block text-sm font-medium text-gray-700 mb-1">State *</label>
+                      <input
+                        id="stable-edit-state"
                         name="state"
-                        value={editEventForm.state}
-                        onChange={handleEditEventChange}
+                        type="text"
+                        required
+                        defaultValue={event?.state || ''}
                         disabled={editSaving}
                         autoComplete="address-level1"
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                          editValidation?.errors?.state ? 'border-red-300' : 'border-gray-300'
-                        } ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                       />
-                      {editValidation?.errors?.state && (
-                        <div className="mt-1 text-xs text-red-600">{editValidation.errors.state}</div>
-                      )}
                     </div>
                   </div>
 
-                  {/* Categories Available */}
-                  {editEventForm && (
-                    <div>
-                      <label htmlFor="edit-event-categories" className="block text-sm font-medium text-gray-700 mb-2">
-                        Categories Available (Optional)
-                      </label>
-                      <div id="edit-event-categories" className={editSaving ? 'pointer-events-none opacity-60' : ''}>
-                        <CategorySelector
-                          value={editEventForm.categoriesAvailable || ''}
-                          onChange={(value) => {
-                            if (!editSaving && editEventForm) {
-                              setEditEventForm(prev => ({ ...prev, categoriesAvailable: value }));
-                            }
-                          }}
-                        />
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        Define age groups, strokes/event types, and distances for this event. Athletes can select from these during registration.
-                      </p>
-                    </div>
-                  )}
+                  <div>
+                    <label htmlFor="stable-edit-categories" className="block text-sm font-medium text-gray-700 mb-1">
+                      Categories Available (optional)
+                    </label>
+                    <textarea
+                      id="stable-edit-categories"
+                      name="categoriesAvailable"
+                      rows={4}
+                      defaultValue={event?.categoriesAvailable || ''}
+                      disabled={editSaving}
+                      autoComplete="off"
+                      className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                      placeholder={`Age Groups: Group I (11-12), U-14\nStrokes / Event Types: Freestyle, Backstroke\nDistances: 50m, 100m`}
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                      Tip: one section per line, format <span className="font-mono">Label: item1, item2</span>.
+                    </p>
+                  </div>
 
                   <div className="flex items-center justify-end gap-3 pt-2">
-                      <button
-                        type="button"
-                        onClick={resetEditedEvent}
-                        disabled={editSaving || !hasEditChanges}
-                        className="px-4 py-2 bg-white border border-gray-300 text-gray-800 rounded-lg font-semibold hover:bg-gray-50 disabled:opacity-60"
-                        title={hasEditChanges ? 'Reset changes' : 'No changes to reset'}
-                      >
-                        Reset
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          console.log('🔘 Save button clicked', {
-                            editSaving,
-                            hasEditChanges,
-                            isValid: editValidation?.isValid,
-                            errors: editValidation?.errors,
-                            patch: editPatch
-                          });
-                          saveEditedEvent();
-                        }}
-                        disabled={editSaving || !hasEditChanges || !editValidation?.isValid}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                        title={
-                          !hasEditChanges
-                            ? 'No changes to save'
-                            : !editValidation?.isValid
-                              ? `Please fix validation errors: ${Object.keys(editValidation?.errors || {}).join(', ')}`
-                              : 'Save changes'
-                        }
-                      >
-                        {editSaving ? (
-                          <span className="flex items-center">
-                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Saving...
-                          </span>
-                        ) : (
-                          'Save Changes'
-                        )}
-                      </button>
-                    </div>
+                    <button
+                      type="reset"
+                      disabled={editSaving}
+                      className="px-4 py-2 bg-white border border-gray-300 text-gray-800 rounded-lg font-semibold hover:bg-gray-50 disabled:opacity-60"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={editSaving}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {editSaving ? 'Saving…' : 'Save Changes'}
+                    </button>
                   </div>
-                )}
+                </form>
               </div>
             )}
 
