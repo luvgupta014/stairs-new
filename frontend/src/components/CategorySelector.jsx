@@ -267,38 +267,47 @@ const CategorySelector = ({
         {showCustomNames && (
           <div className="mt-3 space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label htmlFor="category-custom-age-group-label" className="block text-xs font-medium text-gray-700 mb-1">
                 First Section Name (default: "Age Groups")
               </label>
               <input
                 type="text"
+                id="category-custom-age-group-label"
+                name="customAgeGroupLabel"
                 value={customAgeGroupLabel}
                 onChange={(e) => setCustomAgeGroupLabel(e.target.value)}
                 placeholder="e.g., Weight Classes, Age Divisions, Categories"
+                autoComplete="off"
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label htmlFor="category-custom-stroke-label" className="block text-xs font-medium text-gray-700 mb-1">
                 Second Section Name (default: "Strokes / Event Types")
               </label>
               <input
                 type="text"
+                id="category-custom-stroke-label"
+                name="customStrokeLabel"
                 value={customStrokeLabel}
                 onChange={(e) => setCustomStrokeLabel(e.target.value)}
                 placeholder="e.g., Divisions, Event Categories, Match Types"
+                autoComplete="off"
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label htmlFor="category-custom-distance-label" className="block text-xs font-medium text-gray-700 mb-1">
                 Third Section Name (default: "Distances")
               </label>
               <input
                 type="text"
+                id="category-custom-distance-label"
+                name="customDistanceLabel"
                 value={customDistanceLabel}
                 onChange={(e) => setCustomDistanceLabel(e.target.value)}
                 placeholder="e.g., Rounds, Sets, Attempts, Lengths"
+                autoComplete="off"
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
               />
             </div>
@@ -311,16 +320,19 @@ const CategorySelector = ({
 
       {/* Age Groups Section */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="category-new-age-group" className="block text-sm font-medium text-gray-700 mb-2">
           {finalAgeGroupLabel}
         </label>
         <div className="flex gap-2 mb-2">
           <input
             type="text"
+            id="category-new-age-group"
+            name="newAgeGroup"
             value={newAgeGroup}
             onChange={(e) => setNewAgeGroup(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addAgeGroup())}
             placeholder="Type any age group (e.g., Group I (11-12), U-14, Senior, etc.)"
+            autoComplete="off"
             className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
           />
           <button
@@ -359,16 +371,19 @@ const CategorySelector = ({
 
       {/* Strokes/Event Types Section */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="category-new-stroke" className="block text-sm font-medium text-gray-700 mb-2">
           {finalStrokeLabel}
         </label>
         <div className="flex gap-2 mb-2">
           <input
             type="text"
+            id="category-new-stroke"
+            name="newStroke"
             value={newStroke}
             onChange={(e) => setNewStroke(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addStroke())}
             placeholder="Type any stroke or event type (e.g., Freestyle, Relay, Mixed, etc.)"
+            autoComplete="off"
             className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
           />
           <button
@@ -427,16 +442,19 @@ const CategorySelector = ({
 
       {/* Distances Section */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="category-new-distance" className="block text-sm font-medium text-gray-700 mb-2">
           {finalDistanceLabel}
         </label>
         <div className="flex gap-2 mb-2">
           <input
             type="text"
+            id="category-new-distance"
+            name="newDistance"
             value={newDistance}
             onChange={(e) => setNewDistance(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addDistance())}
             placeholder="Type any distance (e.g., 50m, 100m, 1km, Marathon, etc.)"
+            autoComplete="off"
             className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
           />
           <button
