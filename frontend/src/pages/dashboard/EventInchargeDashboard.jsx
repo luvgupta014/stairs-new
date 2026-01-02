@@ -87,7 +87,7 @@ const EventInchargeDashboard = () => {
 
       const enabledCount = [canStudentMgmt, canResults, canCertificates, canFees].filter(Boolean).length;
       const missing = [
-        !canStudentMgmt ? 'Student Mgmt' : null,
+        !canStudentMgmt ? 'Student Management' : null,
         !canResults ? 'Results' : null,
         !canCertificates ? 'Certificates' : null,
         !canFees ? 'Fees' : null
@@ -213,7 +213,7 @@ const EventInchargeDashboard = () => {
           {/* Assigned Events */}
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold text-gray-900">Assigned Events</h2>
-            <Link to="/events" className="text-sm text-indigo-700 hover:text-indigo-900 font-medium">
+            <Link to="/events?portal=incharge" className="text-sm text-indigo-700 hover:text-indigo-900 font-medium">
               Browse all events
             </Link>
           </div>
@@ -277,7 +277,7 @@ const EventInchargeDashboard = () => {
                 const p = row.perms || {};
                 const chips = [
                   row.canResults ? 'Result Upload' : null,
-                  row.canStudentMgmt ? 'Student Mgmt' : null,
+                  row.canStudentMgmt ? 'Student Management' : null,
                   row.canCertificates ? 'Certificates' : null,
                   row.canFees ? 'Fees' : null
                 ].filter(Boolean);
@@ -387,7 +387,7 @@ const EventInchargeDashboard = () => {
                         title={row.canCertificates ? 'Generate/issue certificates' : 'Certificate Management permission not granted'}
                       >
                         <FaCertificate className="w-4 h-4" />
-                        Certs
+                        Certificates
                       </button>
                       <button
                         type="button"

@@ -111,7 +111,7 @@ const isOriginAllowed = (origin) => {
 // NOTE: withCredentials=true on frontend requires a specific origin (not '*') + credentials=true.
 const corsOptionsDelegate = (req, callback) => {
   const origin = req.header('Origin');
-
+  
   // Non-browser / same-origin requests often have no Origin header; CORS is irrelevant there.
   if (!origin) {
     return callback(null, { origin: false });
@@ -123,7 +123,7 @@ const corsOptionsDelegate = (req, callback) => {
   if (!allowed && isProd) {
     console.warn(`⚠️ CORS blocked origin: ${origin}. Allowed origins:`, allowedOrigins);
   }
-
+  
   const corsOptions = {
     origin: allowed ? origin : false,
     credentials: true,

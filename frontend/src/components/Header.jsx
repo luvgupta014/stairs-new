@@ -281,7 +281,7 @@ const Header = () => {
                 {user.role === 'EVENT_INCHARGE' ? (
                   <>
                     <Link
-                      to="/events"
+                      to="/events?portal=incharge"
                       className={`px-3 py-2 rounded-md text-sm font-medium ${
                         isActivePath('/events') ? 'text-blue-700 bg-blue-50' : 'text-gray-700 hover:text-blue-600'
                       }`}

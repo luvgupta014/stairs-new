@@ -340,6 +340,49 @@ const EventCard = ({
             </>
           )}
 
+          {/* Event Incharge Actions */}
+          {(userRole === 'EVENT_INCHARGE' || userRole === 'event_incharge') && (
+            <>
+              <button
+                onClick={() => handleAction('view')}
+                className="flex-1 bg-indigo-600 text-white px-3 py-2 rounded-md text-sm hover:bg-indigo-700 transition-colors"
+                style={{ minWidth: '120px' }}
+              >
+                Open Event
+              </button>
+
+              {event?.permissionOverride?.studentManagement ? (
+                <button
+                  onClick={() => handleAction('participants')}
+                  className="bg-emerald-600 text-white px-3 py-2 rounded-md text-sm hover:bg-emerald-700 transition-colors"
+                  title="View registered students"
+                >
+                  Students
+                </button>
+              ) : null}
+
+              {event?.permissionOverride?.resultUpload ? (
+                <button
+                  onClick={() => handleAction('results')}
+                  className="bg-purple-600 text-white px-3 py-2 rounded-md text-sm hover:bg-purple-700 transition-colors"
+                  title="Upload/manage results"
+                >
+                  Results
+                </button>
+              ) : null}
+
+              {event?.permissionOverride?.certificateManagement ? (
+                <button
+                  onClick={() => handleAction('certificates')}
+                  className="bg-amber-600 text-white px-3 py-2 rounded-md text-sm hover:bg-amber-700 transition-colors"
+                  title="Issue certificates"
+                >
+                  Certificates
+                </button>
+              ) : null}
+            </>
+          )}
+
           {/* Results Download for all (if available) */}
           {event.hasResults && (
             <button

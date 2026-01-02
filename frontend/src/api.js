@@ -1155,6 +1155,19 @@ export const bulkAddEventParticipants = async (eventId, identifiers = []) => {
   }
 };
 
+// Bulk upload/register students to an event from a CSV/XLSX file (EVENT_INCHARGE with studentManagement)
+export const bulkUploadEventParticipantsFile = async (eventId, file) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post(`/api/events/${eventId}/registrations/bulk-upload`, formData);
+    return response.data;
+  } catch (error) {
+    console.error('Bulk upload event participants error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 // Utility functions
 export const setAuthToken = (token) => {
   localStorage.setItem('authToken', token);

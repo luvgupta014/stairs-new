@@ -7,6 +7,7 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const { successResponse, errorResponse } = require('../utils/helpers');
 const prisma = require('../utils/prismaClient');
+const XLSX = require('xlsx');
 
 const router = express.Router();
 const eventController = new EventController();
@@ -76,6 +77,161 @@ const handleMulterError = (err, req, res, next) => {
     return res.status(400).json({ success: false, message: err.message });
   }
   return res.status(500).json({ success: false, message: 'File upload error: ' + err.message });
+};
+
+// Separate uploader for bulk participant upload (in-memory; CSV/XLS/XLSX only)
+const bulkUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB is plenty for identifier lists
+    files: 1
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['.csv', '.xlsx', '.xls'];
+    const fileExt = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(fileExt)) return cb(null, true);
+    return cb(new Error('Invalid file type. Only CSV, XLSX, and XLS files are allowed.'));
+  }
+});
+
+const extractIdentifiersFromUpload = (file) => {
+  if (!file) return [];
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  const buf = file.buffer;
+  if (!buf) return [];
+
+  const normalize = (v) => String(v || '').trim();
+
+  // CSV
+  if (ext === '.csv') {
+    const text = buf.toString('utf8');
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (!lines.length) return [];
+
+    // If header includes a known column, prefer it; otherwise take first column.
+    const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const known = ['identifier', 'uniqueid', 'uid', 'studentid', 'email', 'phone', 'mobile'];
+    const idx = header.findIndex(h => known.includes(h));
+    const startRow = idx >= 0 ? 1 : 0;
+    const colIndex = idx >= 0 ? idx : 0;
+
+    return lines
+      .slice(startRow)
+      .map(row => row.split(',')[colIndex])
+      .map(normalize)
+      .filter(Boolean);
+  }
+
+  // XLS/XLSX (first sheet)
+  try {
+    const wb = XLSX.read(buf, { type: 'buffer' });
+    const sheetName = wb.SheetNames?.[0];
+    if (!sheetName) return [];
+    const sheet = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }); // array of objects
+    if (!rows.length) {
+      // fallback: treat as array of arrays
+      const rows2 = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      return (rows2 || []).map(r => normalize(Array.isArray(r) ? r[0] : r)).filter(Boolean);
+    }
+
+    const pick = (obj) => {
+      if (!obj || typeof obj !== 'object') return '';
+      const keys = Object.keys(obj);
+      const lowerMap = new Map(keys.map(k => [k.toLowerCase().trim(), k]));
+      const candidates = ['identifier', 'uniqueid', 'uid', 'studentid', 'email', 'phone', 'mobile'];
+      for (const c of candidates) {
+        const realKey = lowerMap.get(c);
+        if (realKey) return normalize(obj[realKey]);
+      }
+      // fallback: first column value
+      const firstKey = keys[0];
+      return normalize(obj[firstKey]);
+    };
+
+    return rows.map(pick).filter(Boolean);
+  } catch {
+    return [];
+  }
+};
+
+// Shared helper for bulk registering existing students by identifiers (used by JSON and file flows)
+const bulkRegisterExistingStudents = async ({ eventId, user, identifiers = [] }) => {
+  if (!Array.isArray(identifiers) || identifiers.length === 0) {
+    return { ok: false, status: 400, message: 'identifiers must be a non-empty array.' };
+  }
+  if (identifiers.length > 300) {
+    return { ok: false, status: 400, message: 'Too many identifiers. Max 300 per request.' };
+  }
+
+  // Authorization
+  if (user.role === 'EVENT_INCHARGE') {
+    const has = await checkEventPermission({ user, eventId, permissionKey: 'studentManagement' });
+    if (!has) return { ok: false, status: 403, message: 'Access denied. Student management permission required.' };
+  } else if (user.role !== 'ADMIN') {
+    return { ok: false, status: 403, message: 'Access denied.' };
+  }
+
+  // Resolve event to DB id (supports uniqueId too)
+  const EventService = require('../services/eventService');
+  const eventServiceLocal = new EventService();
+  const resolvedEvent = await eventServiceLocal.resolveEventId(eventId);
+
+  // Normalize identifiers
+  const uniq = Array.from(new Set(identifiers.map(x => String(x || '').trim()).filter(Boolean)));
+  if (uniq.length === 0) return { ok: false, status: 400, message: 'No valid identifiers found.' };
+
+  const students = await prisma.student.findMany({
+    where: {
+      OR: [
+        { id: { in: uniq } },
+        { user: { uniqueId: { in: uniq } } },
+        { user: { email: { in: uniq } } },
+        { user: { phone: { in: uniq } } }
+      ]
+    },
+    select: {
+      id: true,
+      name: true,
+      user: { select: { uniqueId: true, email: true, phone: true } }
+    }
+  });
+
+  const studentByAnyKey = new Map();
+  for (const s of students) {
+    studentByAnyKey.set(String(s.id), s);
+    if (s.user?.uniqueId) studentByAnyKey.set(String(s.user.uniqueId), s);
+    if (s.user?.email) studentByAnyKey.set(String(s.user.email), s);
+    if (s.user?.phone) studentByAnyKey.set(String(s.user.phone), s);
+  }
+
+  const tasks = uniq.map(async (identifier) => {
+    const student = studentByAnyKey.get(identifier);
+    if (!student) {
+      return { ok: false, identifier, reason: 'Student not found' };
+    }
+    try {
+      await eventServiceLocal.registerForEvent(resolvedEvent.id, student.id);
+      return { ok: true, identifier, studentId: student.id };
+    } catch (e) {
+      return { ok: false, identifier, reason: e?.message || 'Failed to register' };
+    }
+  });
+
+  const results = await Promise.all(tasks);
+  const registered = results.filter(r => r.ok).length;
+  const failed = results.filter(r => !r.ok);
+
+  return {
+    ok: true,
+    data: {
+      eventId: resolvedEvent.id,
+      requested: uniq.length,
+      registered,
+      failedCount: failed.length,
+      failed
+    }
+  };
 };
 
 // Middleware to prevent express-fileupload interference with multer
@@ -529,88 +685,53 @@ router.post('/:eventId/registrations/bulk', authenticate, async (req, res) => {
     const { eventId } = req.params;
     const { user } = req;
     const { identifiers = [] } = req.body || {};
-
-    if (!Array.isArray(identifiers) || identifiers.length === 0) {
-      return res.status(400).json(errorResponse('identifiers must be a non-empty array.', 400));
-    }
-    if (identifiers.length > 300) {
-      return res.status(400).json(errorResponse('Too many identifiers. Max 300 per request.', 400));
-    }
-
-    // Authorization
-    if (user.role === 'EVENT_INCHARGE') {
-      const has = await checkEventPermission({ user, eventId, permissionKey: 'studentManagement' });
-      if (!has) return res.status(403).json(errorResponse('Access denied. Student management permission required.', 403));
-    } else if (user.role !== 'ADMIN') {
-      return res.status(403).json(errorResponse('Access denied.', 403));
-    }
-
-    // Resolve event to DB id (supports uniqueId too)
-    const EventService = require('../services/eventService');
-    const eventServiceLocal = new EventService();
-    const resolvedEvent = await eventServiceLocal.resolveEventId(eventId);
-
-    // Normalize identifiers
-    const uniq = Array.from(new Set(identifiers.map(x => String(x || '').trim()).filter(Boolean)));
-    if (uniq.length === 0) return res.status(400).json(errorResponse('No valid identifiers found.', 400));
-
-    // Lookup students by:
-    // - student.id
-    // - user.uniqueId
-    // - user.email
-    // - user.phone
-    const students = await prisma.student.findMany({
-      where: {
-        OR: [
-          { id: { in: uniq } },
-          { user: { uniqueId: { in: uniq } } },
-          { user: { email: { in: uniq } } },
-          { user: { phone: { in: uniq } } }
-        ]
-      },
-      select: {
-        id: true,
-        name: true,
-        user: { select: { uniqueId: true, email: true, phone: true } }
-      }
-    });
-
-    // Build best-effort map identifier -> student
-    const studentByAnyKey = new Map();
-    for (const s of students) {
-      studentByAnyKey.set(String(s.id), s);
-      if (s.user?.uniqueId) studentByAnyKey.set(String(s.user.uniqueId), s);
-      if (s.user?.email) studentByAnyKey.set(String(s.user.email), s);
-      if (s.user?.phone) studentByAnyKey.set(String(s.user.phone), s);
-    }
-
-    const tasks = uniq.map(async (identifier) => {
-      const student = studentByAnyKey.get(identifier);
-      if (!student) {
-        return { ok: false, identifier, reason: 'Student not found' };
-      }
-      try {
-        await eventServiceLocal.registerForEvent(resolvedEvent.id, student.id);
-        return { ok: true, identifier, studentId: student.id };
-      } catch (e) {
-        return { ok: false, identifier, reason: e?.message || 'Failed to register' };
-      }
-    });
-
-    const results = await Promise.all(tasks);
-    const registered = results.filter(r => r.ok).length;
-    const failed = results.filter(r => !r.ok);
-
-    return res.json(successResponse({
-      eventId: resolvedEvent.id,
-      requested: uniq.length,
-      registered,
-      failedCount: failed.length,
-      failed
-    }, 'Bulk registration completed.'));
+    const out = await bulkRegisterExistingStudents({ eventId, user, identifiers });
+    if (!out.ok) return res.status(out.status || 400).json(errorResponse(out.message || 'Bulk registration failed.', out.status || 400));
+    return res.json(successResponse(out.data, 'Bulk registration completed.'));
   } catch (error) {
     console.error('Bulk register students error:', error);
     return res.status(500).json(errorResponse('Failed to bulk register students.', 500));
+  }
+});
+
+/**
+ * Bulk upload/register students to an event from a CSV/XLSX file (Event Incharge with studentManagement)
+ * POST /api/events/:eventId/registrations/bulk-upload
+ * Form-data: file=<csv/xlsx/xls>
+ *
+ * Supported columns (case-insensitive): identifier | uniqueId | uid | studentId | email | phone | mobile
+ * If no header, the first column is treated as identifier.
+ */
+router.post('/:eventId/registrations/bulk-upload', authenticate, bulkUpload.single('file'), async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { user } = req;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json(errorResponse('file is required (CSV/XLSX/XLS).', 400));
+    }
+
+    const identifiers = extractIdentifiersFromUpload(file).slice(0, 300);
+    if (!identifiers.length) {
+      return res.status(400).json(errorResponse('No identifiers found in file. Provide a column like "identifier" or put IDs/emails/phones in the first column.', 400));
+    }
+
+    const out = await bulkRegisterExistingStudents({ eventId, user, identifiers });
+    if (!out.ok) return res.status(out.status || 400).json(errorResponse(out.message || 'Bulk upload failed.', out.status || 400));
+
+    return res.json(successResponse({
+      ...out.data,
+      source: 'file',
+      filename: file.originalname
+    }, 'Bulk upload registration completed.'));
+  } catch (error) {
+    console.error('Bulk upload register students error:', error);
+    // multer fileFilter errors arrive here too
+    if (error?.message?.includes('Invalid file type')) {
+      return res.status(400).json(errorResponse(error.message, 400));
+    }
+    return res.status(500).json(errorResponse('Failed to bulk upload register students.', 500));
   }
 });
 

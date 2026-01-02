@@ -901,7 +901,7 @@ const EventDetails = () => {
                             disabled={!canInchargeStudentMgmt || inchargePermsLoading}
                           >
                             <FaUsers className="w-4 h-4" />
-                            Student Mgmt
+                            Student Management
                           </Button>
                           <Button
                             onClick={() => navigate(`/events/${eventId}/results`)}

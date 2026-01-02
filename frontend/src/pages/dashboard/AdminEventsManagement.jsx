@@ -3893,7 +3893,7 @@ const AdminEventsManagement = () => {
                                 </div>
                                 <div className="mt-1 flex flex-wrap gap-1">
                                   {inv.permissions?.resultUpload ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">Result Upload</span> : null}
-                                  {inv.permissions?.studentManagement ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">Student Mgmt</span> : null}
+                                  {inv.permissions?.studentManagement ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">Student Management</span> : null}
                                   {inv.permissions?.certificateManagement ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">Certificates</span> : null}
                                   {inv.permissions?.feeManagement ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">Fees</span> : null}
                                   {!inv.permissions?.resultUpload && !inv.permissions?.studentManagement && !inv.permissions?.certificateManagement && !inv.permissions?.feeManagement ? (

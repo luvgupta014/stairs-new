@@ -14,8 +14,9 @@ import {
   unregisterFromEvent,
   getStudentEventDetails,
   createStudentEventPaymentOrder,
-  getMyAssignedEvents
+  getEventInchargeAssignedEvents
 } from '../../api';
+import { useLocation } from 'react-router-dom';
 
 /**
  * Events Page
@@ -25,6 +26,7 @@ import {
 const Events = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [events, setEvents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -244,11 +246,16 @@ const Events = () => {
         console.log('📚 Student events response:', response);
         loadedEvents = response.data?.events || [];
       } else if (user?.role === 'EVENT_INCHARGE') {
-        // Event Incharge sees only assigned events
-        const assigned = await getMyAssignedEvents();
-        const assignments = assigned?.data || assigned || [];
+        // Event Incharge sees assigned events with per-event permission override
+        const assignedRes = await getEventInchargeAssignedEvents();
+        const assignments = assignedRes?.data || assignedRes || [];
         loadedEvents = Array.isArray(assignments)
-          ? assignments.map(a => a.event).filter(Boolean)
+          ? assignments.map(a => ({
+              ...(a.event || {}),
+              // attach permission info for UI actions
+              permissionOverride: a.permissionOverride || null,
+              isPointOfContact: !!a.isPointOfContact
+            })).filter(e => e.id)
           : [];
       } else if (user?.role === 'COACH') {
         // Coaches see their own events
@@ -423,6 +430,47 @@ const Events = () => {
         console.log('🔍 Navigating to event details:', event.id);
         handleEventView(event.id);
         break;
+      case 'participants': {
+        // Event Incharge: only if studentManagement permission
+        if (user?.role === 'EVENT_INCHARGE') {
+          const p = event?.permissionOverride || {};
+          if (!p.studentManagement) {
+            alert('Student Management permission is not granted for this event.');
+            return;
+          }
+          handleViewParticipants(event.id);
+          return;
+        }
+        if (canManageEvents()) handleViewParticipants(event.id);
+        break;
+      }
+      case 'results': {
+        // Event Incharge: only if resultUpload permission
+        if (user?.role === 'EVENT_INCHARGE') {
+          const p = event?.permissionOverride || {};
+          if (!p.resultUpload) {
+            alert('Result Upload permission is not granted for this event.');
+            return;
+          }
+          handleUploadResults(event.id);
+          return;
+        }
+        if (canManageEvents()) handleUploadResults(event.id);
+        break;
+      }
+      case 'certificates': {
+        // Event Incharge: only if certificateManagement permission
+        if (user?.role === 'EVENT_INCHARGE') {
+          const p = event?.permissionOverride || {};
+          if (!p.certificateManagement) {
+            alert('Certificate Management permission is not granted for this event.');
+            return;
+          }
+          handleCertificates(event.id);
+          return;
+        }
+        break;
+      }
       case 'register':
         // Production safety: if categories exist, block quick-register and force details flow
         if (user?.role === 'STUDENT' && event?.categoriesAvailable && event.categoriesAvailable.trim()) {
@@ -440,12 +488,6 @@ const Events = () => {
         break;
       case 'delete':
         if (canManageEvents()) handleEventDelete(event.id);
-        break;
-      case 'participants':
-        if (canManageEvents()) handleViewParticipants(event.id);
-        break;
-      case 'results':
-        if (canManageEvents()) handleUploadResults(event.id);
         break;
       default:
         console.warn('Unknown event action:', action);
@@ -466,6 +508,11 @@ const Events = () => {
   // Handle uploading results
   const handleUploadResults = (eventId) => {
     navigate(`/events/${eventId}/results`);
+  };
+
+  // Handle certificates
+  const handleCertificates = (eventId) => {
+    navigate(`/events/${eventId}/certificates`);
   };
 
   // Check if user can create events
@@ -509,7 +556,9 @@ const Events = () => {
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">Events</h1>
                 <p className="text-gray-600 mt-1">
-                  Discover and participate in sports events
+                  {user?.role === 'EVENT_INCHARGE'
+                    ? 'Browse your assigned events and manage students, results and certificates (as permitted).'
+                    : 'Discover and participate in sports events'}
                 </p>
               </div>
             </div>

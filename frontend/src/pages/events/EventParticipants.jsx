@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { bulkAddEventParticipants, getEventParticipants } from '../../api';
+import { bulkAddEventParticipants, bulkUploadEventParticipantsFile, getEventParticipants } from '../../api';
 import Spinner from '../../components/Spinner';
 import BackButton from '../../components/BackButton';
 import { FaDownload, FaEnvelope, FaPhone, FaUser } from 'react-icons/fa';
@@ -20,6 +20,8 @@ const EventParticipants = () => {
   const [singleId, setSingleId] = useState('');
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkMsg, setBulkMsg] = useState('');
+  const [bulkFile, setBulkFile] = useState(null);
+  const [bulkFileName, setBulkFileName] = useState('');
   const [filters, setFilters] = useState({
     search: '',
     status: ''
@@ -86,6 +88,55 @@ const EventParticipants = () => {
       }
     } catch (e) {
       setBulkMsg(e?.message || 'Failed to add students.');
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
+  const handleBulkFileSelect = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) {
+      setBulkFile(null);
+      setBulkFileName('');
+      return;
+    }
+    const name = (f.name || '').toLowerCase();
+    const ok = name.endsWith('.csv') || name.endsWith('.xlsx') || name.endsWith('.xls');
+    if (!ok) {
+      setBulkMsg('Invalid file type. Please upload CSV / XLSX / XLS.');
+      setBulkFile(null);
+      setBulkFileName('');
+      return;
+    }
+    setBulkMsg('');
+    setBulkFile(f);
+    setBulkFileName(f.name || 'upload');
+  };
+
+  const handleBulkFileUpload = async () => {
+    try {
+      if (!bulkFile) {
+        setBulkMsg('Please choose a CSV/XLSX/XLS file first.');
+        return;
+      }
+      setBulkSubmitting(true);
+      setBulkMsg('');
+      setError('');
+
+      const res = await bulkUploadEventParticipantsFile(eventId, bulkFile);
+      if (res?.success) {
+        const d = res.data || {};
+        const failed = Array.isArray(d.failed) ? d.failed : [];
+        const failedPreview = failed.slice(0, 3).map(f => `${f.identifier}: ${f.reason}`).join(' | ');
+        setBulkMsg(`Uploaded "${d.filename || bulkFileName}". Added: ${d.registered || 0}, Failed: ${d.failedCount || 0}${failedPreview ? ` (${failedPreview}${failed.length > 3 ? ' ...' : ''})` : ''}`);
+        setBulkFile(null);
+        setBulkFileName('');
+        await loadParticipants();
+      } else {
+        setBulkMsg(res?.message || 'Failed to upload file.');
+      }
+    } catch (e) {
+      setBulkMsg(e?.message || 'Failed to upload file.');
     } finally {
       setBulkSubmitting(false);
     }
@@ -230,6 +281,35 @@ const EventParticipants = () => {
                 Paste one per line (or comma-separated). Accepts Student DB ID, Student UID, email, or phone.
               </div>
 
+              <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div className="text-sm font-semibold text-gray-900 mb-2">Upload CSV / Excel</div>
+                <div className="text-xs text-gray-600 mb-3">
+                  Supported columns: <span className="font-mono">identifier</span>, <span className="font-mono">uniqueId</span>, <span className="font-mono">email</span>, <span className="font-mono">phone</span> (or put values in the first column).
+                </div>
+                <div className="flex flex-col md:flex-row gap-2 items-start md:items-center">
+                  <input
+                    type="file"
+                    accept=".csv,.xlsx,.xls"
+                    onChange={handleBulkFileSelect}
+                    disabled={bulkSubmitting}
+                    className="block w-full md:w-auto text-sm"
+                  />
+                  {bulkFileName ? (
+                    <div className="text-xs text-gray-700">
+                      Selected: <span className="font-semibold">{bulkFileName}</span>
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={handleBulkFileUpload}
+                    disabled={bulkSubmitting || !bulkFile}
+                    className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {bulkSubmitting ? 'Uploading...' : 'Upload & Add'}
+                  </button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
                 <input
                   value={singleId}
@@ -259,7 +339,7 @@ const EventParticipants = () => {
                 <div className="text-sm text-gray-600">{bulkMsg}</div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setBulkText(''); setBulkMsg(''); }}
+                    onClick={() => { setBulkText(''); setBulkMsg(''); setBulkFile(null); setBulkFileName(''); }}
                     className="px-3 py-2 rounded-md border text-sm"
                     type="button"
                     disabled={bulkSubmitting}
