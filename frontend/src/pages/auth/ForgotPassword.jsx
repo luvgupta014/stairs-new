@@ -12,6 +12,18 @@ const ForgotPassword = () => {
   const [message, setMessage] = useState('');
   const [email, setEmail] = useState('');
 
+  const portal = (location.state?.portal || '').toString().toLowerCase();
+  const portalToLogin = {
+    student: '/login/student',
+    coach: '/login/coach',
+    coordinator: '/login/coordinator',
+    institute: '/login/institute',
+    club: '/login/club',
+    admin: '/login/admin',
+    incharge: '/login/incharge'
+  };
+  const loginPath = portalToLogin[portal] || '/login/student';
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -50,7 +62,7 @@ const ForgotPassword = () => {
       }
     } catch (err) {
       console.error('❌ Forgot password error:', err);
-      setError(err?.response?.data?.message || err.message || 'Unable to send reset code. Please try again.');
+      setError(err?.userMessage || err?.response?.data?.message || err.message || 'Unable to send reset code. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -168,7 +180,7 @@ const ForgotPassword = () => {
           <div className="mt-6 text-center">
             <p className="text-gray-600 text-sm">
               Remember your password?{' '}
-              <Link to="/login/coach" className="text-blue-600 hover:text-blue-500 font-semibold transition-opacity">
+              <Link to={loginPath} className="text-blue-600 hover:text-blue-500 font-semibold transition-opacity">
                 Back to Login
               </Link>
             </p>

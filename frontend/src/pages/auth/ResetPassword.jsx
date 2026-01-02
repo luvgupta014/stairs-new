@@ -1,16 +1,17 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { resetPassword } from '../../api';
 import Spinner from '../../components/Spinner';
-import Modal from '../../components/Modal';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [loading, setLoading] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [modalMessage, setModalMessage] = useState('');
+  const [status, setStatus] = useState('idle'); // idle | success
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [redirectIn, setRedirectIn] = useState(4);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -21,10 +22,44 @@ const ResetPassword = () => {
     confirmPassword: ''
   });
 
+  const portal = useMemo(() => (location.state?.portal || '').toString().toLowerCase(), [location.state]);
+
+  const loginPath = useMemo(() => {
+    const portalToLogin = {
+      student: '/login/student',
+      coach: '/login/coach',
+      coordinator: '/login/coordinator',
+      institute: '/login/institute',
+      club: '/login/club',
+      admin: '/login/admin',
+      incharge: '/login/incharge'
+    };
+    return portalToLogin[portal] || '/login/student';
+  }, [portal]);
+
+  const portalLabel = useMemo(() => {
+    const map = {
+      student: 'Student',
+      coach: 'Coach',
+      coordinator: 'Coordinator',
+      institute: 'Institute',
+      club: 'Club',
+      admin: 'Admin',
+      incharge: 'Event Incharge'
+    };
+    return map[portal] || 'Login';
+  }, [portal]);
+
+  // Auto redirect countdown on success
   useEffect(() => {
-    // If user refreshed the page, location.state may be lost. Allow manual email entry.
-    // (No redirect here — keeps the flow resilient.)
-  }, [formData.email, navigate]);
+    if (status !== 'success') return;
+    if (redirectIn <= 0) {
+      navigate(loginPath, { replace: true });
+      return;
+    }
+    const t = setTimeout(() => setRedirectIn((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [status, redirectIn, navigate, loginPath]);
 
   const handleChange = (e) => {
     setFormData({
@@ -42,35 +77,31 @@ const ResetPassword = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
 
     // Validation
     if (!formData.email) {
-      setModalMessage('Please enter your registered email.');
-      setShowModal(true);
+      setError('Please enter your registered email.');
       return;
     }
     if (!formData.resetToken) {
-      setModalMessage('Please enter the reset code');
-      setShowModal(true);
+      setError('Please enter the reset code.');
       return;
     }
 
     if (!formData.newPassword || !formData.confirmPassword) {
-      setModalMessage('Please fill in all password fields');
-      setShowModal(true);
+      setError('Please fill in all password fields.');
       return;
     }
 
     const passwordError = validatePassword(formData.newPassword);
     if (passwordError) {
-      setModalMessage(passwordError);
-      setShowModal(true);
+      setError(passwordError);
       return;
     }
 
     if (formData.newPassword !== formData.confirmPassword) {
-      setModalMessage('Passwords do not match');
-      setShowModal(true);
+      setError('Passwords do not match.');
       return;
     }
 
@@ -92,200 +123,239 @@ const ResetPassword = () => {
       console.log('✅ Reset password result:', result);
 
       if (result.success) {
-        setModalMessage('Password reset successful! Redirecting to login...');
-        setShowModal(true);
-
-        setTimeout(() => {
-          // Send users back to the correct login portal when possible.
-          const portal = (location.state?.portal || '').toString().toLowerCase();
-          const portalToLogin = {
-            student: '/login/student',
-            coach: '/login/coach',
-            coordinator: '/login/coordinator',
-            institute: '/login/institute',
-            club: '/login/club',
-            admin: '/login/admin',
-            incharge: '/login/incharge'
-          };
-
-          navigate(portalToLogin[portal] || '/login/coach');
-        }, 2000);
+        setSuccessMessage('Your password has been updated successfully.');
+        setRedirectIn(4);
+        setStatus('success');
       } else {
-        setModalMessage(result.message || 'Failed to reset password');
-        setShowModal(true);
+        setError(result.message || 'Failed to reset password.');
       }
     } catch (error) {
       console.error('Reset password error:', error);
-      setModalMessage(error?.response?.data?.message || error.message || 'An error occurred. Please try again.');
-      setShowModal(true);
+      setError(error?.userMessage || error?.response?.data?.message || error.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
-    return <Spinner />;
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Reset Your Password
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Enter the code sent to your email
-        </p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        {/* Back to Home */}
+        <div className="text-left">
+          <Link to="/" className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors">
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Home
+          </Link>
+        </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            {!formData.email ? (
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                  Email
-                </label>
-                <div className="mt-1">
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={handleChange}
-                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    placeholder="Enter your registered email"
-                  />
+        <div className="bg-white rounded-2xl shadow-xl p-8">
+          {/* Header */}
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-500 text-white text-2xl mb-4">
+              🔐
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">
+              {status === 'success' ? 'Password Updated' : 'Reset Password'}
+            </h2>
+            <p className="text-gray-600 mb-6">
+              {status === 'success'
+                ? `Redirecting you to ${portalLabel} login…`
+                : 'Enter the code sent to your email and set a new password.'}
+            </p>
+          </div>
+
+          {/* Success */}
+          {status === 'success' ? (
+            <div className="space-y-4">
+              <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+                <div className="flex items-start">
+                  <svg className="w-5 h-5 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fillRule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <div>
+                    <div className="font-semibold">{successMessage || 'Password reset successful.'}</div>
+                    <div className="text-sm mt-1">
+                      Redirecting in <span className="font-semibold">{redirectIn}s</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            ) : null}
 
-            <div>
-              <label htmlFor="resetToken" className="block text-sm font-medium text-gray-700">
-                Reset Code
-              </label>
-              <div className="mt-1">
-                <input
-                  id="resetToken"
-                  name="resetToken"
-                  type="text"
-                  required
-                  value={formData.resetToken}
-                  onChange={handleChange}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  placeholder="Enter 6-digit code"
-                  maxLength="6"
-                />
-              </div>
-              <p className="mt-1 text-xs text-gray-500">
-                Check your email for the reset code
-              </p>
-            </div>
-
-            <div>
-              <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700">
-                New Password
-              </label>
-              <div className="mt-1 relative">
-                <input
-                  id="newPassword"
-                  name="newPassword"
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={formData.newPassword}
-                  onChange={handleChange}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm pr-10"
-                  placeholder="Enter new password"
-                />
+              <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  onClick={() => navigate(loginPath, { replace: true })}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
                 >
-                  {showPassword ? <FaEyeSlash className="text-gray-400" /> : <FaEye className="text-gray-400" />}
+                  Go to {portalLabel} Login
                 </button>
-              </div>
-              <p className="mt-1 text-xs text-gray-500">
-                At least 6 characters
-              </p>
-            </div>
-
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                Confirm Password
-              </label>
-              <div className="mt-1 relative">
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  required
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm pr-10"
-                  placeholder="Confirm new password"
-                />
                 <button
                   type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  onClick={() => navigate('/forgot-password', { replace: true })}
+                  className="flex-1 border border-gray-300 hover:border-gray-400 text-gray-800 font-semibold py-3 px-4 rounded-lg transition-colors"
                 >
-                  {showConfirmPassword ? <FaEyeSlash className="text-gray-400" /> : <FaEye className="text-gray-400" />}
+                  Request New Code
                 </button>
               </div>
             </div>
+          ) : (
+            <>
+              {/* Error */}
+              {error ? (
+                <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
+                  <div className="flex items-start">
+                    <svg className="w-5 h-5 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    <span>{error}</span>
+                  </div>
+                </div>
+              ) : null}
 
-            <div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Resetting...' : 'Reset Password'}
-              </button>
-            </div>
+              {/* Form */}
+              <form className="space-y-6" onSubmit={handleSubmit}>
+                {!formData.email ? (
+                  <div>
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                      Email Address
+                    </label>
+                    <input
+                      id="email"
+                      name="email"
+                      type="email"
+                      required
+                      value={formData.email}
+                      onChange={handleChange}
+                      disabled={loading}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="Enter your registered email"
+                    />
+                  </div>
+                ) : null}
 
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => navigate('/forgot-password')}
-                className="text-sm font-medium text-blue-600 hover:text-blue-500"
-              >
-                ← Request new code
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const portal = (location.state?.portal || '').toString().toLowerCase();
-                  const portalToLogin = {
-                    student: '/login/student',
-                    coach: '/login/coach',
-                    coordinator: '/login/coordinator',
-                    institute: '/login/institute',
-                    club: '/login/club',
-                    admin: '/login/admin',
-                    incharge: '/login/incharge'
-                  };
-                  navigate(portalToLogin[portal] || '/login/student');
-                }}
-                className="text-sm font-medium text-gray-600 hover:text-gray-500"
-              >
-                Back to Login
-              </button>
-            </div>
-          </form>
+                <div>
+                  <label htmlFor="resetToken" className="block text-sm font-medium text-gray-700 mb-2">
+                    Reset Code
+                  </label>
+                  <input
+                    id="resetToken"
+                    name="resetToken"
+                    type="text"
+                    required
+                    value={formData.resetToken}
+                    onChange={handleChange}
+                    disabled={loading}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="Enter 6-digit code"
+                    maxLength={6}
+                  />
+                  <p className="mt-2 text-xs text-gray-500">Check your email for the reset code.</p>
+                </div>
+
+                <div>
+                  <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                    New Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="newPassword"
+                      name="newPassword"
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={formData.newPassword}
+                      onChange={handleChange}
+                      disabled={loading}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors pr-12 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="Enter new password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 pr-4 flex items-center"
+                    >
+                      {showPassword ? <FaEyeSlash className="text-gray-400" /> : <FaEye className="text-gray-400" />}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">At least 6 characters.</p>
+                </div>
+
+                <div>
+                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="confirmPassword"
+                      name="confirmPassword"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      disabled={loading}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors pr-12 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="Confirm new password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-4 flex items-center"
+                    >
+                      {showConfirmPassword ? <FaEyeSlash className="text-gray-400" /> : <FaEye className="text-gray-400" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                >
+                  {loading ? (
+                    <>
+                      <Spinner size="sm" color="white" />
+                      <span className="ml-2">Resetting…</span>
+                    </>
+                  ) : (
+                    'Reset Password'
+                  )}
+                </button>
+
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/forgot-password')}
+                    className="text-sm font-medium text-blue-600 hover:text-blue-500"
+                  >
+                    ← Request new code
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate(loginPath)}
+                    className="text-sm font-medium text-gray-600 hover:text-gray-500"
+                  >
+                    Back to {portalLabel} Login
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="text-center">
+          <p className="text-gray-500 text-sm">© 2026 STAIRS. All rights reserved.</p>
         </div>
       </div>
-
-      {showModal && (
-        <Modal
-          isOpen={showModal}
-          onClose={() => setShowModal(false)}
-          title="Password Reset"
-          message={modalMessage}
-        />
-      )}
     </div>
   );
 };

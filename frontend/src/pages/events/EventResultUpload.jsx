@@ -15,10 +15,13 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import Spinner from '../../components/Spinner';
 import BackButton from '../../components/BackButton';
+import { useAuth } from '../../contexts/AuthContext';
+import PermissionGateNotice from '../../components/PermissionGateNotice';
 
 const EventResultUpload = () => {
   const { eventId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   
   const [eventData, setEventData] = useState(null);
   const [files, setFiles] = useState([]);
@@ -27,6 +30,7 @@ const EventResultUpload = () => {
   const [loading, setLoading] = useState(true);
   const [description, setDescription] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [forbidden, setForbidden] = useState(false);
 
   useEffect(() => {
     loadEventFiles();
@@ -35,6 +39,7 @@ const EventResultUpload = () => {
   const loadEventFiles = async () => {
     try {
       setLoading(true);
+      setForbidden(false);
       const response = await getEventResultFiles(eventId);
       
       if (response.success) {
@@ -43,7 +48,12 @@ const EventResultUpload = () => {
       }
     } catch (error) {
       console.error('Failed to load event files:', error);
-      showMessage('error', 'Failed to load event files');
+      const status = error?.statusCode || error?.status || error?.response?.status;
+      if ((status === 401 || status === 403) && user?.role === 'EVENT_INCHARGE') {
+        setForbidden(true);
+      } else {
+        showMessage('error', 'Failed to load event files');
+      }
     } finally {
       setLoading(false);
     }
@@ -176,6 +186,26 @@ const EventResultUpload = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Spinner size="lg" />
       </div>
+    );
+  }
+
+  if (forbidden) {
+    return (
+      <PermissionGateNotice
+        title="Result upload access required"
+        description="This page is available only when you have Result Upload permission for this event."
+        requiredLabel="Result Upload"
+        eventLink={`/events/${eventId}`}
+        secondaryAction={{
+          label: 'Email Support',
+          href: 'mailto:info@stairs.org.in?subject=Permission%20Request%20-%20Result%20Upload'
+        }}
+        primaryAction={{
+          label: 'Back to My Events',
+          onClick: () => navigate('/dashboard/event_incharge'),
+          className: 'bg-indigo-600 hover:bg-indigo-700'
+        }}
+      />
     );
   }
 

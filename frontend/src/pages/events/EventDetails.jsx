@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getStudentEventDetails, getEventById, registerForEvent, unregisterFromEvent, createStudentEventPaymentOrder, getEventFeeSettings, updateEventFeeSettings, getEventInchargeAssignedEvents, shareEventViaEmail } from '../../api';
@@ -8,7 +8,7 @@ import BackButton from '../../components/BackButton';
 import CheckoutModal from '../../components/CheckoutModal';
 import CategorySelector from '../../components/CategorySelector';
 import CategoryPicker from '../../components/CategoryPicker';
-import { FaShare, FaCopy, FaEnvelope } from 'react-icons/fa';
+import { FaShare, FaCopy, FaEnvelope, FaUsers, FaTrophy, FaCertificate, FaInfoCircle } from 'react-icons/fa';
 
 /**
  * EventDetails Page
@@ -649,6 +649,25 @@ const EventDetails = () => {
   const canInchargeStudentMgmt = user?.role === 'EVENT_INCHARGE' && !!inchargePerms.studentManagement;
   const canInchargeResultUpload = user?.role === 'EVENT_INCHARGE' && !!inchargePerms.resultUpload;
   const canInchargeCertificates = user?.role === 'EVENT_INCHARGE' && !!inchargePerms.certificateManagement;
+  const canInchargeFeeMgmt = user?.role === 'EVENT_INCHARGE' && !!inchargePerms.feeManagement;
+
+  const inchargeMissingPerms = useMemo(() => {
+    if (user?.role !== 'EVENT_INCHARGE') return [];
+    const missing = [];
+    if (!canInchargeStudentMgmt) missing.push('Student Management');
+    if (!canInchargeResultUpload) missing.push('Result Upload');
+    if (!canInchargeCertificates) missing.push('Certificates');
+    if (!canInchargeFeeMgmt) missing.push('Fee Management');
+    return missing;
+  }, [user?.role, canInchargeStudentMgmt, canInchargeResultUpload, canInchargeCertificates, canInchargeFeeMgmt]);
+
+  const roleLabel = useMemo(() => {
+    const r = (user?.role || '').toString().toUpperCase();
+    if (r === 'EVENT_INCHARGE') return 'Event Incharge';
+    if (r === 'EVENT_COORDINATOR') return 'Coordinator';
+    if (r) return r.charAt(0) + r.slice(1).toLowerCase();
+    return 'User';
+  }, [user?.role]);
 
   // Get shareable link
   const getShareableLink = () => {
@@ -810,78 +829,157 @@ const EventDetails = () => {
           <div className="lg:col-span-2">
             <div className="bg-white shadow rounded-lg overflow-hidden">
               {/* Header */}
-              <div className="px-6 py-4 border-b border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h1 className="text-2xl font-bold text-gray-900">{event.name}</h1>
-                    <div className="mt-2 flex items-center space-x-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(event.status)}`}>
-                        {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+              <div className="px-6 py-5 border-b border-gray-200">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <h1 className="text-2xl font-bold text-gray-900 truncate">{event.name}</h1>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(event.status)}`}>
+                        {event.status?.charAt(0)?.toUpperCase() + event.status?.slice(1)}
                       </span>
-                      <span className="text-sm text-gray-500">{event.sport}</span>
+                      {event.sport ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                          {event.sport}
+                        </span>
+                      ) : null}
+                      {user?.role ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          Signed in as: {roleLabel}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
-                  
-                  {canManageEvent() && (
-                    <div className="flex space-x-2">
-                      <Button
-                        onClick={() => setShowShareModal(true)}
-                        className="bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-2"
-                      >
-                        <FaShare className="w-4 h-4" />
-                        Share Link
-                      </Button>
-                      <Button
-                        onClick={() => navigate(`/events/${eventId}/edit`)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white"
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        onClick={() => navigate(`/events/${eventId}/participants`)}
-                        className="bg-green-600 hover:bg-green-700 text-white"
-                      >
-                        Participants
-                      </Button>
-                    </div>
-                  )}
 
-                  {user?.role === 'EVENT_INCHARGE' && (
-                    <div className="flex flex-col items-end gap-2">
-                      {inchargePermsError ? (
-                        <div className="text-xs text-red-600">{inchargePermsError}</div>
-                      ) : null}
-                      <div className="flex space-x-2">
+                  {/* Actions */}
+                  <div className="flex flex-col gap-2 items-stretch lg:items-end">
+                    {canManageEvent() ? (
+                      <div className="flex flex-wrap gap-2 justify-start lg:justify-end">
+                        <Button
+                          onClick={() => setShowShareModal(true)}
+                          className="bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-2"
+                        >
+                          <FaShare className="w-4 h-4" />
+                          Share
+                        </Button>
+                        <Button
+                          onClick={() => navigate(`/events/${eventId}/edit`)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          Edit
+                        </Button>
                         <Button
                           onClick={() => navigate(`/events/${eventId}/participants`)}
-                          className={canInchargeStudentMgmt ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}
-                          disabled={!canInchargeStudentMgmt || inchargePermsLoading}
-                          title={!canInchargeStudentMgmt ? 'Student Management permission not granted for this event.' : 'Student Management'}
+                          className="bg-green-600 hover:bg-green-700 text-white"
                         >
-                          Student Mgmt
+                          Participants
                         </Button>
-                        <Button
-                          onClick={() => navigate(`/events/${eventId}/results`)}
-                          className={canInchargeResultUpload ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}
-                          disabled={!canInchargeResultUpload || inchargePermsLoading}
-                          title={!canInchargeResultUpload ? 'Result Upload permission not granted for this event.' : 'Result Upload'}
-                        >
-                          Results
-                        </Button>
-                        {canInchargeCertificates ? (
+                      </div>
+                    ) : null}
+
+                    {user?.role === 'EVENT_INCHARGE' ? (
+                      <div className="rounded-xl border bg-gray-50 p-3 w-full lg:w-auto">
+                        <div className="flex items-center justify-between gap-3 mb-2">
+                          <div className="text-sm font-semibold text-gray-900">Incharge Tools</div>
+                          {inchargePermsLoading ? (
+                            <div className="text-xs text-gray-500 flex items-center gap-2">
+                              <Spinner size="xs" color="gray" />
+                              Checking permissions…
+                            </div>
+                          ) : null}
+                        </div>
+
+                        {inchargePermsError ? (
+                          <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-2">
+                            {inchargePermsError}
+                          </div>
+                        ) : null}
+
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            onClick={() => navigate(`/events/${eventId}/participants`)}
+                            className={canInchargeStudentMgmt ? 'bg-green-600 hover:bg-green-700 text-white flex items-center gap-2' : 'bg-gray-200 text-gray-500 cursor-not-allowed flex items-center gap-2'}
+                            disabled={!canInchargeStudentMgmt || inchargePermsLoading}
+                          >
+                            <FaUsers className="w-4 h-4" />
+                            Student Mgmt
+                          </Button>
+                          <Button
+                            onClick={() => navigate(`/events/${eventId}/results`)}
+                            className={canInchargeResultUpload ? 'bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-2' : 'bg-gray-200 text-gray-500 cursor-not-allowed flex items-center gap-2'}
+                            disabled={!canInchargeResultUpload || inchargePermsLoading}
+                          >
+                            <FaTrophy className="w-4 h-4" />
+                            Results
+                          </Button>
                           <Button
                             onClick={() => navigate(`/events/${eventId}/certificates`)}
-                            className="bg-amber-600 hover:bg-amber-700 text-white"
-                            title="Certificate Management"
+                            className={canInchargeCertificates ? 'bg-amber-600 hover:bg-amber-700 text-white flex items-center gap-2' : 'bg-gray-200 text-gray-500 cursor-not-allowed flex items-center gap-2'}
+                            disabled={!canInchargeCertificates || inchargePermsLoading}
                           >
+                            <FaCertificate className="w-4 h-4" />
                             Certificates
                           </Button>
+                        </div>
+
+                        {!inchargePermsLoading && inchargeMissingPerms.length ? (
+                          <div className="mt-2 text-xs text-gray-600 flex items-start gap-2">
+                            <FaInfoCircle className="w-3.5 h-3.5 mt-0.5 text-gray-400" />
+                            <span>
+                              Some tools are disabled. Ask Admin to enable:{' '}
+                              <span className="font-semibold">{inchargeMissingPerms.join(', ')}</span>.
+                            </span>
+                          </div>
                         ) : null}
                       </div>
-                    </div>
-                  )}
+                    ) : null}
+                  </div>
                 </div>
               </div>
+
+              {/* Incharge access summary */}
+              {user?.role === 'EVENT_INCHARGE' ? (
+                <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-br from-gray-50 to-indigo-50">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-bold text-gray-900">Your access for this event</div>
+                      <div className="text-xs text-gray-600 mt-1">
+                        {inchargeAssignment
+                          ? <>Assigned as <span className="font-semibold">INCHARGE</span>{inchargeAssignment?.isPointOfContact ? <> • <span className="font-semibold">Point of Contact</span></> : null}</>
+                          : 'Loading assignment…'}
+                      </div>
+                    </div>
+                    <a
+                      href="mailto:info@stairs.org.in?subject=Permission%20Request%20-%20Event%20Incharge"
+                      className="text-xs font-semibold text-indigo-700 hover:text-indigo-900"
+                    >
+                      Request more access →
+                    </a>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className={`text-[11px] px-2 py-1 rounded-full border ${canInchargeStudentMgmt ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                      Student Management {canInchargeStudentMgmt ? '✓' : '✕'}
+                    </span>
+                    <span className={`text-[11px] px-2 py-1 rounded-full border ${canInchargeResultUpload ? 'bg-purple-50 text-purple-800 border-purple-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                      Result Upload {canInchargeResultUpload ? '✓' : '✕'}
+                    </span>
+                    <span className={`text-[11px] px-2 py-1 rounded-full border ${canInchargeCertificates ? 'bg-amber-50 text-amber-900 border-amber-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                      Certificates {canInchargeCertificates ? '✓' : '✕'}
+                    </span>
+                    <span className={`text-[11px] px-2 py-1 rounded-full border ${canInchargeFeeMgmt ? 'bg-indigo-50 text-indigo-800 border-indigo-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                      Fee Management {canInchargeFeeMgmt ? '✓' : '✕'}
+                    </span>
+                  </div>
+
+                  {inchargeMissingPerms?.length ? (
+                    <div className="mt-3 text-xs text-gray-600">
+                      Some actions are disabled: <span className="font-semibold">{inchargeMissingPerms.join(', ')}</span>.
+                    </div>
+                  ) : (
+                    <div className="mt-3 text-xs text-emerald-800 font-semibold">All incharge tools are enabled for this event.</div>
+                  )}
+                </div>
+              ) : null}
 
               {/* Description */}
               {event.description && (
@@ -1253,14 +1351,35 @@ const EventDetails = () => {
                     </Button>
                   </div>
                 ) : (
-                  <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
-                    <p className="text-sm text-gray-600">
-                      {user?.role !== 'STUDENT' ? 'Only students can register for events' :
-                       event.status !== 'upcoming' ? 'Registration is closed' :
-                       event.registrationDeadline && new Date(event.registrationDeadline) < new Date() ? 'Registration deadline has passed' :
-                       event.currentParticipants >= event.maxParticipants ? 'Event is full' :
-                       'Registration not available'}
-                    </p>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    {user?.role !== 'STUDENT' ? (
+                      <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                          i
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">Registration is for Students only</div>
+                          <div className="text-sm text-gray-600 mt-1">
+                            You’re currently signed in as <span className="font-semibold">{roleLabel}</span>.
+                            To register, login with a Student account.
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => navigate('/login/student', { state: { from: { pathname: `/events/${eventId}` } } })}
+                            className="mt-3 inline-flex items-center text-sm font-semibold text-blue-700 hover:text-blue-900"
+                          >
+                            Go to Student Login →
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-600">
+                        {event.status !== 'upcoming' ? 'Registration is closed' :
+                        event.registrationDeadline && new Date(event.registrationDeadline) < new Date() ? 'Registration deadline has passed' :
+                        event.currentParticipants >= event.maxParticipants ? 'Event is full' :
+                        'Registration not available'}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

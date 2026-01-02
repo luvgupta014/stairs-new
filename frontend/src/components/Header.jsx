@@ -15,8 +15,13 @@ const Header = () => {
   const [totalItems, setTotalItems] = useState(0);
 
   const handleLogout = () => {
+    const role = (user?.role || '').toString().toUpperCase();
     logout();
-    navigate('/login/student');
+    if (role === 'EVENT_INCHARGE') {
+      navigate('/login/incharge');
+    } else {
+      navigate('/login/student');
+    }
   };
 
   // Memoized function to load notifications
@@ -206,6 +211,19 @@ const Header = () => {
   const isLoginPage = location.pathname.includes('/login');
   const isRegisterPage = location.pathname.includes('/register');
 
+  const getDashboardPath = () => {
+    const role = (user?.role || '').toString().toUpperCase();
+    if (!role) return '/';
+    if (role === 'EVENT_INCHARGE') return '/dashboard/event_incharge';
+    // Default mapping
+    return `/dashboard/${role.toLowerCase()}`;
+  };
+
+  const isActivePath = (path) => {
+    if (!path) return false;
+    return location.pathname === path || location.pathname.startsWith(path + '/');
+  };
+
   // Close notifications dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -251,11 +269,33 @@ const Header = () => {
             {isAuthenticated() && user && (
               <>
                 <Link
-                  to={`/dashboard/${user.role.toLowerCase()}`}
-                  className="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium"
+                  to={getDashboardPath()}
+                  className={`px-3 py-2 rounded-md text-sm font-medium ${
+                    isActivePath('/dashboard/event_incharge') || isActivePath(`/dashboard/${user.role.toLowerCase()}`)
+                      ? 'text-blue-700 bg-blue-50'
+                      : 'text-gray-700 hover:text-blue-600'
+                  }`}
                 >
-                  Dashboard
+                  {user.role === 'EVENT_INCHARGE' ? 'My Events' : 'Dashboard'}
                 </Link>
+                {user.role === 'EVENT_INCHARGE' ? (
+                  <>
+                    <Link
+                      to="/events"
+                      className={`px-3 py-2 rounded-md text-sm font-medium ${
+                        isActivePath('/events') ? 'text-blue-700 bg-blue-50' : 'text-gray-700 hover:text-blue-600'
+                      }`}
+                    >
+                      All Events
+                    </Link>
+                    <a
+                      href="mailto:info@stairs.org.in?subject=Support%20-%20Event%20Incharge"
+                      className="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium"
+                    >
+                      Support
+                    </a>
+                  </>
+                ) : null}
                 {user.role === 'COACH' && (
                   <>
                     <Link

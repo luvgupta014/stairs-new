@@ -5,6 +5,7 @@ import Spinner from '../../components/Spinner';
 import BackButton from '../../components/BackButton';
 import { FaDownload, FaEnvelope, FaPhone, FaUser } from 'react-icons/fa';
 import { useAuth } from '../../contexts/AuthContext';
+import PermissionGateNotice from '../../components/PermissionGateNotice';
 
 const EventParticipants = () => {
   const { eventId } = useParams();
@@ -23,6 +24,7 @@ const EventParticipants = () => {
     search: '',
     status: ''
   });
+  const [forbidden, setForbidden] = useState(false);
   
   const event = location.state?.event;
 
@@ -33,6 +35,7 @@ const EventParticipants = () => {
   const loadParticipants = async () => {
     try {
       setLoading(true);
+      setForbidden(false);
       const response = await getEventParticipants(eventId);
       
       if (response.success) {
@@ -42,7 +45,13 @@ const EventParticipants = () => {
       }
     } catch (err) {
       console.error('Failed to load participants:', err);
-      setError(err.message);
+      const status = err?.statusCode || err?.status || err?.response?.status;
+      if ((status === 401 || status === 403) && user?.role === 'EVENT_INCHARGE') {
+        setForbidden(true);
+        setError('');
+      } else {
+        setError(err?.message || 'Failed to load participants.');
+      }
     } finally {
       setLoading(false);
     }
@@ -147,6 +156,26 @@ const EventParticipants = () => {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Spinner size="lg" />
       </div>
+    );
+  }
+
+  if (forbidden) {
+    return (
+      <PermissionGateNotice
+        title="Student management access required"
+        description="This page is available only when you have Student Management permission for this event."
+        requiredLabel="Student Management"
+        eventLink={`/events/${eventId}`}
+        secondaryAction={{
+          label: 'Email Support',
+          href: 'mailto:info@stairs.org.in?subject=Permission%20Request%20-%20Student%20Management'
+        }}
+        primaryAction={{
+          label: 'Back to My Events',
+          onClick: () => navigate('/dashboard/event_incharge'),
+          className: 'bg-indigo-600 hover:bg-indigo-700'
+        }}
+      />
     );
   }
 

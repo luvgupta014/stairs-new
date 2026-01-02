@@ -2,10 +2,13 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getEventById, getEligibleStudents, issueCertificates, issueWinnerCertificates, getEventCertificates, getEventPaymentStatus } from '../api';
 import Spinner from '../components/Spinner';
+import { useAuth } from '../contexts/AuthContext';
+import PermissionGateNotice from '../components/PermissionGateNotice';
 
 const IssueCertificates = () => {
   const { eventId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   
   const [loading, setLoading] = useState(true);
   const [event, setEvent] = useState(null);
@@ -21,6 +24,7 @@ const IssueCertificates = () => {
   const [success, setSuccess] = useState(null);
   const [activeTab, setActiveTab] = useState('participant'); // 'participant', 'winner', or 'history'
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
 
   useEffect(() => {
     loadEvent();
@@ -33,6 +37,7 @@ const IssueCertificates = () => {
     try {
       setLoading(true);
       setError(null);
+      setForbidden(false);
       
       const eventResponse = await getEventById(eventId);
       if (eventResponse.success) {
@@ -42,7 +47,13 @@ const IssueCertificates = () => {
       }
     } catch (err) {
       console.error('Error loading event:', err);
-      setError(err.message || 'Failed to load event details');
+      const status = err?.statusCode || err?.status || err?.response?.status;
+      if ((status === 401 || status === 403) && user?.role === 'EVENT_INCHARGE') {
+        setForbidden(true);
+        setError(null);
+      } else {
+        setError(err.message || 'Failed to load event details');
+      }
     } finally {
       setLoading(false);
     }
@@ -98,7 +109,13 @@ const IssueCertificates = () => {
       }
     } catch (err) {
       console.error("Error loading eligible students:", err);
-      setError(err.message || "Failed to load eligible students");
+      const status = err?.statusCode || err?.status || err?.response?.status;
+      if ((status === 401 || status === 403) && user?.role === 'EVENT_INCHARGE') {
+        setForbidden(true);
+        setError(null);
+      } else {
+        setError(err.message || "Failed to load eligible students");
+      }
     } finally {
       setLoadingStudents(false);
     }
@@ -260,6 +277,26 @@ const IssueCertificates = () => {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Spinner size="lg" />
       </div>
+    );
+  }
+
+  if (forbidden) {
+    return (
+      <PermissionGateNotice
+        title="Certificate management access required"
+        description="This page is available only when you have Certificate Management permission for this event."
+        requiredLabel="Certificate Management"
+        eventLink={`/events/${eventId}`}
+        secondaryAction={{
+          label: 'Email Support',
+          href: 'mailto:info@stairs.org.in?subject=Permission%20Request%20-%20Certificates'
+        }}
+        primaryAction={{
+          label: 'Back to My Events',
+          onClick: () => navigate('/dashboard/event_incharge'),
+          className: 'bg-indigo-600 hover:bg-indigo-700'
+        }}
+      />
     );
   }
 
