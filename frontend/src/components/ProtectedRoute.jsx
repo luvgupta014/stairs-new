@@ -33,7 +33,7 @@ const ProtectedRoute = ({ children, role, allowedRoles }) => {
       admin: '/login/admin',
       incharge: '/login/incharge',
       event_incharge: '/login/incharge',
-      event-incharge: '/login/incharge',
+      'event-incharge': '/login/incharge',
     };
 
     if (portal && portalToLogin[portal]) {
