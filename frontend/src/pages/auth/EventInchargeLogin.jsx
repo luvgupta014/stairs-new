@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
 import LoginLayout from '../../components/LoginLayout';
@@ -15,6 +15,7 @@ const EventInchargeLogin = () => {
     type: 'error'
   });
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
 
   const handleLogin = async (formData) => {
@@ -24,7 +25,19 @@ const EventInchargeLogin = () => {
     try {
       const response = await login(formData, 'EVENT_INCHARGE');
       if (response.success) {
-        navigate('/dashboard/event_incharge', { replace: true });
+        // Prefer redirect back to the originally requested page (e.g. from an email deep-link),
+        // otherwise land on the incharge dashboard.
+        const fromState = location.state?.from;
+        const fromPath =
+          fromState && typeof fromState === 'object'
+            ? `${fromState.pathname || ''}${fromState.search || ''}${fromState.hash || ''}`
+            : '';
+
+        const qs = new URLSearchParams(location.search || '');
+        const redirect = (qs.get('redirect') || '').toString();
+
+        const target = fromPath || redirect || '/dashboard/event_incharge';
+        navigate(target, { replace: true });
       } else {
         const errorConfig = parseLoginError(response.message || response, 'event incharge');
         setErrorPopup({

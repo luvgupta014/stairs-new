@@ -6124,7 +6124,7 @@ router.post('/events/:eventId/incharge-invites', authenticate, requireAdmin, asy
 
       // Notify existing incharge
       const frontendUrl = process.env.FRONTEND_URL || 'https://portal.stairs.org.in';
-      const eventLink = `${frontendUrl}/events/${eventId}`;
+      const eventLink = `${frontendUrl}/events/${eventId}?portal=incharge`;
       await sendAssignmentEmail({
         to: normalizedEmail,
         role: 'INCHARGE',
@@ -6457,11 +6457,37 @@ router.put('/events/:eventId/assignments', authenticate, requireAdmin, async (re
 
     // Send notification/email to assigned users
     const frontendUrl = process.env.FRONTEND_URL || 'https://portal.stairs.org.in';
-    const eventLink = `${frontendUrl}/events/${eventId}`;
+    const baseEventLink = `${frontendUrl}/events/${eventId}`;
+
+    const getPortalFromAssignment = (assignmentRole, userRole) => {
+      // Prefer assignment role when it maps to a dedicated portal.
+      if (assignmentRole === 'INCHARGE') return 'incharge';
+      if (assignmentRole === 'COORDINATOR') return 'coordinator';
+
+      // Otherwise fall back to the user's account role.
+      switch ((userRole || '').toString().toUpperCase()) {
+        case 'EVENT_INCHARGE':
+          return 'incharge';
+        case 'COACH':
+          return 'coach';
+        case 'INSTITUTE':
+          return 'institute';
+        case 'CLUB':
+          return 'club';
+        case 'ADMIN':
+          return 'admin';
+        case 'STUDENT':
+        default:
+          return 'student';
+      }
+    };
+
     for (const a of assignments) {
       try {
         const assignedUser = await prisma.user.findUnique({ where: { id: a.userId } });
         if (assignedUser?.email) {
+          const portal = getPortalFromAssignment(a.role, assignedUser.role);
+          const eventLink = `${baseEventLink}?portal=${encodeURIComponent(portal)}`;
           await sendAssignmentEmail({
             to: assignedUser.email,
             role: a.role,

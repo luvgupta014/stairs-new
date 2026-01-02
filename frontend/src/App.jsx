@@ -246,6 +246,8 @@ function App() {
                 </>
               }
             />
+            {/* Legacy alias (some older links used /dashboard/incharge) */}
+            <Route path="/dashboard/incharge" element={<Navigate to="/dashboard/event_incharge" replace />} />
             <Route
               path="/admin/events"
               element={

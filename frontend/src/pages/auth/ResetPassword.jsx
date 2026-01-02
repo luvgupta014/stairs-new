@@ -96,8 +96,19 @@ const ResetPassword = () => {
         setShowModal(true);
 
         setTimeout(() => {
-          // Coordinators are stored as COACH in backend; coach login covers coordinators too.
-          navigate('/login/coach');
+          // Send users back to the correct login portal when possible.
+          const portal = (location.state?.portal || '').toString().toLowerCase();
+          const portalToLogin = {
+            student: '/login/student',
+            coach: '/login/coach',
+            coordinator: '/login/coordinator',
+            institute: '/login/institute',
+            club: '/login/club',
+            admin: '/login/admin',
+            incharge: '/login/incharge'
+          };
+
+          navigate(portalToLogin[portal] || '/login/coach');
         }, 2000);
       } else {
         setModalMessage(result.message || 'Failed to reset password');
@@ -245,7 +256,19 @@ const ResetPassword = () => {
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/login/student')}
+                onClick={() => {
+                  const portal = (location.state?.portal || '').toString().toLowerCase();
+                  const portalToLogin = {
+                    student: '/login/student',
+                    coach: '/login/coach',
+                    coordinator: '/login/coordinator',
+                    institute: '/login/institute',
+                    club: '/login/club',
+                    admin: '/login/admin',
+                    incharge: '/login/incharge'
+                  };
+                  navigate(portalToLogin[portal] || '/login/student');
+                }}
                 className="text-sm font-medium text-gray-600 hover:text-gray-500"
               >
                 Back to Login

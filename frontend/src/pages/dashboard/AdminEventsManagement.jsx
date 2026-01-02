@@ -279,58 +279,93 @@ const AdminEventsManagement = () => {
       setLoading(true);
       setError(null);
       console.log('🔄 Fetching admin events...');
-      const response = await getAdminEvents();
-      console.log('📦 Admin events API response:', response);
-      
-      if (response && response.success) {
-        // Handle different response formats
-        const eventsData = response.data?.events || response.data || [];
-        console.log(`✅ Received ${eventsData.length} events`);
-        
-        if (Array.isArray(eventsData)) {
-          // Enrich events with incharge assignments (for button visibility + name display)
-          const settled = await Promise.allSettled(
-            eventsData.map(async (ev) => {
-              try {
-                const aRes = await getEventAssignments(ev.id);
-                const assignments = aRes?.success ? (aRes.data || []) : [];
-                const incharges = assignments
-                  .filter(a => a.role === 'INCHARGE' && a.user?.role === 'EVENT_INCHARGE')
-                  .map(a => ({
-                    userId: a.userId,
-                    name: a.user?.name || '',
-                    email: a.user?.email || '',
-                    uniqueId: a.user?.uniqueId || '',
-                    isPointOfContact: !!a.isPointOfContact
-                  }));
-                return { ev, incharges };
-              } catch {
-                return { ev, incharges: [] };
-              }
-            })
-          );
 
-          const nextMap = {};
-          const enriched = settled
-            .filter(r => r.status === 'fulfilled')
-            .map(r => {
-              const { ev, incharges } = r.value || {};
-              if (ev?.id) nextMap[ev.id] = incharges || [];
-              return ev;
-            });
+      // Backend paginates (default limit=10). Fetch all pages (max 100/page) so the UI shows all events.
+      const { openEventId, ...apiFilters } = filters || {};
+      const limit = 100;
+      let page = 1;
+      let all = [];
+      let hasNext = true;
 
-          setEventIncharges(nextMap);
-          setEvents(enriched);
-        } else {
-          console.warn('⚠️  Events data is not an array:', eventsData);
-          setEvents([]);
-          setError('Invalid response format from server');
+      while (hasNext) {
+        const response = await getAdminEvents({
+          page,
+          limit,
+          ...(apiFilters.status ? { status: apiFilters.status } : {}),
+          ...(apiFilters.sport ? { sport: apiFilters.sport } : {}),
+          ...(apiFilters.search ? { search: apiFilters.search } : {}),
+        });
+
+        if (!response?.success) {
+          const errorMsg = response?.message || 'Failed to fetch events';
+          console.error('❌ API returned error:', errorMsg);
+          throw new Error(errorMsg);
         }
-      } else {
-        const errorMsg = response?.message || 'Failed to fetch events';
-        console.error('❌ API returned error:', errorMsg);
-        throw new Error(errorMsg);
+
+        const pageEvents = response.data?.events || [];
+        const pagination = response.data?.pagination || {};
+
+        if (!Array.isArray(pageEvents)) {
+          console.warn('⚠️  Events page data is not an array:', pageEvents);
+          break;
+        }
+
+        all = all.concat(pageEvents);
+
+        // Prefer backend pagination flags when present.
+        if (typeof pagination.hasNext === 'boolean') {
+          hasNext = pagination.hasNext;
+        } else if (typeof pagination.totalPages === 'number') {
+          hasNext = page < pagination.totalPages;
+        } else {
+          // Fallback: if we received < limit, assume last page.
+          hasNext = pageEvents.length === limit;
+        }
+
+        page += 1;
+
+        // Safety cap to avoid accidental infinite loops.
+        if (page > 200) {
+          console.warn('⚠️  Aborting events pagination after 200 pages (safety cap).');
+          hasNext = false;
+        }
       }
+
+      console.log(`✅ Received ${all.length} events (all pages)`);
+
+      // Enrich events with incharge assignments (for button visibility + name display)
+      const settled = await Promise.allSettled(
+        all.map(async (ev) => {
+          try {
+            const aRes = await getEventAssignments(ev.id);
+            const assignments = aRes?.success ? (aRes.data || []) : [];
+            const incharges = assignments
+              .filter(a => a.role === 'INCHARGE' && a.user?.role === 'EVENT_INCHARGE')
+              .map(a => ({
+                userId: a.userId,
+                name: a.user?.name || '',
+                email: a.user?.email || '',
+                uniqueId: a.user?.uniqueId || '',
+                isPointOfContact: !!a.isPointOfContact
+              }));
+            return { ev, incharges };
+          } catch {
+            return { ev, incharges: [] };
+          }
+        })
+      );
+
+      const nextMap = {};
+      const enriched = settled
+        .filter(r => r.status === 'fulfilled')
+        .map(r => {
+          const { ev, incharges } = r.value || {};
+          if (ev?.id) nextMap[ev.id] = incharges || [];
+          return ev;
+        });
+
+      setEventIncharges(nextMap);
+      setEvents(enriched);
     } catch (error) {
       console.error('❌ Error fetching events:', error);
       const errorMessage = getErrorMessage(error, 'Failed to load events. Please try again.');

@@ -418,8 +418,10 @@ export const resetPassword = async (email, otp, newPassword) => {
   try {
     const response = await api.post('/api/auth/reset-password', {
       email,
+      // Backend expects `resetToken`; keep `otp` for backwards compatibility with any older servers.
+      resetToken: otp,
       otp,
-      newPassword
+      newPassword,
     });
     return response.data;
   } catch (error) {

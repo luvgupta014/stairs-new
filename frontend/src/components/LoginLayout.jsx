@@ -37,6 +37,18 @@ const LoginLayout = ({
     }
   };
 
+  const getPortalFromRole = () => {
+    const r = (role || "").toString().toUpperCase();
+    if (r === "EVENT_INCHARGE") return "incharge";
+    if (r === "EVENT_COORDINATOR") return "coordinator";
+    if (r === "COACH") return "coach";
+    if (r === "INSTITUTE") return "institute";
+    if (r === "CLUB") return "club";
+    if (r === "ADMIN") return "admin";
+    if (r === "STUDENT") return "student";
+    return "";
+  };
+
   const colorClasses = {
     blue: {
       bg: "bg-blue-500",
@@ -186,7 +198,11 @@ const LoginLayout = ({
               <div className="text-sm">
                 <button
                   type="button"
-                  onClick={() => navigate("/forgot-password")}
+                  onClick={() => {
+                    const portal = getPortalFromRole();
+                    // Preserve portal so ResetPassword can send users back to the right login page.
+                    navigate("/forgot-password", portal ? { state: { portal } } : undefined);
+                  }}
                   className={`${currentColor.text} hover:opacity-80 transition-opacity`}
                 >
                   Forgot password?

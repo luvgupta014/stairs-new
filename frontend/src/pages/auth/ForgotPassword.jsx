@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { forgotPassword } from '../../api';
 import Spinner from '../../components/Spinner'; 
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -41,7 +42,8 @@ const ForgotPassword = () => {
         
         // Navigate to Reset Password page after 2 seconds
         setTimeout(() => {
-          navigate('/reset-password', { state: { email } });
+          const portal = location.state?.portal;
+          navigate('/reset-password', { state: { email, portal } });
         }, 2000);
       } else {
         setError(result.message || 'Unable to send reset code. Please try again.');

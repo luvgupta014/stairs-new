@@ -20,6 +20,26 @@ const ProtectedRoute = ({ children, role, allowedRoles }) => {
     const currentPath = location.pathname;
     let loginPath = '/login/student'; // default
 
+    // Optional override: allow deep links like /events/:id?portal=incharge to route to the right login.
+    const searchParams = new URLSearchParams(location.search || '');
+    const portal = (searchParams.get('portal') || searchParams.get('role') || '').toString().toLowerCase();
+
+    const portalToLogin = {
+      student: '/login/student',
+      coach: '/login/coach',
+      coordinator: '/login/coordinator',
+      institute: '/login/institute',
+      club: '/login/club',
+      admin: '/login/admin',
+      incharge: '/login/incharge',
+      event_incharge: '/login/incharge',
+      event-incharge: '/login/incharge',
+    };
+
+    if (portal && portalToLogin[portal]) {
+      loginPath = portalToLogin[portal];
+    }
+
     if (currentPath.includes('/coach')) {
       loginPath = '/login/coach';
     } else if (currentPath.includes('/coordinator')) {
@@ -30,7 +50,7 @@ const ProtectedRoute = ({ children, role, allowedRoles }) => {
       loginPath = '/login/club';
     } else if (currentPath.includes('/admin')) {
       loginPath = '/login/admin';
-    } else if (currentPath.includes('/incharge')) {
+    } else if (currentPath.includes('/incharge') || currentPath.includes('/event_incharge')) {
       loginPath = '/login/incharge';
     }
 
