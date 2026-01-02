@@ -40,6 +40,23 @@ const ProtectedRoute = ({ children, role, allowedRoles }) => {
       loginPath = portalToLogin[portal];
     }
 
+    // If no explicit portal is present and the path is generic (e.g. /events),
+    // use last authenticated role as a hint so logout never sends incharge → student login.
+    if (!portal) {
+      const lastRole = (localStorage.getItem('lastAuthRole') || '').toString().toUpperCase();
+      if (lastRole === 'EVENT_INCHARGE') {
+        loginPath = '/login/incharge';
+      } else if (lastRole === 'ADMIN') {
+        loginPath = '/login/admin';
+      } else if (lastRole === 'INSTITUTE') {
+        loginPath = '/login/institute';
+      } else if (lastRole === 'CLUB') {
+        loginPath = '/login/club';
+      } else if (lastRole === 'COACH') {
+        loginPath = '/login/coach';
+      }
+    }
+
     if (currentPath.includes('/coach')) {
       loginPath = '/login/coach';
     } else if (currentPath.includes('/coordinator')) {

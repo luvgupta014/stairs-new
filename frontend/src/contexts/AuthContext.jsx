@@ -168,6 +168,10 @@ export const AuthProvider = ({ children }) => {
         // Store token and user data
         localStorage.setItem('authToken', newToken);
         localStorage.setItem('user', JSON.stringify(userData));
+        // Remember last role for correct post-logout routing (e.g., EVENT_INCHARGE should not land on student login)
+        if (userData?.role) {
+          localStorage.setItem('lastAuthRole', userData.role);
+        }
         
         setToken(newToken);
         setUser(userData);
@@ -286,6 +290,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    // Keep a hint of the last authenticated role so ProtectedRoute can route to the right login page
+    if (user?.role) {
+      localStorage.setItem('lastAuthRole', user.role);
+    }
     localStorage.removeItem('authToken');
     localStorage.removeItem('user');
     setToken(null);
