@@ -136,7 +136,9 @@ const corsOptionsDelegate = (req, callback) => {
 };
 
 app.use(cors(corsOptionsDelegate));
-app.options('*', cors(corsOptionsDelegate));
+// Express v5 / path-to-regexp no longer supports bare "*" for routes.
+// Use a regex to match all paths for CORS preflight.
+app.options(/.*/, cors(corsOptionsDelegate));
 
 // Body parsing middleware - Increased limits for bulk uploads
 app.use(express.json({ limit: '50mb' }));
