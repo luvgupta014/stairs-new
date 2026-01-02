@@ -107,30 +107,36 @@ const isOriginAllowed = (origin) => {
   return false;
 };
 
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  
-  // Check if origin is in allowed list (exact or pattern match)
-  if (origin && isOriginAllowed(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-  } else if (process.env.NODE_ENV !== 'production') {
-    // Allow any origin in development
-    res.header('Access-Control-Allow-Origin', origin || '*');
-  } else if (origin) {
-    // In production, log blocked origins for debugging
+// CORS middleware (handles preflight + correct headers)
+// NOTE: withCredentials=true on frontend requires a specific origin (not '*') + credentials=true.
+const corsOptionsDelegate = (req, callback) => {
+  const origin = req.header('Origin');
+
+  // Non-browser / same-origin requests often have no Origin header; CORS is irrelevant there.
+  if (!origin) {
+    return callback(null, { origin: false });
+  }
+
+  const isProd = process.env.NODE_ENV === 'production';
+  const allowed = isOriginAllowed(origin) || !isProd;
+
+  if (!allowed && isProd) {
     console.warn(`⚠️ CORS blocked origin: ${origin}. Allowed origins:`, allowedOrigins);
   }
-  
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
 
-  // Handle preflight (OPTIONS) requests quickly
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
+  const corsOptions = {
+    origin: allowed ? origin : false,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    optionsSuccessStatus: 200
+  };
+
+  return callback(null, corsOptions);
+};
+
+app.use(cors(corsOptionsDelegate));
+app.options('*', cors(corsOptionsDelegate));
 
 // Body parsing middleware - Increased limits for bulk uploads
 app.use(express.json({ limit: '50mb' }));

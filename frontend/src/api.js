@@ -231,9 +231,22 @@ export const getUserByUniqueId = async (uniqueId) => {
 };
 import axios from 'axios';
 
+const resolveBackendBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_BACKEND_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim().length) return envUrl.trim();
+
+  // In production, default to same-origin so reverse proxies like Nginx/Apache can route `/api/*`.
+  if (import.meta.env.PROD && typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+
+  // Local dev fallback
+  return 'http://localhost:5000';
+};
+
 // Debug function to help diagnose connection issues
 window.debugBackendConnection = () => {
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+  const backendUrl = resolveBackendBaseUrl();
   console.log('🔍 Backend Connection Debug Info:');
   console.log('  Backend URL:', backendUrl);
   console.log('  Environment:', import.meta.env.MODE);
@@ -285,7 +298,7 @@ window.debugBackendConnection = () => {
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000',
+  baseURL: resolveBackendBaseUrl(),
   timeout: 60000, // Increased to 60 seconds for all requests
   headers: {
     'Content-Type': 'application/json',
@@ -315,16 +328,32 @@ api.interceptors.request.use(
 
 // Response interceptor for error handling
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Guard: if an API endpoint returns HTML (often SPA index.html due to proxy misroute),
+    // fail fast with a clear message.
+    const url = (response?.config?.url || '').toString();
+    if (url.startsWith('/api/') && typeof response.data === 'string') {
+      const body = response.data.trim().toLowerCase();
+      if (body.startsWith('<!doctype html') || body.startsWith('<html')) {
+        const err = new Error(
+          'API misconfiguration: received HTML instead of JSON. Check VITE_BACKEND_URL and reverse-proxy rules for /api/*.'
+        );
+        err.userMessage =
+          'Server misconfiguration: the API request returned the website HTML instead of JSON. Please verify backend URL/proxy for /api/*.';
+        return Promise.reject(err);
+      }
+    }
+    return response;
+  },
   (error) => {
     // Handle different types of errors
     if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
       console.error('🔌 Connection timeout to backend server');
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = resolveBackendBaseUrl();
       error.userMessage = `Connection timeout. Backend server at ${backendUrl} is not responding.`;
     } else if (error.code === 'ERR_NETWORK' || error.message.includes('Network Error')) {
       console.error('🚫 Network error - cannot reach backend server');
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = resolveBackendBaseUrl();
       error.userMessage = `Cannot connect to backend server at ${backendUrl}. Please check if the server is running.`;
     } else if (error.response?.status === 401) {
       // FIXED: Only redirect to login if this is NOT a login/register attempt
