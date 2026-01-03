@@ -88,6 +88,9 @@ class EventService {
         description,
         sport,
         level,
+        eventFormat,
+        tournamentBracketUrl,
+        tournamentCommsUrl,
         startDate,
         endDate,
         venue,
@@ -125,6 +128,22 @@ class EventService {
         throw new Error(`Invalid event level. Must be one of: ${validLevels.join(', ')}`);
       }
 
+      // Validate event format + tournament links
+      const validFormats = ['OFFLINE', 'ONLINE', 'HYBRID'];
+      const normalizedFormat = eventFormat ? String(eventFormat).toUpperCase() : 'OFFLINE';
+      if (!validFormats.includes(normalizedFormat)) {
+        throw new Error(`Invalid event format. Must be one of: ${validFormats.join(', ')}`);
+      }
+      const bracket = (tournamentBracketUrl || '').toString().trim();
+      const comms = (tournamentCommsUrl || '').toString().trim();
+      const looksLikeUrl = (v) => !v || /^https?:\/\/\S+/i.test(v);
+      if (normalizedFormat === 'ONLINE' && (!bracket || !comms)) {
+        throw new Error('For Online events, tournamentBracketUrl and tournamentCommsUrl are required.');
+      }
+      if (!looksLikeUrl(bracket) || !looksLikeUrl(comms)) {
+        throw new Error('Tournament links must be valid URLs starting with http:// or https://');
+      }
+
       // Create event data object based on creator type
       const eventCreateData = {
         uniqueId,
@@ -132,6 +151,9 @@ class EventService {
         description,
         sport,
         level: normalizedLevel || 'DISTRICT',
+        eventFormat: normalizedFormat,
+        tournamentBracketUrl: bracket || null,
+        tournamentCommsUrl: comms || null,
         startDate: start,
         endDate: end,
         venue,
@@ -439,6 +461,9 @@ class EventService {
           description: true,
           sport: true,
           level: true,
+          eventFormat: true,
+          tournamentBracketUrl: true,
+          tournamentCommsUrl: true,
           venue: true,
           address: true,
           city: true,
@@ -704,14 +729,25 @@ class EventService {
    * @param {string} eventId - Event ID
    * @param {string} studentId - Student ID
    */
-  async registerForEvent(eventId, studentId, selectedCategory = null) {
+  async registerForEvent(eventId, studentId, registrationData = null) {
     try {
+      const reg = (registrationData && typeof registrationData === 'object') ? registrationData : {};
+      const selectedCategory =
+        typeof registrationData === 'string'
+          ? registrationData.trim()
+          : (typeof reg.selectedCategory === 'string' ? reg.selectedCategory.trim() : null);
+      const contactEmail = typeof reg.contactEmail === 'string' ? reg.contactEmail.trim() : null;
+      const contactPhone = typeof reg.contactPhone === 'string' ? reg.contactPhone.trim() : null;
+      const playstationId = typeof reg.playstationId === 'string' ? reg.playstationId.trim() : null;
+      const eaId = typeof reg.eaId === 'string' ? reg.eaId.trim() : null;
+      const instagramHandle = typeof reg.instagramHandle === 'string' ? reg.instagramHandle.trim() : null;
+
       // Ensure student exists (needed for payment linkage)
       const student = await prisma.student.findUnique({
         where: { id: studentId },
         include: {
           user: {
-            select: { id: true, email: true }
+            select: { id: true, email: true, phone: true }
           }
         }
       });
@@ -815,13 +851,41 @@ class EventService {
       // Otherwise, REGISTERED for non-payment events
       const registrationStatus = requiresPayment && paymentFound ? 'APPROVED' : 'REGISTERED';
 
+      // Enforce category selection when event has categories
+      if (event.categoriesAvailable && event.categoriesAvailable.trim()) {
+        if (!selectedCategory) {
+          throw new Error('Category selection is required for this event.');
+        }
+      }
+
+      // Online event: require tournament contact details
+      const fmt = (event.eventFormat || 'OFFLINE').toString().toUpperCase();
+      if (fmt === 'ONLINE') {
+        const effectiveEmail = contactEmail || student.user?.email || null;
+        const effectivePhone = contactPhone || student.user?.phone || null;
+        const missing = [];
+        if (!effectiveEmail) missing.push('contactEmail');
+        if (!effectivePhone) missing.push('contactPhone');
+        if (!playstationId) missing.push('playstationId');
+        if (!eaId) missing.push('eaId');
+        if (!instagramHandle) missing.push('instagramHandle');
+        if (missing.length) {
+          throw new Error(`Online event registration requires: ${missing.join(', ')}`);
+        }
+      }
+
       // Create registration
       const registration = await prisma.eventRegistration.create({
         data: {
           studentId,
           eventId,
           status: registrationStatus,
-          selectedCategory: selectedCategory || null
+          selectedCategory: selectedCategory || null,
+          contactEmail: contactEmail || student.user?.email || null,
+          contactPhone: contactPhone || student.user?.phone || null,
+          playstationId: playstationId || null,
+          eaId: eaId || null,
+          instagramHandle: instagramHandle || null
         },
         include: {
           event: {
@@ -831,6 +895,9 @@ class EventService {
               startDate: true,
               endDate: true,
               venue: true,
+              eventFormat: true,
+              tournamentBracketUrl: true,
+              tournamentCommsUrl: true,
               eventFee: true,
               studentFeeAmount: true,
               studentFeeEnabled: true,
@@ -842,6 +909,7 @@ class EventService {
             select: {
               id: true,
               name: true,
+              alias: true,
               user: {
                 select: { email: true, phone: true }
               }
@@ -849,6 +917,33 @@ class EventService {
           }
         }
       });
+
+      // Send tournament email for ONLINE registrations
+      try {
+        const fmt2 = (registration?.event?.eventFormat || 'OFFLINE').toString().toUpperCase();
+        if (fmt2 === 'ONLINE') {
+          const { sendTournamentRegistrationEmail } = require('../utils/emailService');
+          const to = registration?.student?.user?.email || student?.user?.email;
+          if (to) {
+            await sendTournamentRegistrationEmail({
+              to,
+              athleteName: registration?.student?.name || student?.name || 'Athlete',
+              athleteAlias: registration?.student?.alias || null,
+              event: registration?.event,
+              selectedCategory: registration?.selectedCategory || null,
+              registrationContact: {
+                email: registration?.contactEmail || null,
+                phone: registration?.contactPhone || null,
+                playstationId: registration?.playstationId || null,
+                eaId: registration?.eaId || null,
+                instagramHandle: registration?.instagramHandle || null
+              }
+            });
+          }
+        }
+      } catch (mailErr) {
+        console.warn('⚠️ Failed to send tournament registration email:', mailErr?.message || mailErr);
+      }
 
       // Update event participant count
       await prisma.event.update({

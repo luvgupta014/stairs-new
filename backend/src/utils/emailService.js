@@ -399,6 +399,141 @@ const sendEventShareEmail = async ({ to, eventName, eventLink, senderName = 'STA
 };
 
 /**
+ * Send tournament registration confirmation email (ONLINE events)
+ */
+const sendTournamentRegistrationEmail = async ({
+  to,
+  athleteName,
+  athleteAlias = null,
+  event,
+  selectedCategory = null,
+  registrationContact = null
+}) => {
+  const eventName = event?.name || 'Event';
+  const subject = `✅ Registration Confirmed: ${eventName} (Online)`;
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleString('en-IN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const bracketUrl = event?.tournamentBracketUrl || '';
+  const commsUrl = event?.tournamentCommsUrl || '';
+
+  const athleteLine = athleteAlias
+    ? `${athleteName} (Alias: ${athleteAlias})`
+    : athleteName;
+
+  const detailsRows = [
+    ['Event', eventName],
+    ['Start', formatDateTime(event?.startDate)],
+    ['End', event?.endDate ? formatDateTime(event?.endDate) : '—'],
+    ['Sport', event?.sport || '—'],
+    ['Level', event?.level || '—'],
+    ['Venue', [event?.venue, event?.city, event?.state].filter(Boolean).join(', ') || '—'],
+    selectedCategory ? ['Category', selectedCategory] : null,
+  ].filter(Boolean);
+
+  const contactRows = registrationContact ? [
+    registrationContact.email ? ['Email', registrationContact.email] : null,
+    registrationContact.phone ? ['Phone', registrationContact.phone] : null,
+    registrationContact.playstationId ? ['PlayStation ID', registrationContact.playstationId] : null,
+    registrationContact.eaId ? ['EA ID', registrationContact.eaId] : null,
+    registrationContact.instagramHandle ? ['Instagram', registrationContact.instagramHandle] : null,
+  ].filter(Boolean) : [];
+
+  const textParts = [];
+  textParts.push(`Hi ${athleteLine},`);
+  textParts.push('');
+  textParts.push(`You are successfully registered for: ${eventName}`);
+  textParts.push('');
+  detailsRows.forEach(([k, v]) => textParts.push(`${k}: ${v}`));
+  textParts.push('');
+  if (bracketUrl) textParts.push(`Tournament Bracket / Platform: ${bracketUrl}`);
+  if (commsUrl) textParts.push(`Tournament Communications: ${commsUrl}`);
+  if (contactRows.length) {
+    textParts.push('');
+    textParts.push('Your registration details:');
+    contactRows.forEach(([k, v]) => textParts.push(`${k}: ${v}`));
+  }
+  textParts.push('');
+  textParts.push('Good luck and see you in the tournament!');
+
+  const html = `
+    <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:#f6f7fb; padding:24px;">
+      <div style="max-width:640px; margin:0 auto; background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.08);">
+        <div style="background:linear-gradient(135deg,#4f46e5,#2563eb); padding:20px 24px; color:#fff;">
+          <div style="font-size:14px; opacity:0.9;">STAIRS Talent Hub</div>
+          <div style="font-size:22px; font-weight:800; margin-top:6px;">Registration confirmed</div>
+          <div style="margin-top:6px; font-size:14px; opacity:0.95;">${eventName} • Online Tournament</div>
+        </div>
+
+        <div style="padding:24px;">
+          <div style="font-size:16px; color:#111827; font-weight:700;">Hi ${athleteLine},</div>
+          <div style="margin-top:6px; color:#374151; line-height:1.6;">
+            You’re successfully registered. Please keep this email for tournament info and links.
+          </div>
+
+          <div style="margin-top:18px; border:1px solid #e5e7eb; border-radius:12px; padding:14px 16px;">
+            <div style="font-weight:800; color:#111827; margin-bottom:10px;">Event details</div>
+            ${detailsRows.map(([k, v]) => `
+              <div style="display:flex; gap:12px; padding:6px 0; border-top:1px dashed #eef2ff;">
+                <div style="min-width:120px; color:#6b7280; font-size:13px; font-weight:700;">${k}</div>
+                <div style="color:#111827; font-size:13px; font-weight:600;">${v}</div>
+              </div>
+            `).join('')}
+          </div>
+
+          <div style="margin-top:16px; display:grid; grid-template-columns:1fr; gap:10px;">
+            <div style="border:1px solid #e0e7ff; background:#eef2ff; border-radius:12px; padding:14px 16px;">
+              <div style="font-weight:800; color:#1e3a8a;">Tournament Bracket / Platform</div>
+              <div style="margin-top:6px; color:#1f2937; font-size:13px;">
+                ${bracketUrl ? `<a href="${bracketUrl}" style="color:#1d4ed8; font-weight:700; text-decoration:none;">Open bracket/platform link →</a>` : 'Link will be shared soon.'}
+              </div>
+            </div>
+            <div style="border:1px solid #dcfce7; background:#f0fdf4; border-radius:12px; padding:14px 16px;">
+              <div style="font-weight:800; color:#065f46;">Tournament Communications</div>
+              <div style="margin-top:6px; color:#1f2937; font-size:13px;">
+                ${commsUrl ? `<a href="${commsUrl}" style="color:#047857; font-weight:800; text-decoration:none;">Join the group →</a>` : 'Link will be shared soon.'}
+              </div>
+            </div>
+          </div>
+
+          ${contactRows.length ? `
+            <div style="margin-top:16px; border:1px solid #e5e7eb; border-radius:12px; padding:14px 16px;">
+              <div style="font-weight:800; color:#111827; margin-bottom:10px;">Your registration details</div>
+              ${contactRows.map(([k, v]) => `
+                <div style="display:flex; gap:12px; padding:6px 0; border-top:1px dashed #f3f4f6;">
+                  <div style="min-width:140px; color:#6b7280; font-size:13px; font-weight:700;">${k}</div>
+                  <div style="color:#111827; font-size:13px; font-weight:600;">${v}</div>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+
+          <div style="margin-top:18px; color:#6b7280; font-size:12px;">
+            If any link doesn’t open, copy & paste it into your browser. See you in the tournament.
+          </div>
+        </div>
+      </div>
+      <div style="max-width:640px; margin:12px auto 0; color:#9ca3af; font-size:12px; text-align:center;">
+        © ${new Date().getFullYear()} STAIRS Talent Hub
+      </div>
+    </div>
+  `;
+
+  const text = textParts.join('\n');
+  return sendEmail({ to, subject, text, html });
+};
+
+/**
  * Send OTP email for registration
  * @param {string} email - Recipient email
  * @param {string} otp - OTP code
@@ -1506,6 +1641,7 @@ const sendPaymentReceiptEmail = async (receiptData) => {
 
 module.exports = {
   sendEventShareEmail,
+  sendTournamentRegistrationEmail,
   sendOTPEmail,
   sendPasswordResetEmail,
   sendWelcomeEmail,

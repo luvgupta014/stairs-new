@@ -36,6 +36,10 @@ const StudentRegister = () => {
     club: '',
     coachName: '',
     coachMobile: '',
+    playstationId: '',
+    eaId: '',
+    alias: '',
+    instagramHandle: '',
     password: '',
     confirmPassword: '',
     level: 'BEGINNER'
@@ -352,6 +356,10 @@ const StudentRegister = () => {
       club: formData.club || null,
       coachName: formData.coachName || null,
       coachMobile: formData.coachMobile || null,
+      playstationId: formData.playstationId?.trim() || null,
+      eaId: formData.eaId?.trim() || null,
+      alias: formData.alias?.trim() || null,
+      instagramHandle: formData.instagramHandle?.trim() || null,
       level: formData.level,
       password: formData.password,
       termsAccepted: true,
@@ -824,6 +832,74 @@ const StudentRegister = () => {
                 <FieldError fieldName="coachMobile" />
               </div>
             )}
+
+            {/* Optional social / gaming identifiers */}
+            <div className="mt-2 pt-4 border-t border-gray-200">
+              <div className="text-sm font-semibold text-gray-900 mb-1">Social & Gaming (Optional)</div>
+              <div className="text-sm text-gray-600 mb-4">
+                Add these only if applicable — it helps coordinators connect with you for certain events.
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    PlayStation ID (Optional)
+                  </label>
+                  <input
+                    name="playstationId"
+                    type="text"
+                    value={formData.playstationId}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Enter your PlayStation ID"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    EA ID (Optional)
+                  </label>
+                  <input
+                    name="eaId"
+                    type="text"
+                    value={formData.eaId}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Enter your EA ID"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Alias (Optional)
+                  </label>
+                  <input
+                    name="alias"
+                    type="text"
+                    value={formData.alias}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Any nickname / gamer tag"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Instagram Handle (Optional)
+                  </label>
+                  <input
+                    name="instagramHandle"
+                    type="text"
+                    value={formData.instagramHandle}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="@yourhandle"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         );
 

@@ -349,7 +349,17 @@ class EventController {
         }
       }
 
-      const registration = await eventService.registerForEvent(eventId, studentId);
+      const selectedCategory = typeof req.body?.selectedCategory === 'string' ? req.body.selectedCategory.trim() : null;
+      const regDetails = {
+        selectedCategory: selectedCategory || null,
+        contactEmail: typeof req.body?.contactEmail === 'string' ? req.body.contactEmail.trim() : null,
+        contactPhone: typeof req.body?.contactPhone === 'string' ? req.body.contactPhone.trim() : null,
+        playstationId: typeof req.body?.playstationId === 'string' ? req.body.playstationId.trim() : null,
+        eaId: typeof req.body?.eaId === 'string' ? req.body.eaId.trim() : null,
+        instagramHandle: typeof req.body?.instagramHandle === 'string' ? req.body.instagramHandle.trim() : null,
+      };
+
+      const registration = await eventService.registerForEvent(eventId, studentId, regDetails);
 
       res.status(201).json(successResponse(registration, 'Successfully registered for event'));
     } catch (error) {

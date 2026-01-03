@@ -70,6 +70,10 @@ model Student {
   club               String?
   coachName          String?
   coachMobile        String?
+  playstationId      String?
+  eaId               String?
+  alias              String?
+  instagramHandle    String?
   achievements       String?
   profileCompletion  Int                      @default(0)
   createdAt          DateTime                 @default(now())
@@ -245,6 +249,12 @@ model Event {
   name                String
   description         String?
   sport               String
+  /// Event format controls (online/offline/hybrid)
+  eventFormat         EventFormat         @default(OFFLINE)
+  /// For online/hybrid events: bracket/platform URL (always shown on event details)
+  tournamentBracketUrl String?
+  /// For online/hybrid events: communications link (e.g., WhatsApp/Discord/Telegram group)
+  tournamentCommsUrl   String?
   venue               String
   address             String?
   city                String
@@ -438,6 +448,12 @@ model EventRegistration {
   message         String?
   // Selected category by athlete: e.g., "Group II (13-14) | Freestyle | 50m"
   selectedCategory String?
+  /// Online-event registration snapshot fields (optional; required by UI for ONLINE events)
+  contactEmail     String?
+  contactPhone     String?
+  playstationId    String?
+  eaId             String?
+  instagramHandle  String?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   event           Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -687,6 +703,12 @@ enum EventLevel {
   STATE
   NATIONAL
   SCHOOL
+}
+
+enum EventFormat {
+  OFFLINE
+  ONLINE
+  HYBRID
 }
 
 enum EventFeeMode {

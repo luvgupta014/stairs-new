@@ -4265,6 +4265,9 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
       endDate,
       maxParticipants,
       level,
+      eventFormat,
+      tournamentBracketUrl,
+      tournamentCommsUrl,
       categoriesAvailable
     } = req.body;
 
@@ -4316,6 +4319,22 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
     const normalizedLevel = level ? String(level).toUpperCase() : 'DISTRICT';
     if (normalizedLevel && !validLevels.includes(normalizedLevel)) {
       return res.status(400).json(errorResponse(`Invalid event level. Must be one of: ${validLevels.join(', ')}`, 400));
+    }
+
+    // Validate event format + tournament links
+    const validFormats = ['OFFLINE', 'ONLINE', 'HYBRID'];
+    const normalizedFormat = eventFormat ? String(eventFormat).toUpperCase() : 'OFFLINE';
+    if (!validFormats.includes(normalizedFormat)) {
+      return res.status(400).json(errorResponse(`Invalid event format. Must be one of: ${validFormats.join(', ')}`, 400));
+    }
+    const bracket = (tournamentBracketUrl || '').toString().trim();
+    const comms = (tournamentCommsUrl || '').toString().trim();
+    const looksLikeUrl = (v) => !v || /^https?:\/\/\S+/i.test(v);
+    if (normalizedFormat === 'ONLINE' && (!bracket || !comms)) {
+      return res.status(400).json(errorResponse('For Online events, tournamentBracketUrl and tournamentCommsUrl are required.', 400));
+    }
+    if (!looksLikeUrl(bracket) || !looksLikeUrl(comms)) {
+      return res.status(400).json(errorResponse('Tournament links must be valid URLs starting with http:// or https://', 400));
     }
 
     // Get or create a system coach for admin-created events
@@ -4381,6 +4400,9 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
         endDate: endDateObj || null,
         maxParticipants: maxParticipants ? parseInt(maxParticipants) : 50,
         eventFee: 0,
+        eventFormat: normalizedFormat,
+        tournamentBracketUrl: bracket || null,
+        tournamentCommsUrl: comms || null,
         // Student participation fee defaults for admin-created events
         studentFeeEnabled: req.body?.studentFeeEnabled !== undefined
           ? !!req.body.studentFeeEnabled

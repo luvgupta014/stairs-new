@@ -30,6 +30,13 @@ const EventDetails = () => {
   const [payingEventId, setPayingEventId] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [updatingCategory, setUpdatingCategory] = useState(false);
+  const [onlineReg, setOnlineReg] = useState({
+    contactEmail: '',
+    contactPhone: '',
+    playstationId: '',
+    eaId: '',
+    instagramHandle: ''
+  });
 
   // Event Incharge permissions (per-event)
   const [inchargeAssignment, setInchargeAssignment] = useState(null);
@@ -84,6 +91,22 @@ const EventDetails = () => {
       loadRazorpayScript();
     }
   }, [eventId]);
+
+  // Prefill online registration fields from profile (student)
+  useEffect(() => {
+    const fmt = (event?.eventFormat || event?.event?.eventFormat || '').toString().toUpperCase();
+    if (user?.role !== 'STUDENT') return;
+    if (fmt !== 'ONLINE') return;
+    const profile = user?.profile || {};
+    const profileUser = profile?.user || {};
+    setOnlineReg((prev) => ({
+      contactEmail: prev.contactEmail || profileUser.email || user?.email || '',
+      contactPhone: prev.contactPhone || profileUser.phone || user?.phone || '',
+      playstationId: prev.playstationId || profile.playstationId || '',
+      eaId: prev.eaId || profile.eaId || '',
+      instagramHandle: prev.instagramHandle || profile.instagramHandle || ''
+    }));
+  }, [event?.id, user?.id]);
 
   const loadEventDetails = async () => {
     try {
@@ -480,15 +503,50 @@ const EventDetails = () => {
         
         // Prepare registration data with selectedCategory (mandatory if categories exist)
         const trimmedCategory = selectedCategory?.trim() || '';
-        const registrationData = (event.categoriesAvailable && event.categoriesAvailable.trim()) 
+        const fmt = (event?.eventFormat || '').toString().toUpperCase();
+
+        // Online events: require contact fields (modern tournament flow)
+        if (fmt === 'ONLINE') {
+          const missing = [];
+          const ce = (onlineReg.contactEmail || '').trim();
+          const cp = (onlineReg.contactPhone || '').trim();
+          const ps = (onlineReg.playstationId || '').trim();
+          const ea = (onlineReg.eaId || '').trim();
+          const ig = (onlineReg.instagramHandle || '').trim();
+          if (!ce) missing.push('Email');
+          if (!cp) missing.push('Phone number');
+          if (!ps) missing.push('PlayStation ID');
+          if (!ea) missing.push('EA ID');
+          if (!ig) missing.push('Instagram Handle');
+          if (missing.length) {
+            alert(`Please complete these required tournament fields: ${missing.join(', ')}`);
+            setIsRegistering(false);
+            return;
+          }
+        }
+
+        const base = (event.categoriesAvailable && event.categoriesAvailable.trim())
           ? { selectedCategory: trimmedCategory }
           : {};
+
+        const registrationData = fmt === 'ONLINE'
+          ? {
+              ...base,
+              contactEmail: (onlineReg.contactEmail || '').trim(),
+              contactPhone: (onlineReg.contactPhone || '').trim(),
+              playstationId: (onlineReg.playstationId || '').trim(),
+              eaId: (onlineReg.eaId || '').trim(),
+              instagramHandle: (onlineReg.instagramHandle || '').trim(),
+            }
+          : base;
         
         const response = await registerForEvent(eventId, registrationData);
         
         if (response && response.success) {
           console.log('✅ Registration successful');
-          alert('Successfully registered for the event!');
+          alert(fmt === 'ONLINE'
+            ? 'Successfully registered! Tournament links have been sent to your email.'
+            : 'Successfully registered for the event!');
           setSelectedCategory(''); // Reset category selection
           await loadEventDetails();
         } else {
@@ -1023,6 +1081,59 @@ const EventDetails = () => {
                       {event.address && `${event.address}, `}{event.city}, {event.state}
                     </dd>
                   </div>
+
+                  {event?.eventFormat ? (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Event Format</dt>
+                      <dd className="mt-1 text-sm text-gray-900">
+                        {event.eventFormat === 'ONLINE' ? 'Online' : event.eventFormat === 'HYBRID' ? 'Hybrid' : 'Offline'}
+                      </dd>
+                    </div>
+                  ) : null}
+
+                  {(event?.eventFormat === 'ONLINE' || event?.eventFormat === 'HYBRID') ? (
+                    <div className="sm:col-span-2">
+                      <dt className="text-sm font-medium text-gray-500">Tournament Bracket / Platform</dt>
+                      <dd className="mt-1 text-sm text-gray-900">
+                        {event?.tournamentBracketUrl ? (
+                          <a
+                            href={event.tournamentBracketUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center font-semibold text-indigo-700 hover:text-indigo-900"
+                          >
+                            Open bracket/platform link →
+                          </a>
+                        ) : (
+                          <span className="text-gray-500">To be announced</span>
+                        )}
+                      </dd>
+                    </div>
+                  ) : null}
+
+                  {(event?.eventFormat === 'ONLINE' || event?.eventFormat === 'HYBRID') ? (
+                    <div className="sm:col-span-2">
+                      <dt className="text-sm font-medium text-gray-500">Tournament Communications</dt>
+                      <dd className="mt-1 text-sm text-gray-900">
+                        {event?.tournamentCommsUrl ? (
+                          event?.isRegistered ? (
+                            <a
+                              href={event.tournamentCommsUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center font-semibold text-emerald-700 hover:text-emerald-900"
+                            >
+                              Join communications group →
+                            </a>
+                          ) : (
+                            <span className="text-gray-500">Register to view the group link</span>
+                          )
+                        ) : (
+                          <span className="text-gray-500">To be announced</span>
+                        )}
+                      </dd>
+                    </div>
+                  ) : null}
                   
                   <div>
                     <dt className="text-sm font-medium text-gray-500">Event Fee</dt>
@@ -1258,6 +1369,24 @@ const EventDetails = () => {
                       </div>
                     </div>
 
+                    {/* Tournament communications shown after registration (ONLINE/HYBRID) */}
+                    {(event?.eventFormat === 'ONLINE' || event?.eventFormat === 'HYBRID') && event?.tournamentCommsUrl ? (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                        <div className="text-sm font-bold text-emerald-900">Tournament Communications</div>
+                        <div className="text-xs text-emerald-800 mt-1">
+                          Join the group for updates, schedules, and match instructions.
+                        </div>
+                        <a
+                          href={event.tournamentCommsUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-3 inline-flex items-center text-sm font-semibold text-emerald-700 hover:text-emerald-900"
+                        >
+                          Join communications group →
+                        </a>
+                      </div>
+                    ) : null}
+
                     {/* If event has categories and registration is missing selectedCategory, allow backfill via picker */}
                     {event.categoriesAvailable && event.categoriesAvailable.trim() && (!event.selectedCategory || !event.selectedCategory.trim()) && (
                       <div className="bg-white border-2 border-amber-200 rounded-xl p-5 shadow-sm">
@@ -1331,6 +1460,76 @@ const EventDetails = () => {
                         </p>
                       </div>
                     )}
+
+                    {/* Online tournament fields (required for ONLINE) */}
+                    {event?.eventFormat === 'ONLINE' ? (
+                      <div className="bg-white border-2 border-indigo-200 rounded-xl p-5 shadow-sm">
+                        <div className="mb-3">
+                          <div className="text-base font-bold text-gray-900">Tournament Details (Required)</div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            These will be used for online tournament coordination.
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                            <input
+                              type="email"
+                              value={onlineReg.contactEmail}
+                              onChange={(e) => setOnlineReg((p) => ({ ...p, contactEmail: e.target.value }))}
+                              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                              placeholder="you@example.com"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+                            <input
+                              type="tel"
+                              value={onlineReg.contactPhone}
+                              onChange={(e) => setOnlineReg((p) => ({ ...p, contactPhone: e.target.value }))}
+                              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                              placeholder="10-digit mobile"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">PlayStation ID *</label>
+                            <input
+                              type="text"
+                              value={onlineReg.playstationId}
+                              onChange={(e) => setOnlineReg((p) => ({ ...p, playstationId: e.target.value }))}
+                              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                              placeholder="Your PSN ID"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">EA ID *</label>
+                            <input
+                              type="text"
+                              value={onlineReg.eaId}
+                              onChange={(e) => setOnlineReg((p) => ({ ...p, eaId: e.target.value }))}
+                              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                              placeholder="Your EA ID"
+                              required
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Instagram Handle *</label>
+                            <input
+                              type="text"
+                              value={onlineReg.instagramHandle}
+                              onChange={(e) => setOnlineReg((p) => ({ ...p, instagramHandle: e.target.value }))}
+                              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                              placeholder="@yourhandle"
+                              required
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                     <Button
                       onClick={handleRegister}
                       disabled={isRegistering || (event.categoriesAvailable && event.categoriesAvailable.trim() && (!selectedCategory || !selectedCategory.trim()))}

@@ -687,7 +687,12 @@ router.get('/events/:eventId', authenticate, requireStudent, async (req, res) =>
             status: true,
             createdAt: true,
             message: true,
-            selectedCategory: true
+            selectedCategory: true,
+            contactEmail: true,
+            contactPhone: true,
+            playstationId: true,
+            eaId: true,
+            instagramHandle: true
           }
         },
         _count: {
@@ -716,6 +721,9 @@ router.get('/events/:eventId', authenticate, requireStudent, async (req, res) =>
       description: event.description,
       sport: event.sport,
       level: event.level,
+      eventFormat: event.eventFormat || 'OFFLINE',
+      tournamentBracketUrl: event.tournamentBracketUrl || null,
+      tournamentCommsUrl: event.tournamentCommsUrl || null,
       startDate: event.startDate,
       endDate: event.endDate,
       venue: event.venue,
@@ -748,6 +756,13 @@ router.get('/events/:eventId', authenticate, requireStudent, async (req, res) =>
       registrationDate: event.registrations.length > 0 ? event.registrations[0].createdAt : null,
       registrationMessage: event.registrations.length > 0 ? event.registrations[0].message : null,
       selectedCategory: event.registrations.length > 0 ? (event.registrations[0].selectedCategory || null) : null,
+      registrationContact: event.registrations.length > 0 ? ({
+        email: event.registrations[0].contactEmail || null,
+        phone: event.registrations[0].contactPhone || null,
+        playstationId: event.registrations[0].playstationId || null,
+        eaId: event.registrations[0].eaId || null,
+        instagramHandle: event.registrations[0].instagramHandle || null
+      }) : null,
       
       // Check if registration is still possible
       canRegister: event.registrations.length === 0 && 
@@ -832,11 +847,18 @@ router.post('/events/:eventId/register', authenticate, requireStudent, async (re
       return res.status(404).json(errorResponse('Student profile not found.', 404));
     }
 
-    // Extract selectedCategory from request body
-    const { selectedCategory } = req.body || {};
+    const selectedCategory = typeof req.body?.selectedCategory === 'string' ? req.body.selectedCategory.trim() : null;
+    const regDetails = {
+      selectedCategory: selectedCategory || null,
+      contactEmail: typeof req.body?.contactEmail === 'string' ? req.body.contactEmail.trim() : null,
+      contactPhone: typeof req.body?.contactPhone === 'string' ? req.body.contactPhone.trim() : null,
+      playstationId: typeof req.body?.playstationId === 'string' ? req.body.playstationId.trim() : null,
+      eaId: typeof req.body?.eaId === 'string' ? req.body.eaId.trim() : null,
+      instagramHandle: typeof req.body?.instagramHandle === 'string' ? req.body.instagramHandle.trim() : null,
+    };
 
     // Use consolidated service to handle registration + payment triggers
-    const registration = await eventService.registerForEvent(eventId, student.id, selectedCategory);
+    const registration = await eventService.registerForEvent(eventId, student.id, regDetails);
 
     console.log(`✅ Student registered for event successfully`);
 

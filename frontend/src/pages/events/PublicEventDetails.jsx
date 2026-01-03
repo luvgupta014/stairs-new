@@ -345,7 +345,46 @@ const PublicEventDetails = () => {
                     </div>
                   </div>
 
-                  {/* Participants count intentionally hidden on public page */}
+                  {/* Online/Hybrid tournament info (Bracket is always shown with event details) */}
+                  {(event?.eventFormat === 'ONLINE' || event?.eventFormat === 'HYBRID') && (
+                    <div className="pt-6 border-t border-gray-100">
+                      <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                          <FaGlobe className="w-6 h-6 text-indigo-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">Event Format</p>
+                          <p className="text-lg font-semibold text-gray-900">
+                            {event.eventFormat === 'ONLINE' ? 'Online' : 'Hybrid'}
+                          </p>
+
+                          <div className="mt-3 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                            <div className="text-sm font-bold text-indigo-900">Tournament Bracket / Platform</div>
+                            <div className="text-sm text-indigo-800 mt-1">
+                              {event.tournamentBracketUrl ? (
+                                <a
+                                  href={event.tournamentBracketUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="font-semibold text-indigo-700 hover:text-indigo-900"
+                                >
+                                  Open bracket/platform link →
+                                </a>
+                              ) : (
+                                'To be announced'
+                              )}
+                            </div>
+
+                            {event.tournamentCommsUrl ? (
+                              <div className="mt-3 text-sm text-gray-700">
+                                <span className="font-semibold">Tournament communications:</span> visible after registration.
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Registration Fee */}
                   {event.studentFeeEnabled && event.studentFeeAmount > 0 && (

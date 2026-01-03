@@ -183,6 +183,9 @@ const EventCreate = ({ adminMode = false }) => {
     name: '',
     description: '',
     sports: [], // Changed from 'sport' to 'sports' array
+    eventFormat: 'OFFLINE',
+    tournamentBracketUrl: '',
+    tournamentCommsUrl: '',
     venue: '',
     address: '',
     city: '',
@@ -247,6 +250,30 @@ const EventCreate = ({ adminMode = false }) => {
       return;
     }
 
+    // Validate event format + online fields
+    const fmt = (formData.eventFormat || 'OFFLINE').toString().toUpperCase();
+    const isOnline = fmt === 'ONLINE';
+    const isHybrid = fmt === 'HYBRID';
+    const needsTournamentLinks = isOnline; // required only for ONLINE (HYBRID optional)
+    const bracket = (formData.tournamentBracketUrl || '').trim();
+    const comms = (formData.tournamentCommsUrl || '').trim();
+    const isValidUrl = (v) => !v || /^https?:\/\/\S+/i.test(v);
+
+    if (!['OFFLINE', 'ONLINE', 'HYBRID'].includes(fmt)) {
+      setError('Event format must be Offline, Online, or Hybrid.');
+      return;
+    }
+
+    if (needsTournamentLinks && (!bracket || !comms)) {
+      setError('For Online events, Tournament Bracket URL and Tournament Communications link are required.');
+      return;
+    }
+
+    if (!isValidUrl(bracket) || !isValidUrl(comms)) {
+      setError('Please enter valid URLs (must start with http:// or https://).');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -258,6 +285,9 @@ const EventCreate = ({ adminMode = false }) => {
         ...formData,
         // Convert sports array to comma-separated string for backend
         sport: formData.sports.join(', '),
+        eventFormat: fmt,
+        tournamentBracketUrl: bracket || null,
+        tournamentCommsUrl: comms || null,
         startDate: formData.startDate ? formData.startDate + ':00' : '',
         endDate: formData.endDate ? formData.endDate + ':00' : null,
         maxParticipants: formData.maxParticipants ? parseInt(formData.maxParticipants) : null,
@@ -520,7 +550,75 @@ const EventCreate = ({ adminMode = false }) => {
               <option value="SCHOOL">School</option>
             </select>
           </div>
+
+          {/* Event Format */}
+          <div>
+            <label htmlFor="eventFormat" className="block text-sm font-medium text-gray-700 mb-2">
+              Event Format *
+            </label>
+            <select
+              id="eventFormat"
+              name="eventFormat"
+              value={formData.eventFormat}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              required
+            >
+              <option value="OFFLINE">Offline</option>
+              <option value="ONLINE">Online</option>
+              <option value="HYBRID">Hybrid</option>
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              Online events show tournament bracket + communications links to athletes.
+            </p>
+          </div>
         </div>
+
+        {/* Online / Hybrid Links */}
+        {(formData.eventFormat === 'ONLINE' || formData.eventFormat === 'HYBRID') && (
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
+            <div className="font-semibold text-indigo-900">Tournament Links</div>
+            <div className="text-sm text-indigo-800 mt-1">
+              {formData.eventFormat === 'ONLINE'
+                ? 'Required for Online events.'
+                : 'Recommended for Hybrid events (optional).'}
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label htmlFor="tournamentBracketUrl" className="block text-sm font-medium text-gray-700 mb-2">
+                  Tournament Bracket / Platform URL {formData.eventFormat === 'ONLINE' ? '*' : '(Optional)'}
+                </label>
+                <input
+                  type="url"
+                  id="tournamentBracketUrl"
+                  name="tournamentBracketUrl"
+                  value={formData.tournamentBracketUrl}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="https://…"
+                  required={formData.eventFormat === 'ONLINE'}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="tournamentCommsUrl" className="block text-sm font-medium text-gray-700 mb-2">
+                  Tournament Communications Link {formData.eventFormat === 'ONLINE' ? '*' : '(Optional)'}
+                </label>
+                <input
+                  type="url"
+                  id="tournamentCommsUrl"
+                  name="tournamentCommsUrl"
+                  value={formData.tournamentCommsUrl}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="WhatsApp/Telegram/Discord link…"
+                  required={formData.eventFormat === 'ONLINE'}
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
           <div>
             <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
