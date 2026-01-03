@@ -858,9 +858,10 @@ class EventService {
         }
       }
 
-      // Online event: require tournament contact details
+      // Online/Hybrid event: require tournament contact details when tournament links exist
       const fmt = (event.eventFormat || 'OFFLINE').toString().toUpperCase();
-      if (fmt === 'ONLINE') {
+      const hasTournamentLinks = !!(event.tournamentBracketUrl || event.tournamentCommsUrl);
+      if (fmt === 'ONLINE' || (fmt === 'HYBRID' && hasTournamentLinks)) {
         const effectiveEmail = contactEmail || student.user?.email || null;
         const effectivePhone = contactPhone || student.user?.phone || null;
         const missing = [];
@@ -918,10 +919,11 @@ class EventService {
         }
       });
 
-      // Send tournament email for ONLINE registrations
+      // Send tournament email for ONLINE/HYBRID registrations (when tournament links exist)
       try {
         const fmt2 = (registration?.event?.eventFormat || 'OFFLINE').toString().toUpperCase();
-        if (fmt2 === 'ONLINE') {
+        const hasLinks2 = !!(registration?.event?.tournamentBracketUrl || registration?.event?.tournamentCommsUrl);
+        if (fmt2 === 'ONLINE' || (fmt2 === 'HYBRID' && hasLinks2)) {
           const { sendTournamentRegistrationEmail } = require('../utils/emailService');
           const to = registration?.student?.user?.email || student?.user?.email;
           if (to) {
@@ -1177,7 +1179,8 @@ class EventService {
     const allowedFields = [
       'name', 'description', 'sport', 'startDate', 'endDate', 'venue',
       'address', 'city', 'state', 'latitude', 'longitude', 'maxParticipants',
-      'eventFee', 'registrationDeadline', 'level', 'categoriesAvailable'
+      'eventFee', 'registrationDeadline', 'level', 'categoriesAvailable',
+      'eventFormat', 'tournamentBracketUrl', 'tournamentCommsUrl'
     ];
 
     allowedFields.forEach(field => {
@@ -1186,9 +1189,21 @@ class EventService {
       }
     });
 
+    // Helper: parse datetime-local style strings as IST (+05:30)
+    const parseAsIST = (v) => {
+      if (!v) return null;
+      if (v instanceof Date) return v;
+      const s = v.toString().trim();
+      if (!s) return null;
+      // If it already has timezone, use as-is
+      if (s.includes('+') || s.endsWith('Z')) return new Date(s);
+      // Append IST offset so server interprets as IST clock time
+      return new Date(`${s}+05:30`);
+    };
+
     // Validate dates if provided
     if (validatedData.startDate) {
-      const startDate = new Date(validatedData.startDate);
+      const startDate = parseAsIST(validatedData.startDate);
       if (startDate <= new Date()) {
         throw new Error('Event start date must be in the future');
       }
@@ -1196,7 +1211,7 @@ class EventService {
     }
 
     if (validatedData.endDate) {
-      const endDate = new Date(validatedData.endDate);
+      const endDate = parseAsIST(validatedData.endDate);
       const startDate = validatedData.startDate || existingEvent.startDate;
       if (endDate <= startDate) {
         throw new Error('Event end date must be after start date');
@@ -1229,6 +1244,43 @@ class EventService {
         throw new Error(`Invalid event level. Must be one of: ${validLevels.join(', ')}`);
       }
       validatedData.level = normalizedLevel;
+    }
+
+    // Validate event format if provided
+    if (validatedData.eventFormat) {
+      const validFormats = ['OFFLINE', 'ONLINE', 'HYBRID'];
+      const normalizedFormat = String(validatedData.eventFormat).toUpperCase();
+      if (!validFormats.includes(normalizedFormat)) {
+        throw new Error(`Invalid event format. Must be one of: ${validFormats.join(', ')}`);
+      }
+      validatedData.eventFormat = normalizedFormat;
+    }
+
+    // Normalize tournament URLs if provided
+    const normalizeUrl = (v) => {
+      if (v === null || v === undefined) return null;
+      const s = v.toString().trim();
+      return s.length ? s : null;
+    };
+    if (validatedData.tournamentBracketUrl !== undefined) {
+      validatedData.tournamentBracketUrl = normalizeUrl(validatedData.tournamentBracketUrl);
+    }
+    if (validatedData.tournamentCommsUrl !== undefined) {
+      validatedData.tournamentCommsUrl = normalizeUrl(validatedData.tournamentCommsUrl);
+    }
+
+    // If eventFormat is being set to ONLINE, ensure tournament links exist (either incoming or existing)
+    const effectiveFormat = (validatedData.eventFormat || existingEvent.eventFormat || 'OFFLINE').toString().toUpperCase();
+    if (effectiveFormat === 'ONLINE') {
+      const effectiveBracket = (validatedData.tournamentBracketUrl !== undefined ? validatedData.tournamentBracketUrl : existingEvent.tournamentBracketUrl) || null;
+      const effectiveComms = (validatedData.tournamentCommsUrl !== undefined ? validatedData.tournamentCommsUrl : existingEvent.tournamentCommsUrl) || null;
+      if (!effectiveBracket || !effectiveComms) {
+        throw new Error('For Online events, tournamentBracketUrl and tournamentCommsUrl are required.');
+      }
+      const looksLikeUrl = (x) => /^https?:\/\/\S+/i.test(String(x || ''));
+      if (!looksLikeUrl(effectiveBracket) || !looksLikeUrl(effectiveComms)) {
+        throw new Error('Tournament links must be valid URLs starting with http:// or https://');
+      }
     }
 
     // Validate and normalize categoriesAvailable if provided

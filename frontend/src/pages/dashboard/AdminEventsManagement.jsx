@@ -58,7 +58,8 @@ const AdminEventsManagement = () => {
     resultUpload: false,
     studentManagement: false,
     certificateManagement: false,
-    feeManagement: false
+    feeManagement: false,
+    editDetails: false
   });
   const [inchargeInvites, setInchargeInvites] = useState([]);
   const [loadingInvites, setLoadingInvites] = useState(false);
@@ -73,7 +74,8 @@ const AdminEventsManagement = () => {
     resultUpload: false,
     studentManagement: false,
     certificateManagement: false,
-    feeManagement: false
+    feeManagement: false,
+    editDetails: false
   });
   const [permissionMsg, setPermissionMsg] = useState('');
   const [permissionErr, setPermissionErr] = useState('');
@@ -585,7 +587,8 @@ const AdminEventsManagement = () => {
       resultUpload: false,
       studentManagement: false,
       certificateManagement: false,
-      feeManagement: false
+      feeManagement: false,
+      editDetails: false
     });
     // Load existing assignments for this event
     await loadEventAssignments(eventId);
@@ -610,7 +613,8 @@ const AdminEventsManagement = () => {
       resultUpload: !!inchargeInviteForm.resultUpload,
       studentManagement: !!inchargeInviteForm.studentManagement,
       certificateManagement: !!inchargeInviteForm.certificateManagement,
-      feeManagement: !!inchargeInviteForm.feeManagement
+      feeManagement: !!inchargeInviteForm.feeManagement,
+      editDetails: !!inchargeInviteForm.editDetails
     };
 
     try {
@@ -746,7 +750,7 @@ const AdminEventsManagement = () => {
 
   const downloadInchargeInviteTemplateCsv = () => {
     // Header-only template (no sample data)
-    const header = 'email,isPointOfContact,resultUpload,studentManagement,certificateManagement,feeManagement\n';
+    const header = 'email,isPointOfContact,resultUpload,studentManagement,certificateManagement,feeManagement,editDetails\n';
     const blob = new Blob([header], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -778,6 +782,7 @@ const AdminEventsManagement = () => {
     const smIdx = idx('studentManagement');
     const cmIdx = idx('certificateManagement');
     const fmIdx = idx('feeManagement');
+    const edIdx = idx('editDetails');
 
     const out = [];
     for (let i = 1; i < lines.length; i++) {
@@ -791,7 +796,8 @@ const AdminEventsManagement = () => {
           resultUpload: ruIdx >= 0 ? parseBool(cols[ruIdx]) : undefined,
           studentManagement: smIdx >= 0 ? parseBool(cols[smIdx]) : undefined,
           certificateManagement: cmIdx >= 0 ? parseBool(cols[cmIdx]) : undefined,
-          feeManagement: fmIdx >= 0 ? parseBool(cols[fmIdx]) : undefined
+          feeManagement: fmIdx >= 0 ? parseBool(cols[fmIdx]) : undefined,
+          editDetails: edIdx >= 0 ? parseBool(cols[edIdx]) : undefined
         }
       });
     }
@@ -1102,7 +1108,8 @@ const AdminEventsManagement = () => {
               resultUpload: !!p.resultUpload,
               studentManagement: !!p.studentManagement,
               certificateManagement: !!p.certificateManagement,
-              feeManagement: !!p.feeManagement
+              feeManagement: !!p.feeManagement,
+              editDetails: !!p.editDetails
             },
             saving: false,
             error: '',
@@ -1116,7 +1123,7 @@ const AdminEventsManagement = () => {
         const i = incharges[idx];
         return {
           ...i,
-          permissions: { resultUpload: false, studentManagement: false, certificateManagement: false, feeManagement: false },
+          permissions: { resultUpload: false, studentManagement: false, certificateManagement: false, feeManagement: false, editDetails: false },
           saving: false,
           error: 'Failed to load permissions.',
           msg: ''
@@ -1151,7 +1158,7 @@ const AdminEventsManagement = () => {
     const row = permissionIncharges.find(r => r.userId === userId);
     if (!row) return;
     const p = row.permissions || {};
-    const hasAny = p.resultUpload || p.studentManagement || p.certificateManagement || p.feeManagement;
+    const hasAny = p.resultUpload || p.studentManagement || p.certificateManagement || p.feeManagement || p.editDetails;
     if (!hasAny) {
       updatePermissionRow(userId, { error: 'Select at least one permission.', msg: '' });
       return;
@@ -1162,7 +1169,8 @@ const AdminEventsManagement = () => {
         resultUpload: !!p.resultUpload,
         studentManagement: !!p.studentManagement,
         certificateManagement: !!p.certificateManagement,
-        feeManagement: !!p.feeManagement
+        feeManagement: !!p.feeManagement,
+        editDetails: !!p.editDetails
       });
       if (res?.success) {
         updatePermissionRow(userId, { saving: false, msg: 'Saved.', error: '' });
@@ -1453,9 +1461,12 @@ const AdminEventsManagement = () => {
       const nextCity = getStr('city');
       const nextState = getStr('state');
       const nextLevel = String(getStr('level') || (ev.level || 'DISTRICT')).toUpperCase();
+      const nextFormat = String(getStr('eventFormat') || (ev.eventFormat || 'OFFLINE')).toUpperCase();
 
       const nextDescription = getStrOrNull('description');
       const nextAddress = getStrOrNull('address');
+      const nextBracketUrl = getStrOrNull('tournamentBracketUrl');
+      const nextCommsUrl = getStrOrNull('tournamentCommsUrl');
 
       const nextStartInput = getStr('startDate'); // datetime-local: YYYY-MM-DDTHH:mm
       const nextEndInput = getStr('endDate'); // optional
@@ -1475,6 +1486,17 @@ const AdminEventsManagement = () => {
       if (!nextStartInput) throw new Error('Start date is required.');
       if (nextMaxRaw && (!Number.isFinite(nextMax) || nextMax < 1)) throw new Error('Max participants must be a positive number.');
 
+      // Validate event format + tournament links
+      const validFormats = ['OFFLINE', 'ONLINE', 'HYBRID'];
+      if (!validFormats.includes(nextFormat)) throw new Error('Event format must be Offline, Online, or Hybrid.');
+      const looksLikeUrl = (v) => !v || /^https?:\/\/\S+/i.test(String(v || ''));
+      if (!looksLikeUrl(nextBracketUrl) || !looksLikeUrl(nextCommsUrl)) {
+        throw new Error('Tournament links must be valid URLs starting with http:// or https://');
+      }
+      if (nextFormat === 'ONLINE' && (!nextBracketUrl || !nextCommsUrl)) {
+        throw new Error('Online events require Tournament Bracket URL and Tournament Communications link.');
+      }
+
       const patch = {};
       const setIfChanged = (key, nextVal, origVal) => {
         const n = String(nextVal ?? '');
@@ -1488,9 +1510,17 @@ const AdminEventsManagement = () => {
       setIfChanged('city', nextCity, (ev.city || '').trim());
       setIfChanged('state', nextState, (ev.state || '').trim());
       setIfChanged('level', nextLevel, String(ev.level || 'DISTRICT').toUpperCase());
+      setIfChanged('eventFormat', nextFormat, String(ev.eventFormat || 'OFFLINE').toUpperCase());
 
       setIfChanged('description', nextDescription, (ev.description || '').trim() || null);
       setIfChanged('address', nextAddress, (ev.address || '').trim() || null);
+
+      const origBracket = ev.tournamentBracketUrl && String(ev.tournamentBracketUrl).trim() ? String(ev.tournamentBracketUrl).trim() : null;
+      const origComms = ev.tournamentCommsUrl && String(ev.tournamentCommsUrl).trim() ? String(ev.tournamentCommsUrl).trim() : null;
+      const nextBracketNorm = nextBracketUrl && String(nextBracketUrl).trim() ? String(nextBracketUrl).trim() : null;
+      const nextCommsNorm = nextCommsUrl && String(nextCommsUrl).trim() ? String(nextCommsUrl).trim() : null;
+      if (nextBracketNorm !== origBracket) patch.tournamentBracketUrl = nextBracketNorm;
+      if (nextCommsNorm !== origComms) patch.tournamentCommsUrl = nextCommsNorm;
 
       // Dates: compare by minute precision using existing helper
       const origStartKey = ev.startDate ? formatDateForInput(ev.startDate) : '';
@@ -2413,6 +2443,22 @@ const AdminEventsManagement = () => {
                       </select>
                     </div>
                     <div>
+                      <label htmlFor="stable-edit-format" className="block text-sm font-medium text-gray-700 mb-1">Event Format</label>
+                      <select
+                        id="stable-edit-format"
+                        name="eventFormat"
+                        defaultValue={event?.eventFormat || 'OFFLINE'}
+                        disabled={editSaving}
+                        autoComplete="off"
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                      >
+                        <option value="OFFLINE">OFFLINE</option>
+                        <option value="ONLINE">ONLINE</option>
+                        <option value="HYBRID">HYBRID</option>
+                      </select>
+                      <p className="text-[11px] text-gray-500 mt-1">Old events may be updated to ONLINE/HYBRID.</p>
+                    </div>
+                    <div>
                       <label htmlFor="stable-edit-start" className="block text-sm font-medium text-gray-700 mb-1">Start Date & Time *</label>
                       <input
                         id="stable-edit-start"
@@ -2435,6 +2481,40 @@ const AdminEventsManagement = () => {
                         disabled={editSaving}
                         autoComplete="off"
                         className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Tournament links (ONLINE/HYBRID) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="stable-edit-bracket" className="block text-sm font-medium text-gray-700 mb-1">
+                        Tournament Bracket / Platform URL <span className="text-gray-400">(not specified if empty)</span>
+                      </label>
+                      <input
+                        id="stable-edit-bracket"
+                        name="tournamentBracketUrl"
+                        type="url"
+                        defaultValue={event?.tournamentBracketUrl || ''}
+                        disabled={editSaving}
+                        autoComplete="off"
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                        placeholder="https://…"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="stable-edit-comms" className="block text-sm font-medium text-gray-700 mb-1">
+                        Tournament Communications Link <span className="text-gray-400">(not specified if empty)</span>
+                      </label>
+                      <input
+                        id="stable-edit-comms"
+                        name="tournamentCommsUrl"
+                        type="url"
+                        defaultValue={event?.tournamentCommsUrl || ''}
+                        disabled={editSaving}
+                        autoComplete="off"
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                        placeholder="WhatsApp/Telegram/Discord link…"
                       />
                     </div>
                   </div>
@@ -3376,7 +3456,8 @@ const AdminEventsManagement = () => {
                     resultUpload: false,
                     studentManagement: false,
                     certificateManagement: false,
-                    feeManagement: false
+                    feeManagement: false,
+                    editDetails: false
                   });
                   setPermissionEventIdSearch('');
                   setPermissionMsg('');
@@ -3427,7 +3508,8 @@ const AdminEventsManagement = () => {
                       resultUpload: false,
                       studentManagement: false,
                       certificateManagement: false,
-                      feeManagement: false
+      feeManagement: false,
+      editDetails: false
                     });
                   }}
                   className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-all"
@@ -3600,6 +3682,14 @@ const AdminEventsManagement = () => {
                               onChange={(e) => setInchargeInviteForm(prev => ({ ...prev, feeManagement: e.target.checked }))}
                             />
                             Fee Management
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-indigo-900">
+                            <input
+                              type="checkbox"
+                              checked={!!inchargeInviteForm.editDetails}
+                              onChange={(e) => setInchargeInviteForm(prev => ({ ...prev, editDetails: e.target.checked }))}
+                            />
+                            Edit Details
                           </label>
                         </div>
                       </div>
@@ -3896,7 +3986,8 @@ const AdminEventsManagement = () => {
                                   {inv.permissions?.studentManagement ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">Student Management</span> : null}
                                   {inv.permissions?.certificateManagement ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">Certificates</span> : null}
                                   {inv.permissions?.feeManagement ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">Fees</span> : null}
-                                  {!inv.permissions?.resultUpload && !inv.permissions?.studentManagement && !inv.permissions?.certificateManagement && !inv.permissions?.feeManagement ? (
+                                  {inv.permissions?.editDetails ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-800">Edit</span> : null}
+                                  {!inv.permissions?.resultUpload && !inv.permissions?.studentManagement && !inv.permissions?.certificateManagement && !inv.permissions?.feeManagement && !inv.permissions?.editDetails ? (
                                     <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-50 text-gray-500">No permissions</span>
                                   ) : null}
                                 </div>
@@ -3959,7 +4050,8 @@ const AdminEventsManagement = () => {
                       resultUpload: false,
                       studentManagement: false,
                       certificateManagement: false,
-                      feeManagement: false
+                      feeManagement: false,
+                      editDetails: false
                     });
                   }}
                   className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-semibold"
@@ -3986,7 +4078,8 @@ const AdminEventsManagement = () => {
                       resultUpload: false,
                       studentManagement: false,
                       certificateManagement: false,
-                      feeManagement: false
+                      feeManagement: false,
+                      editDetails: false
                     });
                     setPermissionLoading(false);
                     setPermissionEventIdSearch('');
@@ -4111,6 +4204,15 @@ const AdminEventsManagement = () => {
                       className="h-4 w-4 text-indigo-600"
                     />
                     <span>Fee Management</span>
+                  </label>
+                  <label className="inline-flex items-center space-x-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                                  checked={!!row.permissions?.editDetails}
+                                  onChange={(e) => togglePermission(row.userId, 'editDetails', e.target.checked)}
+                      className="h-4 w-4 text-indigo-600"
+                    />
+                    <span>Edit Details</span>
                   </label>
                 </div>
 

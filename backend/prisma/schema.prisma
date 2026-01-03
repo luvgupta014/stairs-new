@@ -394,6 +394,7 @@ model EventInchargeInvite {
   studentManagement     Boolean @default(false)
   certificateManagement Boolean @default(false)
   feeManagement         Boolean @default(false)
+  editDetails           Boolean @default(false)
 
   createdAt       DateTime     @default(now())
   event           Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -414,6 +415,7 @@ model EventUserPermission {
   studentManagement    Boolean   @default(false)
   certificateManagement Boolean  @default(false)
   feeManagement        Boolean   @default(false)
+  editDetails          Boolean   @default(false)
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
@@ -432,6 +434,7 @@ model EventPermission {
   studentManagement    Boolean               @default(false)
   certificateManagement Boolean              @default(false)
   feeManagement        Boolean               @default(false)
+  editDetails          Boolean               @default(false)
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   event                Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)

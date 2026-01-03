@@ -433,7 +433,8 @@ const checkEventPermission = async ({ user, eventId, permissionKey }) => {
       resultUpload: true,
       studentManagement: true,
       certificateManagement: true,
-      feeManagement: true
+      feeManagement: true,
+      editDetails: true
     }
   });
   if (override && override[permissionKey]) return true;
@@ -446,7 +447,8 @@ const checkEventPermission = async ({ user, eventId, permissionKey }) => {
       resultUpload: true,
       studentManagement: true,
       certificateManagement: true,
-      feeManagement: true
+      feeManagement: true,
+      editDetails: true
     }
   });
 

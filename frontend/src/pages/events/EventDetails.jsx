@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getStudentEventDetails, getEventById, registerForEvent, unregisterFromEvent, createStudentEventPaymentOrder, getEventFeeSettings, updateEventFeeSettings, getEventInchargeAssignedEvents, shareEventViaEmail } from '../../api';
+import { getStudentEventDetails, getEventById, registerForEvent, unregisterFromEvent, createStudentEventPaymentOrder, getEventFeeSettings, updateEventFeeSettings, getEventInchargeAssignedEvents, shareEventViaEmail, inchargeUpdateEventDetails } from '../../api';
 import Spinner from '../../components/Spinner';
 import Button from '../../components/Button';
 import BackButton from '../../components/BackButton';
@@ -42,6 +42,18 @@ const EventDetails = () => {
   const [inchargeAssignment, setInchargeAssignment] = useState(null);
   const [inchargePermsLoading, setInchargePermsLoading] = useState(false);
   const [inchargePermsError, setInchargePermsError] = useState('');
+  const [showInchargeEditModal, setShowInchargeEditModal] = useState(false);
+  const [inchargeEditSaving, setInchargeEditSaving] = useState(false);
+  const [inchargeEditErr, setInchargeEditErr] = useState('');
+  const [inchargeEditMsg, setInchargeEditMsg] = useState('');
+  const [inchargeEditForm, setInchargeEditForm] = useState({
+    description: '',
+    startDate: '',
+    endDate: '',
+    maxParticipants: '',
+    tournamentBracketUrl: '',
+    tournamentCommsUrl: ''
+  });
 
   // Fee management (event-scoped permissions)
   const [feePanelVisible, setFeePanelVisible] = useState(false);
@@ -63,6 +75,21 @@ const EventDetails = () => {
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState('');
   const [shareSuccess, setShareSuccess] = useState('');
+
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return '';
+    try {
+      const d = new Date(dateString);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+      return '';
+    }
+  };
 
   // Load Razorpay script
   const loadRazorpayScript = () => {
@@ -96,7 +123,7 @@ const EventDetails = () => {
   useEffect(() => {
     const fmt = (event?.eventFormat || event?.event?.eventFormat || '').toString().toUpperCase();
     if (user?.role !== 'STUDENT') return;
-    if (fmt !== 'ONLINE') return;
+    if (fmt !== 'ONLINE' && fmt !== 'HYBRID') return;
     const profile = user?.profile || {};
     const profileUser = profile?.user || {};
     setOnlineReg((prev) => ({
@@ -506,7 +533,9 @@ const EventDetails = () => {
         const fmt = (event?.eventFormat || '').toString().toUpperCase();
 
         // Online events: require contact fields (modern tournament flow)
-        if (fmt === 'ONLINE') {
+        const hasTournamentLinks = !!(event?.tournamentBracketUrl || event?.tournamentCommsUrl);
+        const needsTournamentFields = fmt === 'ONLINE' || (fmt === 'HYBRID' && hasTournamentLinks);
+        if (needsTournamentFields) {
           const missing = [];
           const ce = (onlineReg.contactEmail || '').trim();
           const cp = (onlineReg.contactPhone || '').trim();
@@ -529,7 +558,7 @@ const EventDetails = () => {
           ? { selectedCategory: trimmedCategory }
           : {};
 
-        const registrationData = fmt === 'ONLINE'
+        const registrationData = needsTournamentFields
           ? {
               ...base,
               contactEmail: (onlineReg.contactEmail || '').trim(),
@@ -544,7 +573,7 @@ const EventDetails = () => {
         
         if (response && response.success) {
           console.log('✅ Registration successful');
-          alert(fmt === 'ONLINE'
+          alert(needsTournamentFields
             ? 'Successfully registered! Tournament links have been sent to your email.'
             : 'Successfully registered for the event!');
           setSelectedCategory(''); // Reset category selection
@@ -708,6 +737,7 @@ const EventDetails = () => {
   const canInchargeResultUpload = user?.role === 'EVENT_INCHARGE' && !!inchargePerms.resultUpload;
   const canInchargeCertificates = user?.role === 'EVENT_INCHARGE' && !!inchargePerms.certificateManagement;
   const canInchargeFeeMgmt = user?.role === 'EVENT_INCHARGE' && !!inchargePerms.feeManagement;
+  const canInchargeEditDetails = user?.role === 'EVENT_INCHARGE' && !!inchargePerms.editDetails;
 
   const inchargeMissingPerms = useMemo(() => {
     if (user?.role !== 'EVENT_INCHARGE') return [];
@@ -716,8 +746,9 @@ const EventDetails = () => {
     if (!canInchargeResultUpload) missing.push('Result Upload');
     if (!canInchargeCertificates) missing.push('Certificates');
     if (!canInchargeFeeMgmt) missing.push('Fee Management');
+    if (!canInchargeEditDetails) missing.push('Edit Details');
     return missing;
-  }, [user?.role, canInchargeStudentMgmt, canInchargeResultUpload, canInchargeCertificates, canInchargeFeeMgmt]);
+  }, [user?.role, canInchargeStudentMgmt, canInchargeResultUpload, canInchargeCertificates, canInchargeFeeMgmt, canInchargeEditDetails]);
 
   const roleLabel = useMemo(() => {
     const r = (user?.role || '').toString().toUpperCase();
@@ -784,6 +815,58 @@ const EventDetails = () => {
       setShareError(error.message || 'Failed to share event. Please try again.');
     } finally {
       setShareLoading(false);
+    }
+  };
+
+  const openInchargeEdit = () => {
+    setInchargeEditErr('');
+    setInchargeEditMsg('');
+    setInchargeEditForm({
+      description: event?.description || '',
+      startDate: formatDateForInput(event?.startDate),
+      endDate: formatDateForInput(event?.endDate),
+      maxParticipants: event?.maxParticipants ?? '',
+      tournamentBracketUrl: event?.tournamentBracketUrl || '',
+      tournamentCommsUrl: event?.tournamentCommsUrl || ''
+    });
+    setShowInchargeEditModal(true);
+  };
+
+  const submitInchargeEdit = async (e) => {
+    e.preventDefault();
+    if (!event?.id) return;
+    try {
+      setInchargeEditSaving(true);
+      setInchargeEditErr('');
+      setInchargeEditMsg('');
+
+      const isPast = event?.startDate ? (new Date(event.startDate) <= new Date()) : false;
+
+      // Past events: backend allows incharge to update tournament links (and description) only.
+      const payload = isPast && user?.role === 'EVENT_INCHARGE'
+        ? {
+            description: inchargeEditForm.description ?? '',
+            tournamentBracketUrl: inchargeEditForm.tournamentBracketUrl ?? '',
+            tournamentCommsUrl: inchargeEditForm.tournamentCommsUrl ?? ''
+          }
+        : {
+            description: inchargeEditForm.description ?? '',
+            startDate: inchargeEditForm.startDate ? `${inchargeEditForm.startDate}:00` : null,
+            endDate: inchargeEditForm.endDate ? `${inchargeEditForm.endDate}:00` : null,
+            maxParticipants: inchargeEditForm.maxParticipants === '' ? null : Number(inchargeEditForm.maxParticipants),
+            tournamentBracketUrl: inchargeEditForm.tournamentBracketUrl ?? '',
+            tournamentCommsUrl: inchargeEditForm.tournamentCommsUrl ?? ''
+          };
+
+      const res = await inchargeUpdateEventDetails(event.id, payload);
+      if (!res?.success) throw new Error(res?.message || 'Failed to update event.');
+      setInchargeEditMsg('Event updated.');
+      setShowInchargeEditModal(false);
+      await loadEventDetails();
+    } catch (err) {
+      setInchargeEditErr(err?.message || 'Failed to update event.');
+    } finally {
+      setInchargeEditSaving(false);
     }
   };
 
@@ -1027,6 +1110,9 @@ const EventDetails = () => {
                     <span className={`text-[11px] px-2 py-1 rounded-full border ${canInchargeFeeMgmt ? 'bg-indigo-50 text-indigo-800 border-indigo-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
                       Fee Management {canInchargeFeeMgmt ? '✓' : '✕'}
                     </span>
+                    <span className={`text-[11px] px-2 py-1 rounded-full border ${canInchargeEditDetails ? 'bg-sky-50 text-sky-800 border-sky-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                      Edit Details {canInchargeEditDetails ? '✓' : '✕'}
+                    </span>
                   </div>
 
                   {inchargeMissingPerms?.length ? (
@@ -1036,6 +1122,18 @@ const EventDetails = () => {
                   ) : (
                     <div className="mt-3 text-xs text-emerald-800 font-semibold">All incharge tools are enabled for this event.</div>
                   )}
+
+                  {canInchargeEditDetails ? (
+                    <div className="mt-4 flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={openInchargeEdit}
+                        className="inline-flex items-center px-3 py-2 rounded-lg text-xs font-semibold bg-white border border-sky-200 text-sky-800 hover:bg-sky-50"
+                      >
+                        ✏️ Edit Event Details
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -1462,7 +1560,7 @@ const EventDetails = () => {
                     )}
 
                     {/* Online tournament fields (required for ONLINE) */}
-                    {event?.eventFormat === 'ONLINE' ? (
+                    {(event?.eventFormat === 'ONLINE' || event?.eventFormat === 'HYBRID') ? (
                       <div className="bg-white border-2 border-indigo-200 rounded-xl p-5 shadow-sm">
                         <div className="mb-3">
                           <div className="text-base font-bold text-gray-900">Tournament Details (Required)</div>
@@ -1766,6 +1864,140 @@ const EventDetails = () => {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Incharge Edit Details Modal */}
+      {showInchargeEditModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full mx-4 p-6">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="min-w-0">
+                <h2 className="text-xl font-bold text-gray-900">Edit Event Details</h2>
+                <div className="text-sm text-gray-600 truncate">{event?.name || ''}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInchargeEditModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+                aria-label="Close"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {inchargeEditErr ? (
+              <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                {inchargeEditErr}
+              </div>
+            ) : null}
+            {inchargeEditMsg ? (
+              <div className="mb-3 p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
+                {inchargeEditMsg}
+              </div>
+            ) : null}
+
+            <form onSubmit={submitInchargeEdit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  rows={3}
+                  value={inchargeEditForm.description}
+                  onChange={(e) => setInchargeEditForm((p) => ({ ...p, description: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                  disabled={inchargeEditSaving}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date & Time *</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={inchargeEditForm.startDate}
+                    onChange={(e) => setInchargeEditForm((p) => ({ ...p, startDate: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                      disabled={inchargeEditSaving || (user?.role === 'EVENT_INCHARGE' && event?.startDate && new Date(event.startDate) <= new Date())}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={inchargeEditForm.endDate}
+                    onChange={(e) => setInchargeEditForm((p) => ({ ...p, endDate: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                      disabled={inchargeEditSaving || (user?.role === 'EVENT_INCHARGE' && event?.startDate && new Date(event.startDate) <= new Date())}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Max Participants</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={inchargeEditForm.maxParticipants}
+                  onChange={(e) => setInchargeEditForm((p) => ({ ...p, maxParticipants: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                  disabled={inchargeEditSaving || (user?.role === 'EVENT_INCHARGE' && event?.startDate && new Date(event.startDate) <= new Date())}
+                />
+              </div>
+
+              {(event?.eventFormat === 'ONLINE' || event?.eventFormat === 'HYBRID') ? (
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                  <div className="font-semibold text-indigo-900">Tournament Links</div>
+                  <div className="text-xs text-indigo-800 mt-1">Editable only for Online/Hybrid events.</div>
+
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tournament Bracket / Platform URL</label>
+                      <input
+                        type="url"
+                        value={inchargeEditForm.tournamentBracketUrl}
+                        onChange={(e) => setInchargeEditForm((p) => ({ ...p, tournamentBracketUrl: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        disabled={inchargeEditSaving}
+                        placeholder="https://…"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tournament Communications Link</label>
+                      <input
+                        type="url"
+                        value={inchargeEditForm.tournamentCommsUrl}
+                        onChange={(e) => setInchargeEditForm((p) => ({ ...p, tournamentCommsUrl: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        disabled={inchargeEditSaving}
+                        placeholder="WhatsApp/Telegram/Discord link…"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowInchargeEditModal(false)}
+                  className="px-4 py-2 rounded-lg border bg-white text-gray-700 hover:bg-gray-50 font-semibold"
+                  disabled={inchargeEditSaving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-semibold disabled:opacity-60"
+                  disabled={inchargeEditSaving}
+                >
+                  {inchargeEditSaving ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

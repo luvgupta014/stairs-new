@@ -69,7 +69,8 @@ router.get('/invites/validate', async (req, res) => {
         resultUpload: invite.resultUpload,
         studentManagement: invite.studentManagement,
         certificateManagement: invite.certificateManagement,
-        feeManagement: invite.feeManagement
+        feeManagement: invite.feeManagement,
+        editDetails: invite.editDetails
       },
       event: invite.event,
       vendor: invite.vendor ? {
@@ -216,7 +217,8 @@ router.post('/register', async (req, res) => {
           resultUpload: !!invite.resultUpload,
           studentManagement: !!invite.studentManagement,
           certificateManagement: !!invite.certificateManagement,
-          feeManagement: !!invite.feeManagement
+          feeManagement: !!invite.feeManagement,
+          editDetails: !!invite.editDetails
         },
         create: {
           eventId: invite.eventId,
@@ -224,7 +226,8 @@ router.post('/register', async (req, res) => {
           resultUpload: !!invite.resultUpload,
           studentManagement: !!invite.studentManagement,
           certificateManagement: !!invite.certificateManagement,
-          feeManagement: !!invite.feeManagement
+          feeManagement: !!invite.feeManagement,
+          editDetails: !!invite.editDetails
         }
       });
 
@@ -274,7 +277,8 @@ router.get('/me/assigned-events', authenticate, requireEventIncharge, async (req
           resultUpload: override.resultUpload,
           studentManagement: override.studentManagement,
           certificateManagement: override.certificateManagement,
-          feeManagement: override.feeManagement
+          feeManagement: override.feeManagement,
+          editDetails: override.editDetails
         } : null
       };
     }));

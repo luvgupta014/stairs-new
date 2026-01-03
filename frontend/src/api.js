@@ -1101,6 +1101,16 @@ export const adminUpdateEvent = async (eventId, data) => {
   }
 };
 
+// Event Incharge: edit event details (requires editDetails permission)
+export const inchargeUpdateEventDetails = async (eventId, data) => {
+  try {
+    const response = await api.patch(`/api/events/${eventId}/edit-details`, data);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 export const deleteEvent = async (eventId) => {
   try {
     const response = await api.delete(`/api/coach/events/${eventId}`);

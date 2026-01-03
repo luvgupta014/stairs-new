@@ -5853,7 +5853,7 @@ router.get('/events/:eventId/verify-permission/:permissionKey', authenticate, as
     const { eventId, permissionKey } = req.params;
     const { checkEventPermission } = require('../utils/authMiddleware');
     
-    const validPermissionKeys = ['resultUpload', 'studentManagement', 'certificateManagement', 'feeManagement'];
+    const validPermissionKeys = ['resultUpload', 'studentManagement', 'certificateManagement', 'feeManagement', 'editDetails'];
     if (!validPermissionKeys.includes(permissionKey)) {
       return res.status(400).json(errorResponse(`Invalid permission key. Must be one of: ${validPermissionKeys.join(', ')}`, 400));
     }
@@ -5905,7 +5905,8 @@ router.get('/events/:eventId/verify-permission/:permissionKey', authenticate, as
         resultUpload: userOverride.resultUpload,
         studentManagement: userOverride.studentManagement,
         certificateManagement: userOverride.certificateManagement,
-        feeManagement: userOverride.feeManagement
+        feeManagement: userOverride.feeManagement,
+        editDetails: userOverride.editDetails
       } : null,
       permissions: permissions.map(p => ({
         role: p.role,
@@ -5947,7 +5948,7 @@ router.get('/events/:eventId/incharge-permissions/:userId', authenticate, requir
       where: { eventId_userId: { eventId, userId } }
     });
 
-    res.json(successResponse({
+    res.json(successResponse({ 
       eventId,
       user,
       assignment: assigned,
@@ -5955,12 +5956,14 @@ router.get('/events/:eventId/incharge-permissions/:userId', authenticate, requir
         resultUpload: override.resultUpload,
         studentManagement: override.studentManagement,
         certificateManagement: override.certificateManagement,
-        feeManagement: override.feeManagement
+        feeManagement: override.feeManagement,
+        editDetails: override.editDetails
       } : {
         resultUpload: false,
         studentManagement: false,
         certificateManagement: false,
-        feeManagement: false
+        feeManagement: false,
+        editDetails: false
       }
     }, 'Incharge permissions retrieved.'));
   } catch (error) {
@@ -5979,7 +5982,8 @@ router.put('/events/:eventId/incharge-permissions/:userId', authenticate, requir
       resultUpload = false,
       studentManagement = false,
       certificateManagement = false,
-      feeManagement = false
+      feeManagement = false,
+      editDetails = false
     } = req.body || {};
 
     const assigned = await prisma.eventAssignment.findFirst({
@@ -6005,7 +6009,8 @@ router.put('/events/:eventId/incharge-permissions/:userId', authenticate, requir
         resultUpload: !!resultUpload,
         studentManagement: !!studentManagement,
         certificateManagement: !!certificateManagement,
-        feeManagement: !!feeManagement
+        feeManagement: !!feeManagement,
+        editDetails: !!editDetails
       },
       create: {
         eventId,
@@ -6013,7 +6018,8 @@ router.put('/events/:eventId/incharge-permissions/:userId', authenticate, requir
         resultUpload: !!resultUpload,
         studentManagement: !!studentManagement,
         certificateManagement: !!certificateManagement,
-        feeManagement: !!feeManagement
+        feeManagement: !!feeManagement,
+        editDetails: !!editDetails
       }
     });
 
@@ -6024,7 +6030,8 @@ router.put('/events/:eventId/incharge-permissions/:userId', authenticate, requir
         resultUpload: updated.resultUpload,
         studentManagement: updated.studentManagement,
         certificateManagement: updated.certificateManagement,
-        feeManagement: updated.feeManagement
+        feeManagement: updated.feeManagement,
+        editDetails: updated.editDetails
       }
     }, 'Incharge permissions updated.'));
   } catch (error) {
@@ -6081,7 +6088,8 @@ router.post('/events/:eventId/incharge-invites', authenticate, requireAdmin, asy
       resultUpload: !!permissions.resultUpload,
       studentManagement: !!permissions.studentManagement,
       certificateManagement: !!permissions.certificateManagement,
-      feeManagement: !!permissions.feeManagement
+      feeManagement: !!permissions.feeManagement,
+      editDetails: !!permissions.editDetails
     };
 
     // Prevent duplicate active invites for same event+email (idempotency)
@@ -6540,7 +6548,7 @@ router.put('/events/:eventId/assignments', authenticate, requireAdmin, async (re
 router.put('/events/:eventId/permissions', authenticate, requireAdmin, async (req, res) => {
   try {
     const { eventId } = req.params;
-    const { permissions = [] } = req.body; // [{ role, resultUpload, studentManagement, certificateManagement, feeManagement }]
+    const { permissions = [] } = req.body; // [{ role, resultUpload, studentManagement, certificateManagement, feeManagement, editDetails }]
 
     if (!Array.isArray(permissions)) {
       return res.status(400).json(errorResponse('permissions must be an array', 400));
@@ -6568,7 +6576,8 @@ router.put('/events/:eventId/permissions', authenticate, requireAdmin, async (re
           resultUpload: !!p.resultUpload,
           studentManagement: !!p.studentManagement,
           certificateManagement: !!p.certificateManagement,
-          feeManagement: !!p.feeManagement
+          feeManagement: !!p.feeManagement,
+          editDetails: !!p.editDetails
         }))
       });
     }

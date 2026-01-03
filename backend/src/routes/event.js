@@ -592,6 +592,99 @@ router.put('/:eventId',
   eventController.updateEvent.bind(eventController)
 );
 
+/**
+ * Edit event details (Event Incharge with editDetails permission, or Admin)
+ * PATCH /api/events/:eventId/edit-details
+ * Allows editing: description, start/end date/time, maxParticipants, tournament links.
+ */
+router.patch('/:eventId/edit-details', authenticate, requireRole(['ADMIN', 'EVENT_INCHARGE']), async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const user = req.user;
+
+    // Resolve event by id or uniqueId
+    const ev = await prisma.event.findFirst({
+      where: { OR: [{ id: eventId }, { uniqueId: eventId }] }
+    });
+    if (!ev) return res.status(404).json(errorResponse('Event not found.', 404));
+
+    const isPastEvent = ev?.startDate ? (new Date(ev.startDate) <= new Date()) : false;
+
+    if (user.role === 'EVENT_INCHARGE') {
+      const ok = await checkEventPermission({ user, eventId: ev.id, permissionKey: 'editDetails' });
+      if (!ok) return res.status(403).json(errorResponse('Access denied. Edit Details permission required.', 403));
+      // Past events: allow incharge to update tournament links (and description) only.
+    }
+
+    const parseAsIST = (v) => {
+      if (!v) return null;
+      if (v instanceof Date) return v;
+      const s = v.toString().trim();
+      if (!s) return null;
+      if (s.includes('+') || s.endsWith('Z')) return new Date(s);
+      return new Date(`${s}+05:30`);
+    };
+
+    const patch = {};
+    if (req.body?.description !== undefined) patch.description = req.body.description ? String(req.body.description) : null;
+    if (req.body?.maxParticipants !== undefined) patch.maxParticipants = req.body.maxParticipants === null || req.body.maxParticipants === '' ? null : parseInt(req.body.maxParticipants);
+    if (req.body?.startDate !== undefined) patch.startDate = parseAsIST(req.body.startDate);
+    if (req.body?.endDate !== undefined) patch.endDate = req.body.endDate ? parseAsIST(req.body.endDate) : null;
+
+    // Tournament links editable only for ONLINE/HYBRID
+    if (ev.eventFormat === 'ONLINE' || ev.eventFormat === 'HYBRID') {
+      if (req.body?.tournamentBracketUrl !== undefined) {
+        const s = req.body.tournamentBracketUrl === null ? '' : String(req.body.tournamentBracketUrl || '');
+        patch.tournamentBracketUrl = s.trim() ? s.trim() : null;
+      }
+      if (req.body?.tournamentCommsUrl !== undefined) {
+        const s = req.body.tournamentCommsUrl === null ? '' : String(req.body.tournamentCommsUrl || '');
+        patch.tournamentCommsUrl = s.trim() ? s.trim() : null;
+      }
+    }
+
+    // Incharge + past event: restrict changes to safe keys only (tournament + description)
+    if (user.role === 'EVENT_INCHARGE' && isPastEvent) {
+      const allowed = new Set(['description', 'tournamentBracketUrl', 'tournamentCommsUrl']);
+      for (const k of Object.keys(patch)) {
+        if (!allowed.has(k)) delete patch[k];
+      }
+    }
+
+    // Validate dates if provided
+    if (patch.startDate) {
+      if (patch.startDate <= new Date()) {
+        return res.status(400).json(errorResponse('Event start date must be in the future.', 400));
+      }
+    }
+    if (patch.endDate) {
+      const effectiveStart = patch.startDate || ev.startDate;
+      if (patch.endDate <= effectiveStart) {
+        return res.status(400).json(errorResponse('Event end date must be after start date.', 400));
+      }
+    }
+    if (patch.maxParticipants !== undefined && patch.maxParticipants !== null) {
+      if (!Number.isFinite(patch.maxParticipants) || patch.maxParticipants < 1) {
+        return res.status(400).json(errorResponse('maxParticipants must be a positive number.', 400));
+      }
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return res.json(successResponse(ev, 'No changes to save.'));
+    }
+
+    const updated = await prisma.event.update({
+      where: { id: ev.id },
+      data: patch
+    });
+
+    return res.json(successResponse(updated, 'Event updated.'));
+  } catch (error) {
+    console.error('❌ Incharge edit-details error:', error);
+    return res.status(500).json(errorResponse(error.message || 'Failed to update event.', 500));
+  }
+});
+
 // Delete event (creators and admin only)
 router.delete('/:eventId', 
   authenticate, 

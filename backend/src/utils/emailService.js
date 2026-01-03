@@ -83,7 +83,8 @@ const sendEventInchargeInviteEmail = async ({
     permissions?.resultUpload ? 'Result Upload' : null,
     permissions?.studentManagement ? 'Student Management' : null,
     permissions?.certificateManagement ? 'Certificate Management' : null,
-    permissions?.feeManagement ? 'Fee Management' : null
+    permissions?.feeManagement ? 'Fee Management' : null,
+    permissions?.editDetails ? 'Edit Details' : null
   ].filter(Boolean);
 
   const text = [
@@ -410,7 +411,9 @@ const sendTournamentRegistrationEmail = async ({
   registrationContact = null
 }) => {
   const eventName = event?.name || 'Event';
-  const subject = `✅ Registration Confirmed: ${eventName} (Online)`;
+  const fmt = (event?.eventFormat || 'ONLINE').toString().toUpperCase();
+  const fmtLabel = fmt === 'HYBRID' ? 'Hybrid' : 'Online';
+  const subject = `✅ Registration Confirmed: ${eventName} (${fmtLabel})`;
 
   const formatDateTime = (dateString) => {
     if (!dateString) return 'N/A';
