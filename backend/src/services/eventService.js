@@ -1041,7 +1041,7 @@ class EventService {
         });
 
         if (payment) {
-          throw new Error('Cannot unregister from an event after payment has been made. Please contact support for assistance.');
+          throw new Error('You can’t unregister from this event after completing payment because your seat is confirmed. Please contact the tournament admin for help.');
         }
       }
 

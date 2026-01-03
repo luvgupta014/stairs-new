@@ -1516,13 +1516,29 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
           }
         }
         
+        // Detect optional columns safely (avoid referencing missing columns in raw SQL)
+        const cols = await prisma.$queryRawUnsafe(
+          `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'events'`
+        ).catch(() => []);
+        const colSet = new Set((cols || []).map(r => String(r.column_name || '')));
+        const hasEventFormat = colSet.has('eventFormat');
+        const hasBracket = colSet.has('tournamentBracketUrl');
+        const hasComms = colSet.has('tournamentCommsUrl');
+
+        const extraSelect = [
+          hasEventFormat ? `, e."eventFormat" as "eventFormat"` : `, NULL as "eventFormat"`,
+          hasBracket ? `, e."tournamentBracketUrl" as "tournamentBracketUrl"` : `, NULL as "tournamentBracketUrl"`,
+          hasComms ? `, e."tournamentCommsUrl" as "tournamentCommsUrl"` : `, NULL as "tournamentCommsUrl"`
+        ].join(' ');
+
         const eventsQuery = `
           SELECT 
             e.id, e."uniqueId", e.name, e.description, e.sport, e.venue, e.address,
             e.city, e.state, e.latitude, e.longitude, e."startDate", e."endDate",
             e."maxParticipants", e."currentParticipants", e."eventFee", e.status,
             e."adminNotes", e."createdAt", e."updatedAt", e."coachId", e.level,
-            e."categoriesAvailable",
+            e."categoriesAvailable"
+            ${extraSelect}
             c.id as "coach_id", c.name as "coach_name", c."primarySport" as "coach_primarySport", c.city as "coach_city",
             u.id as "user_id", u."uniqueId" as "user_uniqueId", u.email as "user_email", u.phone as "user_phone", u.role as "user_role"
           FROM events e
@@ -1568,6 +1584,9 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
             name: row.name,
             description: row.description,
             sport: row.sport,
+            eventFormat: row.eventFormat || 'OFFLINE',
+            tournamentBracketUrl: row.tournamentBracketUrl || null,
+            tournamentCommsUrl: row.tournamentCommsUrl || null,
             venue: row.venue,
             address: row.address,
             city: row.city,
@@ -1739,6 +1758,10 @@ router.get('/events', authenticate, requireAdmin, async (req, res) => {
       name: event.name,
       description: event.description,
       sport: event.sport,
+      // IMPORTANT: include mode + tournament links so Admin UI can display/edit correctly
+      eventFormat: event.eventFormat || 'OFFLINE',
+      tournamentBracketUrl: event.tournamentBracketUrl || null,
+      tournamentCommsUrl: event.tournamentCommsUrl || null,
       location: event.venue,                                        // FIXED: Map venue to location for frontend
       venue: event.venue,
       address: event.address,
