@@ -261,6 +261,11 @@ const EventParticipants = () => {
     downloadCsv(filename, rows);
   };
 
+  const isOnlineLike = (() => {
+    const fmt = (eventMeta?.eventFormat || event?.eventFormat || '').toString().toUpperCase();
+    return fmt === 'ONLINE' || fmt === 'HYBRID';
+  })();
+
   const filteredParticipants = participants.filter(participant => {
     const matchesSearch = !filters.search || 
       (participant?.student?.name || '').toLowerCase().includes(filters.search.toLowerCase()) ||
@@ -281,11 +286,6 @@ const EventParticipants = () => {
     
     return matchesSearch && matchesStatus && matchesCategory && matchesMissingTournament;
   });
-
-  const isOnlineLike = (() => {
-    const fmt = (eventMeta?.eventFormat || event?.eventFormat || '').toString().toUpperCase();
-    return fmt === 'ONLINE' || fmt === 'HYBRID';
-  })();
 
   const openStudentProfile = async (participant) => {
     try {
