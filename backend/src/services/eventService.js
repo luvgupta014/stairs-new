@@ -1085,12 +1085,42 @@ class EventService {
         throw new Error('You do not have permission to view event participants');
       }
 
-      const participants = event.registrations.map(registration => ({
+      // Fetch registrations with richer fields (needed for Online/Hybrid admin views)
+      // Note: event.registrations shape varies depending on getEventById usage, so we query directly.
+      const regs = await prisma.eventRegistration.findMany({
+        where: { eventId: event.id },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          student: {
+            select: {
+              id: true,
+              name: true,
+              sport: true,
+              level: true,
+              alias: true,
+              playstationId: true,
+              eaId: true,
+              instagramHandle: true,
+              user: { select: { uniqueId: true, email: true, phone: true } }
+            }
+          }
+        },
+        take: 5000
+      });
+
+      const participants = regs.map(registration => ({
         id: registration.id,
         status: registration.status,
         // Keep legacy field name for frontend compatibility
         registeredAt: registration.createdAt,
         selectedCategory: registration.selectedCategory || null,
+        registrationContact: {
+          email: registration.contactEmail || null,
+          phone: registration.contactPhone || null,
+          playstationId: registration.playstationId || null,
+          eaId: registration.eaId || null,
+          instagramHandle: registration.instagramHandle || null
+        },
         student: registration.student
       }));
 
@@ -1101,7 +1131,8 @@ class EventService {
           startDate: event.startDate,
           endDate: event.endDate,
           maxParticipants: event.maxParticipants,
-          currentParticipants: event._count.registrations
+          currentParticipants: event._count.registrations,
+          eventFormat: event.eventFormat || 'OFFLINE'
         },
         participants
       };
@@ -1338,68 +1369,144 @@ class EventService {
       }
 
       // --- VALIDATE HEADERS ---
-      const headers = Object.keys(rows[0]).map(x => x.trim().toLowerCase());
-      if (!headers.includes('studentid') || !headers.includes('score'))
-        throw new Error("Sheet must have column headers: studentId,name,score[,remarks]");
+      const headers = Object.keys(rows[0]).map(x => String(x || '').trim().toLowerCase());
+      const hasStudentId = headers.includes('studentid');
+      const hasStudentUID = headers.includes('studentuid') || headers.includes('student_uid') || headers.includes('uid');
+      const hasScore = headers.includes('score');
+      const hasPoints = headers.includes('points');
+      const hasPlacement = headers.includes('placement');
+
+      // New flow: studentUID + placement + points
+      // Legacy flow: studentId + score
+      const isNew = hasStudentUID && hasPoints && hasPlacement;
+      const isLegacy = hasStudentId && hasScore;
+
+      if (!isNew && !isLegacy) {
+        throw new Error(
+          'Result sheet headers are invalid. Use either:\n' +
+          '- New template: studentUID, placement, points (recommended)\n' +
+          '- Legacy template: studentId, score\n'
+        );
+      }
 
       // --- Validate Students ---
       const registrations = await prisma.eventRegistration.findMany({
         where: { eventId: event.id },
-        select: { id: true, studentId: true }
+        select: {
+          id: true,
+          studentId: true,
+          student: { select: { user: { select: { uniqueId: true } } } }
+        }
       });
-      const allowedStudents = new Set(registrations.map(r => r.studentId));
-      const seenIds = new Set();
+      const byStudentId = new Map();
+      const byStudentUID = new Map();
+      registrations.forEach(r => {
+        if (r.studentId) byStudentId.set(String(r.studentId), r.studentId);
+        const uid = r.student?.user?.uniqueId ? String(r.student.user.uniqueId) : '';
+        if (uid) byStudentUID.set(uid, r.studentId);
+      });
+      const seenKeys = new Set();
       let parseErrors = [];
 
       const resultsBulk = rows.map((row, i) => {
-        // Handle various studentId formats
-        const rawStudentId = row.studentId || row['Student ID'] || row['StudentID'] || row['student_id'] || '';
-        const studentId = String(rawStudentId).trim();
-        
-        // Handle various score formats
-        const rawScore = row.score || row['Score'] || row['SCORE'] || row['score'] || 0;
+        const safeGet = (k) => row?.[k] ?? row?.[String(k || '').toUpperCase()] ?? row?.[String(k || '').toLowerCase()];
+
+        // Identify student (prefer new template)
+        const rawUid = safeGet('studentUID') || safeGet('student_uid') || safeGet('uid') || safeGet('Student UID') || '';
+        const rawStudentId = safeGet('studentId') || safeGet('Student ID') || safeGet('StudentID') || safeGet('student_id') || '';
+        const studentUID = String(rawUid || '').trim();
+        const studentIdStr = String(rawStudentId || '').trim();
+
+        const resolvedStudentId = studentUID ? byStudentUID.get(studentUID) : byStudentId.get(studentIdStr);
+        const dedupeKey = studentUID || studentIdStr;
+
+        if (!dedupeKey || dedupeKey === 'undefined' || dedupeKey === 'null') {
+          parseErrors.push({ row: i + 2, error: 'Missing studentUID (recommended) or studentId', data: row });
+          return null;
+        }
+        if (!resolvedStudentId) {
+          parseErrors.push({ row: i + 2, studentUID: studentUID || null, studentId: studentIdStr || null, error: 'Student not registered for event (or missing UID on profile)', data: row });
+          return null;
+        }
+        if (seenKeys.has(dedupeKey)) {
+          parseErrors.push({ row: i + 2, studentUID: studentUID || null, studentId: studentIdStr || null, error: 'Duplicate student row in sheet', data: row });
+          return null;
+        }
+
+        const rawPlacement = safeGet('placement') || safeGet('Placement') || '';
+        const rawPoints = safeGet('points') || safeGet('Points') || '';
+        const rawScore = safeGet('score') || safeGet('Score') || '';
+
+        // Points parsing (preferred)
+        let points = rawPoints;
+        if (typeof points === 'string') {
+          points = parseFloat(points.replace(/[^0-9.-]/g, ''));
+        } else {
+          points = Number(points);
+        }
+
+        // Legacy score parsing (fallback; also mirrored into points when new placement/points missing)
         let score = rawScore;
-        
-        // Convert score to number with proper parsing
         if (typeof score === 'string') {
           score = parseFloat(score.replace(/[^0-9.-]/g, ''));
         } else {
           score = Number(score);
         }
-        
-        // Validate studentId
-        if (!studentId || studentId === '' || studentId === 'undefined' || studentId === 'null') {
-          parseErrors.push({row: i+2, error:'Missing or invalid studentId', data: row});
+
+        // If using new template, placement+points required
+        if (isNew) {
+          if (!String(rawPlacement || '').trim()) {
+            parseErrors.push({ row: i + 2, studentUID: studentUID || null, error: 'Missing placement', data: row });
+            return null;
+          }
+          if (isNaN(points) || !isFinite(points)) {
+            parseErrors.push({ row: i + 2, studentUID: studentUID || null, error: `Invalid points: ${rawPoints}. Points must be a number`, data: row });
+            return null;
+          }
+        } else {
+          // Legacy requires score
+          if (isNaN(score) || !isFinite(score)) {
+            parseErrors.push({ row: i + 2, studentId: studentIdStr || null, error: `Invalid score: ${rawScore}. Score must be a number`, data: row });
+            return null;
+          }
+          // Map legacy score into points as well for leaderboard
+          points = score;
+        }
+
+        // Validate reasonable range
+        if (Math.abs(points) > 1000000) {
+          parseErrors.push({ row: i + 2, studentUID: studentUID || null, error: `Points ${points} is out of reasonable range`, data: row });
           return null;
         }
-        
-        // Validate student is registered
-        if (!allowedStudents.has(studentId)) {
-          parseErrors.push({row: i+2, studentId, error:'Student not registered for event', data: row});
-          return null;
+
+        // placement parsing: number OR text (winner/runner-up/top 8)
+        const placementText = String(rawPlacement || '').trim() || null;
+        let placement = null;
+        const pStr = String(rawPlacement || '').trim().toLowerCase();
+        const pNum = parseInt(pStr.replace(/[^0-9]/g, ''), 10);
+        if (!isNaN(pNum) && isFinite(pNum) && pNum > 0) {
+          placement = pNum;
+        } else if (pStr) {
+          if (pStr.includes('winner') && !pStr.includes('runner')) placement = 1;
+          else if (pStr.includes('runner')) placement = 2;
+          else if (pStr.includes('second runner')) placement = 3;
+          else if (pStr.includes('3rd')) placement = 3;
+          else if (pStr.includes('4th')) placement = 4;
+          else if (pStr.includes('top')) {
+            const topNum = parseInt(pStr.replace(/[^0-9]/g, ''), 10);
+            if (!isNaN(topNum) && topNum > 0) placement = topNum;
+          }
         }
-        
-        // Check for duplicates
-        if (seenIds.has(studentId)) {
-          parseErrors.push({row: i+2, studentId, error:'Duplicate studentId in sheet', data: row});
-          return null;
-        }
-        
-        // Validate score
-        if (isNaN(score) || !isFinite(score)) {
-          parseErrors.push({row: i+2, studentId, error:`Invalid score: ${rawScore}. Score must be a number`, data: row});
-          return null;
-        }
-        
-        // Allow negative scores (for some sports like golf where lower is better)
-        // But validate reasonable range
-        if (Math.abs(score) > 1000000) {
-          parseErrors.push({row: i+2, studentId, error:`Score ${score} is out of reasonable range`, data: row});
-          return null;
-        }
-        
-        seenIds.add(studentId);
-        return { studentId, score: Number(score.toFixed(2)) }; // Round to 2 decimal places
+
+        seenKeys.add(dedupeKey);
+        return {
+          studentId: resolvedStudentId,
+          studentUID: studentUID || null,
+          points: Number(Number(points).toFixed(2)),
+          score: Number(Number(points).toFixed(2)), // keep score in sync for legacy views
+          placement,
+          placementText
+        };
       });
       // Filter out null entries
       const validResults = resultsBulk.filter(Boolean);
@@ -1417,23 +1524,29 @@ class EventService {
         }
       }
       
-      // --- Sort and assign placements: highest score first (can be changed for sports where lower is better) ---
+      // --- Sort and assign placements (if missing): highest points first ---
       let sorted = [...validResults];
-      sorted.sort((a, b) => b.score - a.score); // Highest score wins (change to a.score - b.score for lowest wins)
-      
-      // Handle ties properly
+      sorted.sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
+
+      // If placement was not provided or not parsed, compute it from points (ties share rank)
       let placement = 1;
-      let lastScore = null;
-      
+      let lastPoints = null;
       for (let i = 0; i < sorted.length; i++) {
-        if (lastScore !== null && sorted[i].score !== lastScore) {
+        if (lastPoints !== null && sorted[i].points !== lastPoints) {
           placement = i + 1;
         }
-        sorted[i].placement = placement;
-        lastScore = sorted[i].score;
+        if (!sorted[i].placement) sorted[i].placement = placement;
+        if (!sorted[i].placementText) {
+          sorted[i].placementText =
+            sorted[i].placement === 1 ? 'Winner' :
+            sorted[i].placement === 2 ? 'Runner-Up' :
+            sorted[i].placement === 3 ? 'Second Runner-Up' :
+            `Position ${sorted[i].placement}`;
+        }
+        lastPoints = sorted[i].points;
       }
       
-      // --- Bulk update scores/placings in eventRegistration with transaction ---
+      // --- Bulk update results in eventRegistration with transaction ---
       await prisma.$transaction(
         sorted.map(res =>
           prisma.eventRegistration.updateMany({
@@ -1442,8 +1555,10 @@ class EventService {
               studentId: res.studentId 
             },
             data: { 
-              score: res.score, 
-              placement: res.placement 
+              score: res.score,
+              points: res.points,
+              placement: res.placement,
+              placementText: res.placementText
             }
           })
         ),
@@ -1705,10 +1820,15 @@ class EventService {
               select: {
                 id: true,
                 name: true,
+                alias: true,
+                playstationId: true,
+                eaId: true,
+                instagramHandle: true,
                 user: {
                   select: {
                     uniqueId: true,
-                    email: true
+                    email: true,
+                    phone: true
                   }
                 }
               }
@@ -1716,7 +1836,8 @@ class EventService {
           },
           orderBy: [
             { placement: 'asc' }, // Winners first
-            { score: 'desc' }     // Then by score
+            { points: 'desc' },   // Then by points
+            { score: 'desc' }     // Back-compat
           ],
           skip,
           take
@@ -1729,12 +1850,19 @@ class EventService {
         studentId: reg.studentId,
         studentName: reg.student.name,
         studentUniqueId: reg.student.user?.uniqueId,
+        email: reg.student.user?.email || null,
+        phone: reg.student.user?.phone || null,
+        alias: reg.student.alias || null,
+        playstationId: reg.playstationId || reg.student.playstationId || null,
+        eaId: reg.eaId || reg.student.eaId || null,
+        instagramHandle: reg.instagramHandle || reg.student.instagramHandle || null,
+        points: reg.points ?? reg.score,
         score: reg.score,
         placement: reg.placement,
-        positionText: reg.placement === 1 ? 'Winner' : 
+        positionText: reg.placementText || (reg.placement === 1 ? 'Winner' : 
                      reg.placement === 2 ? 'Runner-Up' : 
                      reg.placement === 3 ? 'Second Runner-Up' : 
-                     `Position ${reg.placement}`,
+                     (reg.placement ? `Position ${reg.placement}` : '')),
         status: reg.status,
         registeredAt: reg.createdAt
       }));

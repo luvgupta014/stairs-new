@@ -5948,7 +5948,7 @@ router.get('/events/:eventId/incharge-permissions/:userId', authenticate, requir
       where: { eventId_userId: { eventId, userId } }
     });
 
-    res.json(successResponse({ 
+    res.json(successResponse({
       eventId,
       user,
       assignment: assigned,

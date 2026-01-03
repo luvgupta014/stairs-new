@@ -36,7 +36,12 @@ const StudentProfile = () => {
     school: '',
     club: '',
     coachName: '',
-    coachMobile: ''
+    coachMobile: '',
+    // Optional social/gaming IDs
+    playstationId: '',
+    eaId: '',
+    alias: '',
+    instagramHandle: ''
   });
 
   useEffect(() => {
@@ -68,7 +73,11 @@ const StudentProfile = () => {
           school: profile.school || '',
           club: profile.club || '',
           coachName: profile.coachName || '',
-          coachMobile: profile.coachMobile || ''
+          coachMobile: profile.coachMobile || '',
+          playstationId: profile.playstationId || '',
+          eaId: profile.eaId || '',
+          alias: profile.alias || '',
+          instagramHandle: profile.instagramHandle || ''
         });
       }
     } catch (error) {
@@ -255,6 +264,68 @@ const StudentProfile = () => {
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Social / Gaming IDs (Optional) */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Social & Gaming (Optional)</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      PlayStation ID
+                    </label>
+                    <input
+                      type="text"
+                      name="playstationId"
+                      value={formData.playstationId}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="e.g., myPSN123"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      EA ID
+                    </label>
+                    <input
+                      type="text"
+                      name="eaId"
+                      value={formData.eaId}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="e.g., myEAId"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Alias
+                    </label>
+                    <input
+                      type="text"
+                      name="alias"
+                      value={formData.alias}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Name shown in tournaments (optional)"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Instagram Handle
+                    </label>
+                    <input
+                      type="text"
+                      name="instagramHandle"
+                      value={formData.instagramHandle}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="@yourhandle"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  These fields are optional, but recommended for Online/Hybrid tournaments.
+                </p>
               </div>
 
               {/* Address Information */}

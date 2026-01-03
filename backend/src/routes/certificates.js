@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticate, requireCoach, requireAdmin, checkEventPermission } = require('../utils/authMiddleware');
 const certificateService = require('../services/certificateService');
 const EventService = require('../services/eventService');
+const { sendCertificateIssuedEmail, sendWinnerCertificateIssuedEmail } = require('../utils/emailService');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const eventService = new EventService();
@@ -230,12 +231,14 @@ router.post('/issue', authenticate, requireAdminOrCertificateManager, async (req
 
     // Create notifications for students
     for (const certificate of results) {
+      const studentRow = await prisma.student.findUnique({
+        where: { id: certificate.studentId },
+        select: { name: true, user: { select: { id: true, email: true } } }
+      });
+
       await prisma.notification.create({
         data: {
-          userId: (await prisma.student.findUnique({ 
-            where: { id: certificate.studentId },
-            select: { userId: true }
-          })).userId,
+          userId: studentRow?.user?.id,
           type: 'GENERAL',
           title: '🎓 Certificate Issued!',
           message: `Your certificate for ${event.name} has been issued. You can download it from your dashboard.`,
@@ -245,6 +248,22 @@ router.post('/issue', authenticate, requireAdminOrCertificateManager, async (req
           })
         }
       });
+
+      // Best-effort email (do not fail issuance)
+      try {
+        const to = studentRow?.user?.email;
+        if (to) {
+          await sendCertificateIssuedEmail({
+            to,
+            athleteName: studentRow?.name,
+            eventName: event.name,
+            sportName: event.sport,
+            certificateUrl: certificate.certificateUrl
+          });
+        }
+      } catch (mailErr) {
+        console.warn('⚠️ Participation certificate email failed:', mailErr?.message || mailErr);
+      }
     }
 
     console.log(`✅ Successfully issued ${results.length} certificate(s)`);
@@ -370,14 +389,22 @@ router.post('/issue-winner', authenticate, requireAdminOrCertificateManager, asy
     const { results, errors } = await certificateService.generateBulkWinnerCertificates(certificatesData);
 
     // Create notifications
+    const regRows = await prisma.eventRegistration.findMany({
+      where: { eventId: event.id, studentId: { in: studentIds } },
+      select: { studentId: true, points: true, score: true }
+    }).catch(() => []);
+    const pointsByStudent = new Map(regRows.map(r => [r.studentId, r.points ?? r.score ?? null]));
+
     for (const certificate of results) {
       const studentData = certificatesData.find(c => c.studentId === certificate.studentId);
+      const studentRow = await prisma.student.findUnique({
+        where: { id: certificate.studentId },
+        select: { name: true, user: { select: { id: true, email: true } } }
+      });
+
       await prisma.notification.create({
         data: {
-          userId: (await prisma.student.findUnique({ 
-            where: { id: certificate.studentId },
-            select: { userId: true }
-          })).userId,
+          userId: studentRow?.user?.id,
           type: 'GENERAL',
           title: '🏆 Winner Certificate Issued!',
           message: `Congratulations! Your winner certificate (${studentData.positionText || `Position ${studentData.position}`}) for ${event.name} has been issued.`,
@@ -387,6 +414,24 @@ router.post('/issue-winner', authenticate, requireAdminOrCertificateManager, asy
           })
         }
       });
+
+      // Best-effort email (do not fail issuance)
+      try {
+        const to = studentRow?.user?.email;
+        if (to) {
+          await sendWinnerCertificateIssuedEmail({
+            to,
+            athleteName: studentRow?.name,
+            eventName: event.name,
+            sportName: event.sport,
+            positionText: studentData?.positionText || `Position ${studentData?.position}`,
+            points: pointsByStudent.get(certificate.studentId) ?? null,
+            certificateUrl: certificate.certificateUrl
+          });
+        }
+      } catch (mailErr) {
+        console.warn('⚠️ Winner certificate email failed:', mailErr?.message || mailErr);
+      }
     }
 
     console.log(`✅ Successfully issued ${results.length} winner certificate(s)`);

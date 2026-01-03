@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { FaTimes, FaUsers, FaUser, FaEnvelope, FaPhone, FaCalendarAlt, FaMedal, FaGraduationCap, FaSchool } from 'react-icons/fa';
 
 const ParticipantsModal = ({ 
@@ -48,6 +49,11 @@ const ParticipantsModal = ({
     };
     return colors[level] || 'bg-gray-100 text-gray-800';
   };
+
+  const isOnlineLike = (() => {
+    const fmt = (eventData?.eventFormat || '').toString().toUpperCase();
+    return fmt === 'ONLINE' || fmt === 'HYBRID';
+  })();
 
   return (
     <div 
@@ -113,14 +119,31 @@ const ParticipantsModal = ({
                   <button
                     onClick={() => {
                       // Export participants to CSV
-                      const headers = ['Name', 'Email', 'Phone', 'UID', 'Status', 'Selected Category', 'Registered Date'];
+                      const headers = [
+                        'Name',
+                        'UID',
+                        'Status',
+                        'Selected Category',
+                        'Account Email',
+                        'Account Phone',
+                        ...(isOnlineLike ? ['Alias', 'Tournament Email', 'Tournament Phone', 'PlayStation ID', 'EA ID', 'Instagram Handle'] : []),
+                        'Registered Date'
+                      ];
                       const rows = participants.map(p => [
                         p.student?.name || 'N/A',
-                        p.student?.user?.email || p.student?.email || 'N/A',
-                        p.student?.user?.phone || p.student?.phone || 'N/A',
                         p.student?.user?.uniqueId || 'N/A',
                         p.status || 'N/A',
                         p.selectedCategory || 'Not specified',
+                        p.student?.user?.email || p.student?.email || 'N/A',
+                        p.student?.user?.phone || p.student?.phone || 'N/A',
+                        ...(isOnlineLike ? [
+                          p.student?.alias || '',
+                          p.registrationContact?.email || '',
+                          p.registrationContact?.phone || '',
+                          p.registrationContact?.playstationId || p.student?.playstationId || '',
+                          p.registrationContact?.eaId || p.student?.eaId || '',
+                          p.registrationContact?.instagramHandle || p.student?.instagramHandle || ''
+                        ] : []),
                         p.registeredAt || p.createdAt ? new Date(p.registeredAt || p.createdAt).toLocaleDateString() : 'N/A'
                       ]);
 
@@ -177,6 +200,15 @@ const ParticipantsModal = ({
                             {participant.student.level}
                           </span>
                         )}
+                      {participant.student?.user?.uniqueId ? (
+                        <Link
+                          to={`/admin/users/${participant.student.user.uniqueId}`}
+                          className="px-3 py-1 rounded-md bg-gray-900 text-white text-xs font-semibold hover:bg-gray-800 transition-colors"
+                          title="Open full student profile"
+                        >
+                          View Profile
+                        </Link>
+                      ) : null}
                       </div>
                     </div>
 
@@ -206,6 +238,34 @@ const ParticipantsModal = ({
                           <span className="ml-2 text-gray-900">{participant.student?.level || 'Not specified'}</span>
                         </div>
                       </div>
+
+                      {/* Online/Hybrid details */}
+                      {isOnlineLike ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center">
+                            <FaMedal className="text-gray-400 w-4 h-4 mr-2" />
+                            <span className="text-gray-700">Alias:</span>
+                            <span className="ml-2 text-gray-900">{participant.student?.alias || 'Not specified'}</span>
+                          </div>
+                          <div className="flex items-center">
+                            <FaEnvelope className="text-gray-400 w-4 h-4 mr-2" />
+                            <span className="text-gray-700">Tournament Email:</span>
+                            <span className="ml-2 text-gray-900">{participant.registrationContact?.email || 'Not provided'}</span>
+                          </div>
+                          <div className="flex items-center">
+                            <FaPhone className="text-gray-400 w-4 h-4 mr-2" />
+                            <span className="text-gray-700">Tournament Phone:</span>
+                            <span className="ml-2 text-gray-900">{participant.registrationContact?.phone || 'Not provided'}</span>
+                          </div>
+                          <div className="text-xs text-gray-700">
+                            <span className="font-semibold">PSN:</span> <span className="font-mono">{participant.registrationContact?.playstationId || participant.student?.playstationId || '—'}</span>
+                            <span className="mx-2">•</span>
+                            <span className="font-semibold">EA:</span> <span className="font-mono">{participant.registrationContact?.eaId || participant.student?.eaId || '—'}</span>
+                            <span className="mx-2">•</span>
+                            <span className="font-semibold">IG:</span> <span className="font-mono">{participant.registrationContact?.instagramHandle || participant.student?.instagramHandle || '—'}</span>
+                          </div>
+                        </div>
+                      ) : null}
 
                       {/* Academic Information */}
                       <div className="space-y-2">

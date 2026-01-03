@@ -1297,6 +1297,7 @@ const AdminEventsManagement = () => {
       if (participantsResponse.status === 'fulfilled' && participantsResponse.value?.success) {
         const responseValue = participantsResponse.value;
         // Backend shape: { success: true, data: { event: {...}, participants: [...] } }
+        const responseEventMeta = responseValue?.data?.event || responseValue?.event || null;
         const participantsList =
           responseValue?.data?.participants ||
           responseValue?.data?.registrations ||
@@ -1308,6 +1309,7 @@ const AdminEventsManagement = () => {
         console.log('✅ Participants loaded:', participantsList?.length || 0);
         setEventDetailsModal(prev => ({
           ...prev,
+          event: responseEventMeta ? { ...(prev.event || {}), ...responseEventMeta } : prev.event,
           participants: Array.isArray(participantsList) ? participantsList : [],
           loading: false
         }));
@@ -2443,7 +2445,7 @@ const AdminEventsManagement = () => {
                       </select>
                     </div>
                     <div>
-                      <label htmlFor="stable-edit-format" className="block text-sm font-medium text-gray-700 mb-1">Event Format</label>
+                      <label htmlFor="stable-edit-format" className="block text-sm font-medium text-gray-700 mb-1">Mode</label>
                       <select
                         id="stable-edit-format"
                         name="eventFormat"
@@ -2452,11 +2454,11 @@ const AdminEventsManagement = () => {
                         autoComplete="off"
                         className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                       >
-                        <option value="OFFLINE">OFFLINE</option>
-                        <option value="ONLINE">ONLINE</option>
-                        <option value="HYBRID">HYBRID</option>
+                        <option value="OFFLINE">Offline</option>
+                        <option value="ONLINE">Online</option>
+                        <option value="HYBRID">Hybrid</option>
                       </select>
-                      <p className="text-[11px] text-gray-500 mt-1">Old events may be updated to ONLINE/HYBRID.</p>
+                      <p className="text-[11px] text-gray-500 mt-1">Mode controls tournament fields for Online/Hybrid events.</p>
                     </div>
                     <div>
                       <label htmlFor="stable-edit-start" className="block text-sm font-medium text-gray-700 mb-1">Start Date & Time *</label>
@@ -4359,6 +4361,7 @@ const AdminEventsManagement = () => {
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Event</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Sport</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Level</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-900">Mode</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Coach</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Date</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Location</th>
@@ -4432,6 +4435,20 @@ const AdminEventsManagement = () => {
                         })()}
                       </td>
                       <td className="py-3 px-4">
+                        {(() => {
+                          const fmt = (event?.eventFormat || 'OFFLINE').toString().toUpperCase();
+                          const label = fmt === 'ONLINE' ? 'Online' : fmt === 'HYBRID' ? 'Hybrid' : 'Offline';
+                          const cls = fmt === 'ONLINE' ? 'bg-indigo-100 text-indigo-800'
+                            : fmt === 'HYBRID' ? 'bg-fuchsia-100 text-fuchsia-800'
+                            : 'bg-slate-100 text-slate-800';
+                          return (
+                            <span className={`px-2 py-1 ${cls} rounded-full text-xs font-medium`}>
+                              {label}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td className="py-3 px-4">
                         <div>
                           {event.coach?.user?.uniqueId ? (
                             <Link
@@ -4473,22 +4490,22 @@ const AdminEventsManagement = () => {
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        <div className="flex flex-col space-y-2">
+                        <div className="flex flex-col gap-2">
                           {/* Moderation / Assign Actions */}
-                          <div className="flex space-x-1 flex-wrap">
+                          <div className="flex flex-wrap gap-2">
                             {event.status === 'PENDING' && (
                               <>
                                 <button
                                   onClick={() => handleModerateEvent(event.id, 'approve')}
                                   disabled={moderatingEventId === event.id}
-                                  className="bg-green-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+                                  className="bg-green-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shadow-sm"
                                 >
                                   {moderatingEventId === event.id ? 'Processing...' : 'Approve'}
                                 </button>
                                 <button
                                   onClick={() => handleModerateEvent(event.id, 'reject')}
                                   disabled={moderatingEventId === event.id}
-                                  className="bg-red-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                                  className="bg-red-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shadow-sm"
                                 >
                                   Reject
                                 </button>
@@ -4499,7 +4516,7 @@ const AdminEventsManagement = () => {
                               <button
                                 onClick={() => handleModerateEvent(event.id, 'suspend')}
                                 disabled={moderatingEventId === event.id}
-                                className="bg-orange-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-orange-700 transition-colors disabled:opacity-50"
+                                className="bg-orange-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shadow-sm"
                               >
                                 Suspend
                               </button>
@@ -4509,7 +4526,7 @@ const AdminEventsManagement = () => {
                               <button
                                 onClick={() => handleModerateEvent(event.id, 'restart')}
                                 disabled={moderatingEventId === event.id}
-                                className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shadow-sm"
                               >
                                 Restart
                               </button>
@@ -4519,7 +4536,7 @@ const AdminEventsManagement = () => {
                             <button
                               type="button"
                               onClick={() => handleAssignClick(event.id)}
-                              className="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-indigo-700 transition-colors"
+                              className="bg-indigo-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-indigo-700 transition-colors whitespace-nowrap shadow-sm"
                             >
                               Assign
                             </button>
@@ -4531,7 +4548,7 @@ const AdminEventsManagement = () => {
                             <button
                               type="button"
                                   onClick={() => handlePermissionClick(event.id)}
-                              className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-purple-700 transition-colors"
+                              className="bg-purple-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-purple-700 transition-colors whitespace-nowrap shadow-sm"
                                   title="Edit permissions for assigned incharges"
                             >
                                   Incharge Permissions
@@ -4550,7 +4567,7 @@ const AdminEventsManagement = () => {
                             return (
                               <Link
                                 to={`/admin/event/${event.uniqueId || event.id}/certificates`}
-                                className="bg-teal-600 text-white px-2 py-1 rounded text-xs font-medium hover:bg-teal-700 transition-colors inline-flex items-center justify-center"
+                                className="bg-teal-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-teal-700 transition-colors inline-flex items-center justify-center whitespace-nowrap shadow-sm"
                               >
                                 🎓 Issue Certificates
                               </Link>

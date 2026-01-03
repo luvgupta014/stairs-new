@@ -451,6 +451,14 @@ model EventRegistration {
   message         String?
   // Selected category by athlete: e.g., "Group II (13-14) | Freestyle | 50m"
   selectedCategory String?
+  /// Results: numeric score (legacy/optional)
+  score            Float?
+  /// Results: rank/position as number (1 = Winner)
+  placement        Int?
+  /// Results: display text for placement (e.g., "Winner", "Top 8")
+  placementText    String?
+  /// Results: points for leaderboard (recommended)
+  points           Float?
   /// Online-event registration snapshot fields (optional; required by UI for ONLINE events)
   contactEmail     String?
   contactPhone     String?

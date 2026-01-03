@@ -1642,6 +1642,60 @@ const sendPaymentReceiptEmail = async (receiptData) => {
   }
 };
 
+/**
+ * Certificate issuance emails (participation + winner)
+ * Failures should not block certificate generation.
+ */
+const sendCertificateIssuedEmail = async ({ to, athleteName, eventName, sportName, certificateUrl }) => {
+  try {
+    if (!to) return { success: false, error: 'Missing recipient' };
+    const subject = `Your e-certificate is ready - ${eventName}`;
+    const base = process.env.FRONTEND_URL || '';
+    const safeUrl = certificateUrl ? (String(certificateUrl).startsWith('http') ? certificateUrl : `${base}${certificateUrl}`) : '';
+
+    const text = `Hi ${athleteName || 'Athlete'},\n\nYour participation certificate for ${eventName}${sportName ? ` (${sportName})` : ''} has been issued.\n${safeUrl ? `Download: ${safeUrl}\n` : ''}\n`;
+    const html = `
+      <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827">
+        <h2 style="margin:0 0 8px 0;">🎓 Your certificate is ready</h2>
+        <p style="margin:0 0 12px 0;">Hi <b>${athleteName || 'Athlete'}</b>,</p>
+        <p style="margin:0 0 12px 0;">Your participation certificate for <b>${eventName}</b>${sportName ? ` (${sportName})` : ''} has been issued.</p>
+        ${safeUrl ? `<p style="margin:0 0 12px 0;"><a href="${safeUrl}" target="_blank" rel="noreferrer">Download your certificate</a></p>` : ''}
+        <p style="margin:0;color:#6b7280;font-size:12px;">© ${new Date().getFullYear()} STAIRS Talent Hub</p>
+      </div>
+    `;
+    return await sendEmail({ to, subject, text, html });
+  } catch (e) {
+    console.warn('⚠️ sendCertificateIssuedEmail failed:', e?.message || e);
+    return { success: false, error: e?.message || 'Failed to send' };
+  }
+};
+
+const sendWinnerCertificateIssuedEmail = async ({ to, athleteName, eventName, sportName, positionText, points, certificateUrl }) => {
+  try {
+    if (!to) return { success: false, error: 'Missing recipient' };
+    const pos = positionText || 'Winner';
+    const subject = `🏆 ${pos} certificate - ${eventName}`;
+    const base = process.env.FRONTEND_URL || '';
+    const safeUrl = certificateUrl ? (String(certificateUrl).startsWith('http') ? certificateUrl : `${base}${certificateUrl}`) : '';
+
+    const text = `Hi ${athleteName || 'Athlete'},\n\nCongratulations! Your ${pos} certificate for ${eventName}${sportName ? ` (${sportName})` : ''} has been issued.\n${points !== null && points !== undefined ? `Points: ${points}\n` : ''}${safeUrl ? `Download: ${safeUrl}\n` : ''}\n`;
+    const html = `
+      <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827">
+        <h2 style="margin:0 0 8px 0;">🏆 Congratulations!</h2>
+        <p style="margin:0 0 12px 0;">Hi <b>${athleteName || 'Athlete'}</b>,</p>
+        <p style="margin:0 0 12px 0;">Your <b>${pos}</b> certificate for <b>${eventName}</b>${sportName ? ` (${sportName})` : ''} has been issued.</p>
+        ${points !== null && points !== undefined ? `<p style="margin:0 0 12px 0;"><b>Points:</b> ${points}</p>` : ''}
+        ${safeUrl ? `<p style="margin:0 0 12px 0;"><a href="${safeUrl}" target="_blank" rel="noreferrer">Download your certificate</a></p>` : ''}
+        <p style="margin:0;color:#6b7280;font-size:12px;">© ${new Date().getFullYear()} STAIRS Talent Hub</p>
+      </div>
+    `;
+    return await sendEmail({ to, subject, text, html });
+  } catch (e) {
+    console.warn('⚠️ sendWinnerCertificateIssuedEmail failed:', e?.message || e);
+    return { success: false, error: e?.message || 'Failed to send' };
+  }
+};
+
 module.exports = {
   sendEventShareEmail,
   sendTournamentRegistrationEmail,
@@ -1654,5 +1708,7 @@ module.exports = {
   sendEventCompletionEmail,
   sendAssignmentEmail,
   sendEventInchargeInviteEmail,
+  sendCertificateIssuedEmail,
+  sendWinnerCertificateIssuedEmail,
   sendEmail
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { uploadEventResults, getEventResultFiles, deleteEventResultFile, downloadIndividualEventResultFile, downloadSampleResultSheet } from '../../api';
+import { uploadEventResults, getEventResultFiles, deleteEventResultFile, downloadIndividualEventResultFile, downloadSampleResultSheet, getEventLeaderboard, issueCertificates, issueWinnerCertificates } from '../../api';
 import { 
   FaUpload, 
   FaFileExcel, 
@@ -10,7 +10,9 @@ import {
   FaCalendarAlt, 
   FaTrophy,
   FaFilter,
-  FaSearch
+  FaSearch,
+  FaMedal,
+  FaAward
 } from 'react-icons/fa';
 import { useParams, useNavigate } from 'react-router-dom';
 import Spinner from '../../components/Spinner';
@@ -31,6 +33,10 @@ const EventResultUpload = () => {
   const [description, setDescription] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
   const [forbidden, setForbidden] = useState(false);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardError, setLeaderboardError] = useState('');
+  const [issuing, setIssuing] = useState(false);
 
   useEffect(() => {
     loadEventFiles();
@@ -45,6 +51,7 @@ const EventResultUpload = () => {
       if (response.success) {
         setEventData(response.data.event);
         setFiles(response.data.files || []);
+        await loadLeaderboardSilent();
       }
     } catch (error) {
       console.error('Failed to load event files:', error);
@@ -56,6 +63,30 @@ const EventResultUpload = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadLeaderboardSilent = async () => {
+    try {
+      setLeaderboardLoading(true);
+      setLeaderboardError('');
+      const res = await getEventLeaderboard(eventId);
+      if (res?.success) {
+        setLeaderboard(res.data?.leaderboard || []);
+      } else {
+        setLeaderboard([]);
+      }
+    } catch (e) {
+      // If leaderboard is not available yet (no results uploaded), keep it quiet.
+      setLeaderboard([]);
+      const msg = e?.message || e?.userMessage || '';
+      if (msg && !String(msg).toLowerCase().includes('not found')) {
+        setLeaderboardError(msg);
+      } else {
+        setLeaderboardError('');
+      }
+    } finally {
+      setLeaderboardLoading(false);
     }
   };
 
@@ -108,13 +139,93 @@ const EventResultUpload = () => {
         showMessage('success', `Successfully uploaded ${response.data.uploadedFiles.length} file(s)`);
         setSelectedFiles([]);
         setDescription('');
-        loadEventFiles(); // Reload the file list
+        await loadEventFiles(); // Reload the file list + leaderboard
+        await loadLeaderboardSilent();
       }
     } catch (error) {
       console.error('Upload failed:', error);
       showMessage('error', error.message || 'Failed to upload files');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const topHolders = (() => {
+    const list = Array.isArray(leaderboard) ? leaderboard : [];
+    const withPlacement = list.filter(r => r?.placement !== null && r?.placement !== undefined);
+    withPlacement.sort((a, b) => (a.placement ?? 999) - (b.placement ?? 999));
+    return withPlacement.slice(0, 10);
+  })();
+
+  const issueWinnerForRow = async (row) => {
+    try {
+      if (!row?.studentId || !row?.placement) {
+        showMessage('error', 'Missing studentId/placement for this row.');
+        return;
+      }
+      setIssuing(true);
+      const payload = {
+        eventId,
+        selectedStudentsWithPositions: [{
+          studentId: row.studentId,
+          position: row.placement,
+          positionText: row.placementText || (row.placement === 1 ? 'Winner' : row.placement === 2 ? 'Runner-Up' : `Position ${row.placement}`)
+        }]
+      };
+      const res = await issueWinnerCertificates(payload);
+      if (res?.success) showMessage('success', 'Winner certificate issued.');
+      else showMessage('error', res?.message || 'Failed to issue winner certificate.');
+    } catch (e) {
+      showMessage('error', e?.message || 'Failed to issue winner certificate.');
+    } finally {
+      setIssuing(false);
+    }
+  };
+
+  const issueAllWinnerCertificates = async () => {
+    try {
+      const winners = topHolders.filter(r => r?.studentId && r?.placement);
+      if (!winners.length) {
+        showMessage('warning', 'No position holders found to issue winner certificates.');
+        return;
+      }
+      if (!confirm(`Issue winner certificates to ${winners.length} position holder(s)?`)) return;
+      setIssuing(true);
+      const payload = {
+        eventId,
+        selectedStudentsWithPositions: winners.map(r => ({
+          studentId: r.studentId,
+          position: r.placement,
+          positionText: r.placementText || (r.placement === 1 ? 'Winner' : r.placement === 2 ? 'Runner-Up' : `Position ${r.placement}`)
+        }))
+      };
+      const res = await issueWinnerCertificates(payload);
+      if (res?.success) showMessage('success', `Issued ${res.data?.issued || winners.length} winner certificate(s).`);
+      else showMessage('error', res?.message || 'Failed to issue winner certificates.');
+    } catch (e) {
+      showMessage('error', e?.message || 'Failed to issue winner certificates.');
+    } finally {
+      setIssuing(false);
+    }
+  };
+
+  const issueAllParticipationCertificates = async () => {
+    try {
+      const all = (Array.isArray(leaderboard) ? leaderboard : []).filter(r => r?.studentId).map(r => r.studentId);
+      const uniq = Array.from(new Set(all));
+      if (!uniq.length) {
+        showMessage('warning', 'No students found to issue participation certificates.');
+        return;
+      }
+      if (!confirm(`Issue participation certificates to ALL ${uniq.length} student(s)?`)) return;
+      setIssuing(true);
+      const res = await issueCertificates({ eventId, selectedStudents: uniq });
+      if (res?.success) showMessage('success', `Issued ${res.data?.issued || uniq.length} participation certificate(s).`);
+      else showMessage('error', res?.message || 'Failed to issue participation certificates.');
+    } catch (e) {
+      showMessage('error', e?.message || 'Failed to issue participation certificates.');
+    } finally {
+      setIssuing(false);
     }
   };
 
@@ -218,7 +329,7 @@ const EventResultUpload = () => {
             <div className="flex items-center">
               <div className="mr-4">
                 <BackButton 
-                  to="/dashboard/coach" 
+                  to={user?.role === 'EVENT_INCHARGE' ? '/dashboard/event_incharge' : '/dashboard/coach'} 
                   label="Back to Dashboard" 
                   variant="minimal"
                   className="text-white hover:text-green-200"
@@ -286,8 +397,9 @@ const EventResultUpload = () => {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <h4 className="font-semibold text-blue-900 mb-2">📋 File Format Requirements</h4>
             <ul className="list-disc list-inside text-sm text-blue-800 space-y-1">
-              <li><strong>Required columns:</strong> studentId, score</li>
-              <li><strong>Optional columns:</strong> name, remarks</li>
+              <li><strong>Required columns to fill:</strong> placement, points</li>
+              <li><strong>Stable identifier (do not edit):</strong> studentUID</li>
+              <li><strong>Placement examples:</strong> 1, 2, 3... OR "Winner", "Runner-Up", "Top 8"</li>
               <li><strong>File types:</strong> Excel (.xlsx, .xls) or CSV</li>
               <li><strong>Note:</strong> Download the sample sheet above to see the exact format with example data</li>
             </ul>
@@ -385,6 +497,153 @@ const EventResultUpload = () => {
               </button>
             </div>
           </form>
+        </div>
+
+        {/* Leaderboard Preview (after upload) */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+              <FaTrophy className="mr-2 text-amber-600" />
+              Leaderboard (Preview)
+            </h2>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={loadLeaderboardSilent}
+                disabled={leaderboardLoading}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium disabled:opacity-50"
+              >
+                {leaderboardLoading ? 'Refreshing...' : 'Refresh'}
+              </button>
+              <button
+                type="button"
+                onClick={issueAllWinnerCertificates}
+                disabled={issuing || !topHolders.length}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
+                title={!topHolders.length ? 'Upload results first to get position holders' : ''}
+              >
+                <FaMedal className="mr-2" />
+                Issue Winner Certificates
+              </button>
+              <button
+                type="button"
+                onClick={issueAllParticipationCertificates}
+                disabled={issuing || !(leaderboard?.length)}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
+                title={!leaderboard?.length ? 'Upload results first to load leaderboard' : ''}
+              >
+                <FaAward className="mr-2" />
+                Issue Participation (All)
+              </button>
+            </div>
+          </div>
+
+          {leaderboardError ? (
+            <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              {leaderboardError}
+            </div>
+          ) : null}
+
+          {!leaderboardLoading && (!leaderboard || leaderboard.length === 0) ? (
+            <div className="text-sm text-gray-600">
+              No leaderboard data yet. Upload the filled template (placement + points) and refresh.
+            </div>
+          ) : (
+            <>
+              {/* Top holders cards */}
+              {topHolders.length ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  {topHolders.slice(0, 3).map((r, idx) => (
+                    <div key={`${r.studentId}-${idx}`} className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-amber-700">
+                            {r.placementText || `Position ${r.placement || (idx + 1)}`}
+                          </div>
+                          <div className="text-lg font-bold text-gray-900 truncate">{r.name || '—'}</div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            UID: <span className="font-mono">{r.studentUID || '—'}</span>
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            Points: <span className="font-semibold">{r.points ?? '—'}</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => issueWinnerForRow(r)}
+                          disabled={issuing || !r.studentId || !r.placement}
+                          className="shrink-0 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold disabled:opacity-50"
+                        >
+                          Issue
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {/* Leaderboard table */}
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900">Position</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900">Student</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900">Category</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900">Points</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900">Contact</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900">IDs</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(leaderboard || []).slice(0, 200).map((r, i) => (
+                      <tr key={`${r.studentId}-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
+                            {r.placementText || (r.placement ? `#${r.placement}` : '—')}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-gray-900">{r.name || '—'}</div>
+                          <div className="text-xs text-gray-600">
+                            UID: <span className="font-mono">{r.studentUID || '—'}</span>
+                            {r.alias ? <span className="ml-2">• Alias: <span className="font-semibold">{r.alias}</span></span> : null}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-700">{r.selectedCategory || '—'}</td>
+                        <td className="py-3 px-4 text-sm text-gray-900 font-semibold">{r.points ?? '—'}</td>
+                        <td className="py-3 px-4 text-sm text-gray-700">
+                          <div className="text-xs">{r.email || '—'}</div>
+                          <div className="text-xs">{r.phone || '—'}</div>
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-700">
+                          <div className="text-xs">PSN: <span className="font-mono">{r.playstationId || '—'}</span></div>
+                          <div className="text-xs">EA: <span className="font-mono">{r.eaId || '—'}</span></div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <button
+                            type="button"
+                            onClick={() => issueWinnerForRow(r)}
+                            disabled={issuing || !r.studentId || !r.placement}
+                            className="px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold disabled:opacity-50"
+                            title={!r.placement ? 'Placement not set for this row' : ''}
+                          >
+                            Issue Winner Cert
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {leaderboard?.length > 200 ? (
+                  <div className="mt-3 text-xs text-gray-500">
+                    Showing first 200 rows (for performance). Export full results from the template if needed.
+                  </div>
+                ) : null}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Files List */}

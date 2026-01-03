@@ -765,6 +765,108 @@ router.patch('/:eventId/register/selected-category', authenticate, requireStuden
 });
 
 /**
+ * Backfill/update online tournament contact details for an existing registration (students only)
+ * PATCH /api/events/:eventId/register/online-details
+ * Body: { contactEmail, contactPhone, playstationId, eaId, instagramHandle }
+ *
+ * Notes:
+ * - Useful for past registrations created before these fields were collected.
+ * - If the event is ONLINE or HYBRID, all fields are required for the backfill.
+ * - Also syncs the optional IDs to the Student profile (playstationId, eaId, instagramHandle).
+ */
+router.patch('/:eventId/register/online-details', authenticate, requireStudent, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const contactEmail = typeof req.body?.contactEmail === 'string' ? req.body.contactEmail.trim() : '';
+    const contactPhone = typeof req.body?.contactPhone === 'string' ? req.body.contactPhone.trim() : '';
+    const playstationId = typeof req.body?.playstationId === 'string' ? req.body.playstationId.trim() : '';
+    const eaId = typeof req.body?.eaId === 'string' ? req.body.eaId.trim() : '';
+    const instagramHandle = typeof req.body?.instagramHandle === 'string' ? req.body.instagramHandle.trim() : '';
+
+    // Resolve student id (middleware may attach req.student in some flows)
+    let studentId = req.student?.id || null;
+    if (!studentId) {
+      const student = await prisma.student.findUnique({ where: { userId: req.user.id }, select: { id: true } });
+      studentId = student?.id || null;
+    }
+    if (!studentId) {
+      return res.status(404).json(errorResponse('Student profile not found.', 404));
+    }
+
+    // Ensure registration exists for this student + event
+    const existing = await prisma.eventRegistration.findFirst({
+      where: { eventId, studentId },
+      select: { id: true }
+    });
+    if (!existing) {
+      return res.status(404).json(errorResponse('You are not registered for this event.', 404));
+    }
+
+    // Validate based on event format
+    const ev = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, eventFormat: true }
+    });
+    if (!ev) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    const fmt = (ev.eventFormat || 'OFFLINE').toString().toUpperCase();
+    const needsTournamentFields = fmt === 'ONLINE' || fmt === 'HYBRID';
+    if (needsTournamentFields) {
+      const missing = [];
+      if (!contactEmail) missing.push('Email');
+      if (!contactPhone) missing.push('Phone number');
+      if (!playstationId) missing.push('PlayStation ID');
+      if (!eaId) missing.push('EA ID');
+      if (!instagramHandle) missing.push('Instagram Handle');
+      if (missing.length) {
+        return res.status(400).json(errorResponse(`Missing required fields: ${missing.join(', ')}`, 400));
+      }
+    }
+
+    const updated = await prisma.eventRegistration.update({
+      where: { id: existing.id },
+      data: {
+        contactEmail: contactEmail || null,
+        contactPhone: contactPhone || null,
+        playstationId: playstationId || null,
+        eaId: eaId || null,
+        instagramHandle: instagramHandle || null
+      }
+    });
+
+    // Best-effort sync to Student profile (optional fields)
+    try {
+      await prisma.student.update({
+        where: { id: studentId },
+        data: {
+          playstationId: playstationId || null,
+          eaId: eaId || null,
+          instagramHandle: instagramHandle || null
+        }
+      });
+    } catch (e) {
+      console.warn('⚠️ Failed to sync online details to student profile:', e?.message || e);
+    }
+
+    return res.json(successResponse({
+      id: updated.id,
+      registrationContact: {
+        email: updated.contactEmail || null,
+        phone: updated.contactPhone || null,
+        playstationId: updated.playstationId || null,
+        eaId: updated.eaId || null,
+        instagramHandle: updated.instagramHandle || null
+      }
+    }, 'Tournament details saved.'));
+  } catch (error) {
+    console.error('❌ Update online registration details error:', error);
+    return res.status(500).json(errorResponse('Failed to update tournament details.', 500));
+  }
+});
+
+/**
  * Bulk add/register students to an event (Event Incharge with studentManagement)
  * POST /api/events/:eventId/registrations/bulk
  * Body: { identifiers: string[] }
@@ -854,6 +956,7 @@ router.get('/:eventId/participants', authenticate, async (req, res) => {
       select: {
         id: true,
         name: true,
+        eventFormat: true,
         startDate: true,
         endDate: true,
         maxParticipants: true,
@@ -871,6 +974,11 @@ router.get('/:eventId/participants', authenticate, async (req, res) => {
             id: true,
             name: true,
             sport: true,
+            level: true,
+            playstationId: true,
+            eaId: true,
+            alias: true,
+            instagramHandle: true,
             user: { select: { email: true, phone: true, uniqueId: true } }
           }
         }
@@ -883,6 +991,13 @@ router.get('/:eventId/participants', authenticate, async (req, res) => {
       // Keep legacy field name for frontend compatibility
       registeredAt: r.createdAt,
       selectedCategory: r.selectedCategory || null,
+      registrationContact: {
+        email: r.contactEmail || null,
+        phone: r.contactPhone || null,
+        playstationId: r.playstationId || null,
+        eaId: r.eaId || null,
+        instagramHandle: r.instagramHandle || null
+      },
       student: r.student
     }));
 
@@ -890,6 +1005,7 @@ router.get('/:eventId/participants', authenticate, async (req, res) => {
       event: {
         id: ev.id,
         name: ev.name,
+        eventFormat: ev.eventFormat || 'OFFLINE',
         startDate: ev.startDate,
         endDate: ev.endDate,
         maxParticipants: ev.maxParticipants,
@@ -900,6 +1016,98 @@ router.get('/:eventId/participants', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Get event participants (incharge) error:', error);
     return res.status(500).json(errorResponse('Failed to retrieve event participants.', 500));
+  }
+});
+
+/**
+ * Get a registered student's full profile for this event (Admin, or Event Incharge with studentManagement)
+ * GET /api/events/:eventId/students/:studentId/profile
+ *
+ * Notes:
+ * - Event Incharge can only view profiles for students registered in this event and only with studentManagement permission.
+ * - Admin can view any registered student's profile for this event.
+ */
+router.get('/:eventId/students/:studentId/profile', authenticate, async (req, res) => {
+  try {
+    const { eventId, studentId } = req.params;
+    const user = req.user;
+
+    // Resolve event id (supports uniqueId)
+    const ev = await prisma.event.findFirst({
+      where: { OR: [{ id: eventId }, { uniqueId: eventId }] },
+      select: { id: true, uniqueId: true, name: true, sport: true, eventFormat: true }
+    });
+    if (!ev) return res.status(404).json(errorResponse('Event not found.', 404));
+
+    // Permissions
+    if (user?.role === 'EVENT_INCHARGE') {
+      const has = await checkEventPermission({ user, eventId: ev.id, permissionKey: 'studentManagement' });
+      if (!has) return res.status(403).json(errorResponse('Access denied. Student management permission required.', 403));
+    } else if (user?.role !== 'ADMIN') {
+      // For non-admin creators, reuse standard participant view access: must own event
+      if (!['COACH', 'INSTITUTE', 'CLUB'].includes(user?.role)) {
+        return res.status(403).json(errorResponse('Access denied.', 403));
+      }
+      // If COACH/INSTITUTE/CLUB, ensure they can view participants by verifying getEventById access
+      try {
+        const EventService = require('../services/eventService');
+        const svc = new EventService();
+        let roleId = null;
+        if (user.role === 'COACH') roleId = req.coach?.id;
+        else if (user.role === 'INSTITUTE') roleId = req.institute?.id;
+        else if (user.role === 'CLUB') roleId = req.club?.id;
+        await svc.getEventById(ev.id, user.role, roleId);
+      } catch {
+        return res.status(403).json(errorResponse('Access denied.', 403));
+      }
+    }
+
+    // Ensure student is registered for this event
+    const reg = await prisma.eventRegistration.findFirst({
+      where: { eventId: ev.id, studentId },
+      select: {
+        id: true,
+        status: true,
+        createdAt: true,
+        selectedCategory: true,
+        contactEmail: true,
+        contactPhone: true,
+        playstationId: true,
+        eaId: true,
+        instagramHandle: true,
+        score: true,
+        points: true,
+        placement: true,
+        placementText: true
+      }
+    });
+    if (!reg) return res.status(404).json(errorResponse('Student is not registered for this event.', 404));
+
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      include: {
+        user: { select: { id: true, uniqueId: true, email: true, phone: true, role: true, createdAt: true } }
+      }
+    });
+    if (!student) return res.status(404).json(errorResponse('Student not found.', 404));
+
+    return res.json(successResponse({
+      event: ev,
+      registration: {
+        ...reg,
+        registrationContact: {
+          email: reg.contactEmail || null,
+          phone: reg.contactPhone || null,
+          playstationId: reg.playstationId || null,
+          eaId: reg.eaId || null,
+          instagramHandle: reg.instagramHandle || null
+        }
+      },
+      student
+    }, 'Student profile retrieved.'));
+  } catch (e) {
+    console.error('Get event student profile error:', e);
+    return res.status(500).json(errorResponse('Failed to load student profile.', 500));
   }
 });
 
@@ -1025,33 +1233,75 @@ router.get('/:eventId/results/sample-sheet', authenticate, async (req, res, next
     });
 
     // Clean Results sheet: header row + participant rows only (no extra "instructions" rows)
-    const rows = [['studentId', 'studentUID', 'name', 'selectedCategory', 'score', 'remarks']];
+    // IMPORTANT: incharge template should NOT expose studentId; use studentUID as the stable identifier.
+    // Only columns that should be edited by the uploader: placement, points
+    const rows = [[
+      'studentUID',
+      'name',
+      'email',
+      'phone',
+      'selectedCategory',
+      'alias',
+      'playstationId',
+      'eaId',
+      'instagramHandle',
+      'placement',
+      'points'
+    ]];
 
     if (registrations.length > 0) {
+      // Load richer fields (email/phone/alias/IDs) for template readability
+      // Note: registrations query below only selects limited fields; re-fetch minimal needed.
+      const regIds = registrations.map(r => r.student?.id).filter(Boolean);
+      const students = await prisma.student.findMany({
+        where: { id: { in: regIds } },
+        select: {
+          id: true,
+          name: true,
+          alias: true,
+          playstationId: true,
+          eaId: true,
+          instagramHandle: true,
+          user: { select: { uniqueId: true, email: true, phone: true } }
+        }
+      });
+      const byId = new Map(students.map(s => [s.id, s]));
+
       registrations.forEach((reg) => {
+        const s = reg.student?.id ? byId.get(reg.student.id) : null;
         rows.push([
-          reg.student?.id || '',
-          reg.student?.user?.uniqueId || '',
-          reg.student?.name || '',
+          s?.user?.uniqueId || reg.student?.user?.uniqueId || '',
+          s?.name || reg.student?.name || '',
+          s?.user?.email || '',
+          s?.user?.phone || '',
           reg.selectedCategory || '',
-          '', // score to be filled by admin
-          ''  // remarks optional
+          s?.alias || '',
+          s?.playstationId || '',
+          s?.eaId || '',
+          s?.instagramHandle || '',
+          '', // placement to be filled
+          ''  // points to be filled
         ]);
       });
     } else {
       // Keep a few empty rows so the file is still editable immediately
-      for (let i = 0; i < 10; i++) rows.push(['', '', '', '', '', '']);
+      for (let i = 0; i < 10; i++) rows.push(['', '', '', '', '', '', '', '', '', '', '']);
     }
 
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet(rows);
     worksheet['!cols'] = [
-      { wch: 22 }, // studentId
       { wch: 18 }, // studentUID
       { wch: 26 }, // name
-      { wch: 40 }, // selectedCategory
-      { wch: 12 }, // score
-      { wch: 28 }  // remarks
+      { wch: 28 }, // email
+      { wch: 16 }, // phone
+      { wch: 44 }, // selectedCategory
+      { wch: 18 }, // alias
+      { wch: 18 }, // playstationId
+      { wch: 18 }, // eaId
+      { wch: 20 }, // instagramHandle
+      { wch: 18 }, // placement
+      { wch: 10 }  // points
     ];
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Results');
 
@@ -1059,14 +1309,14 @@ router.get('/:eventId/results/sample-sheet', authenticate, async (req, res, next
     const instructionRows = [
       ['Instructions'],
       [''],
-      ['Required columns:', 'studentId, score'],
-      ['Do not edit:', 'selectedCategory is auto-filled from registration (if available)'],
-      ['Optional columns:', 'studentUID, name, remarks'],
+      ['Required columns to fill:', 'placement, points'],
+      ['Stable identifier:', 'studentUID (do not edit)'],
+      ['Do not edit:', 'name/email/phone/selectedCategory fields are pre-filled'],
       [''],
       ['Notes:'],
-      ['- Keep "studentId" exactly as provided (do not change it).'],
-      ['- Enter numeric values in "score".'],
-      ['- You can leave "remarks" blank.'],
+      ['- placement can be: 1,2,3... OR text like "Winner", "Runner-Up", "Top 8".'],
+      ['- points must be a number.'],
+      ['- Rows with missing placement/points will be skipped with a clear error report.'],
     ];
     const instrSheet = XLSX.utils.aoa_to_sheet(instructionRows);
     instrSheet['!cols'] = [{ wch: 22 }, { wch: 80 }];
@@ -1117,6 +1367,108 @@ router.get('/:eventId/student-results',
   authenticate,
   eventController.getStudentResults.bind(eventController)
 );
+
+/**
+ * Leaderboard preview (admin/coach/incharge with resultUpload)
+ * GET /api/events/:eventId/leaderboard
+ *
+ * Notes:
+ * - Not visible to students until validation (students should use /student-results flow).
+ * - Intended for incharges/coaches/admins to review after upload.
+ */
+router.get('/:eventId/leaderboard', authenticate, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const user = req.user;
+
+    // Permission gate:
+    // - ADMIN: allowed
+    // - COACH: allowed (owner check is handled by service verify)
+    // - EVENT_INCHARGE: requires resultUpload permission
+    if (user?.role === 'EVENT_INCHARGE') {
+      const has = await checkEventPermission({ user, eventId, permissionKey: 'resultUpload' });
+      if (!has) return res.status(403).json(errorResponse('Access denied. Result upload permission required.', 403));
+    } else if (!['ADMIN', 'COACH', 'INSTITUTE', 'CLUB'].includes(user?.role)) {
+      return res.status(403).json(errorResponse('Access denied.', 403));
+    }
+
+    const resolved = await (new (require('../services/eventService'))()).resolveEventId(eventId);
+    const ev = await prisma.event.findUnique({
+      where: { id: resolved.id },
+      select: {
+        id: true,
+        uniqueId: true,
+        name: true,
+        sport: true,
+        level: true,
+        status: true,
+        eventFormat: true,
+        startDate: true,
+        endDate: true
+      }
+    });
+    if (!ev) return res.status(404).json(errorResponse('Event not found.', 404));
+
+    const regs = await prisma.eventRegistration.findMany({
+      where: { eventId: ev.id },
+      include: {
+        student: {
+          select: {
+            id: true,
+            name: true,
+            sport: true,
+            level: true,
+            alias: true,
+            playstationId: true,
+            eaId: true,
+            instagramHandle: true,
+            user: { select: { uniqueId: true, email: true, phone: true } }
+          }
+        }
+      },
+      take: 5000
+    });
+
+    const rows = regs.map(r => ({
+      registrationId: r.id,
+      studentId: r.studentId,
+      studentUID: r.student?.user?.uniqueId || null,
+      name: r.student?.name || null,
+      email: r.student?.user?.email || null,
+      phone: r.student?.user?.phone || null,
+      selectedCategory: r.selectedCategory || null,
+      points: r.points ?? r.score ?? null,
+      placement: r.placement ?? null,
+      placementText: r.placementText ?? null,
+      // Online/Hybrid extras
+      alias: r.student?.alias || null,
+      playstationId: r.playstationId || r.student?.playstationId || null,
+      eaId: r.eaId || r.student?.eaId || null,
+      instagramHandle: r.instagramHandle || r.student?.instagramHandle || null
+    }));
+
+    // Sort: placement asc if present, else points desc
+    rows.sort((a, b) => {
+      const pa = a.placement ?? 999999;
+      const pb = b.placement ?? 999999;
+      if (pa !== pb) return pa - pb;
+      const xa = Number(a.points ?? 0);
+      const xb = Number(b.points ?? 0);
+      return xb - xa;
+    });
+
+    const top = rows.filter(r => r.placement !== null).slice(0, 20);
+
+    return res.json(successResponse({
+      event: ev,
+      leaderboard: rows,
+      top
+    }, 'Leaderboard retrieved.'));
+  } catch (e) {
+    console.error('Leaderboard error:', e);
+    return res.status(500).json(errorResponse('Failed to load leaderboard.', 500));
+  }
+});
 
 // Download event results (legacy: latest file)
 router.get('/:eventId/results/download', 

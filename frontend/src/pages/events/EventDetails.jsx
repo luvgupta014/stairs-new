@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getStudentEventDetails, getEventById, registerForEvent, unregisterFromEvent, createStudentEventPaymentOrder, getEventFeeSettings, updateEventFeeSettings, getEventInchargeAssignedEvents, shareEventViaEmail, inchargeUpdateEventDetails } from '../../api';
+import { getStudentEventDetails, getEventById, registerForEvent, unregisterFromEvent, createStudentEventPaymentOrder, getEventFeeSettings, updateEventFeeSettings, getEventInchargeAssignedEvents, shareEventViaEmail, inchargeUpdateEventDetails, updateOnlineRegistrationDetails } from '../../api';
 import Spinner from '../../components/Spinner';
 import Button from '../../components/Button';
 import BackButton from '../../components/BackButton';
@@ -18,7 +18,7 @@ import { FaShare, FaCopy, FaEnvelope, FaUsers, FaTrophy, FaCertificate, FaInfoCi
 const EventDetails = () => {
   const { eventId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [event, setEvent] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -37,6 +37,11 @@ const EventDetails = () => {
     eaId: '',
     instagramHandle: ''
   });
+
+  // Post-registration backfill for past ONLINE/HYBRID registrations
+  const [showOnlineBackfillModal, setShowOnlineBackfillModal] = useState(false);
+  const [onlineBackfillSaving, setOnlineBackfillSaving] = useState(false);
+  const [onlineBackfillError, setOnlineBackfillError] = useState('');
 
   // Event Incharge permissions (per-event)
   const [inchargeAssignment, setInchargeAssignment] = useState(null);
@@ -134,6 +139,45 @@ const EventDetails = () => {
       instagramHandle: prev.instagramHandle || profile.instagramHandle || ''
     }));
   }, [event?.id, user?.id]);
+
+  const needsTournamentFields = useMemo(() => {
+    const fmt = (event?.eventFormat || '').toString().toUpperCase();
+    return fmt === 'ONLINE' || fmt === 'HYBRID';
+  }, [event?.eventFormat]);
+
+  const missingTournamentFields = useMemo(() => {
+    if (user?.role !== 'STUDENT') return [];
+    if (!event?.isRegistered) return [];
+    if (!needsTournamentFields) return [];
+    const c = event?.registrationContact || {};
+    const missing = [];
+    if (!String(c.email || '').trim()) missing.push('Email');
+    if (!String(c.phone || '').trim()) missing.push('Phone number');
+    if (!String(c.playstationId || '').trim()) missing.push('PlayStation ID');
+    if (!String(c.eaId || '').trim()) missing.push('EA ID');
+    if (!String(c.instagramHandle || '').trim()) missing.push('Instagram Handle');
+    return missing;
+  }, [user?.role, event?.isRegistered, event?.registrationContact, needsTournamentFields]);
+
+  // Ask once per event for past registrations missing tournament fields
+  useEffect(() => {
+    if (user?.role !== 'STUDENT') return;
+    if (!event?.id) return;
+    if (!event?.isRegistered) return;
+    if (!needsTournamentFields) return;
+    if (!missingTournamentFields.length) return;
+    try {
+      const key = `onlineDetailsPrompted:${event.id}`;
+      const already = localStorage.getItem(key);
+      if (!already) {
+        localStorage.setItem(key, '1');
+        setOnlineBackfillError('');
+        setShowOnlineBackfillModal(true);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [user?.role, event?.id, event?.isRegistered, needsTournamentFields, missingTournamentFields.length]);
 
   const loadEventDetails = async () => {
     try {
@@ -533,8 +577,7 @@ const EventDetails = () => {
         const fmt = (event?.eventFormat || '').toString().toUpperCase();
 
         // Online events: require contact fields (modern tournament flow)
-        const hasTournamentLinks = !!(event?.tournamentBracketUrl || event?.tournamentCommsUrl);
-        const needsTournamentFields = fmt === 'ONLINE' || (fmt === 'HYBRID' && hasTournamentLinks);
+        const needsTournamentFields = fmt === 'ONLINE' || fmt === 'HYBRID';
         if (needsTournamentFields) {
           const missing = [];
           const ce = (onlineReg.contactEmail || '').trim();
@@ -669,6 +712,43 @@ const EventDetails = () => {
       alert(e?.message || 'Failed to update selected category');
     } finally {
       setUpdatingCategory(false);
+    }
+  };
+
+  const openOnlineBackfillModal = () => {
+    const c = event?.registrationContact || {};
+    setOnlineReg((prev) => ({
+      contactEmail: prev.contactEmail || c.email || '',
+      contactPhone: prev.contactPhone || c.phone || '',
+      playstationId: prev.playstationId || c.playstationId || '',
+      eaId: prev.eaId || c.eaId || '',
+      instagramHandle: prev.instagramHandle || c.instagramHandle || ''
+    }));
+    setOnlineBackfillError('');
+    setShowOnlineBackfillModal(true);
+  };
+
+  const saveOnlineBackfill = async () => {
+    try {
+      setOnlineBackfillSaving(true);
+      setOnlineBackfillError('');
+      const payload = {
+        contactEmail: (onlineReg.contactEmail || '').trim(),
+        contactPhone: (onlineReg.contactPhone || '').trim(),
+        playstationId: (onlineReg.playstationId || '').trim(),
+        eaId: (onlineReg.eaId || '').trim(),
+        instagramHandle: (onlineReg.instagramHandle || '').trim()
+      };
+      const res = await updateOnlineRegistrationDetails(eventId, payload);
+      if (!res?.success) throw new Error(res?.message || 'Failed to save tournament details.');
+      setShowOnlineBackfillModal(false);
+      await loadEventDetails();
+      try { await refreshUser?.(); } catch { /* ignore */ }
+    } catch (e) {
+      const msg = e?.message || e?.userMessage || e?.error || 'Failed to save tournament details.';
+      setOnlineBackfillError(msg);
+    } finally {
+      setOnlineBackfillSaving(false);
     }
   };
 
@@ -1467,6 +1547,23 @@ const EventDetails = () => {
                       </div>
                     </div>
 
+                    {/* Past registrations: prompt to complete missing tournament fields (ONLINE/HYBRID) */}
+                    {missingTournamentFields.length ? (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                        <div className="text-sm font-bold text-amber-900">Complete Tournament Details</div>
+                        <div className="text-xs text-amber-800 mt-1">
+                          We’re missing: <span className="font-semibold">{missingTournamentFields.join(', ')}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={openOnlineBackfillModal}
+                          className="mt-3 inline-flex items-center px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold"
+                        >
+                          Add Details
+                        </button>
+                      </div>
+                    ) : null}
+
                     {/* Tournament communications shown after registration (ONLINE/HYBRID) */}
                     {(event?.eventFormat === 'ONLINE' || event?.eventFormat === 'HYBRID') && event?.tournamentCommsUrl ? (
                       <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
@@ -1758,6 +1855,112 @@ const EventDetails = () => {
           </div>
         </div>
       </div>
+
+      {/* Online Tournament Details Backfill Modal (for past registrations) */}
+      {showOnlineBackfillModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full mx-4 p-6">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="min-w-0">
+                <h2 className="text-xl font-bold text-gray-900">Tournament Details</h2>
+                <div className="text-sm text-gray-600 truncate">{event?.name || ''}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOnlineBackfillModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+                aria-label="Close"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="text-sm text-gray-600 mb-4">
+              Please add your tournament contact details. These are required for Online/Hybrid events.
+            </div>
+
+            {onlineBackfillError ? (
+              <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                {onlineBackfillError}
+              </div>
+            ) : null}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <input
+                  type="email"
+                  value={onlineReg.contactEmail}
+                  onChange={(e) => setOnlineReg((p) => ({ ...p, contactEmail: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="you@example.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+                <input
+                  type="tel"
+                  value={onlineReg.contactPhone}
+                  onChange={(e) => setOnlineReg((p) => ({ ...p, contactPhone: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="10-digit mobile"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">PlayStation ID *</label>
+                <input
+                  type="text"
+                  value={onlineReg.playstationId}
+                  onChange={(e) => setOnlineReg((p) => ({ ...p, playstationId: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Your PSN ID"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">EA ID *</label>
+                <input
+                  type="text"
+                  value={onlineReg.eaId}
+                  onChange={(e) => setOnlineReg((p) => ({ ...p, eaId: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Your EA ID"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Instagram Handle *</label>
+                <input
+                  type="text"
+                  value={onlineReg.instagramHandle}
+                  onChange={(e) => setOnlineReg((p) => ({ ...p, instagramHandle: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="@yourhandle"
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowOnlineBackfillModal(false)}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                disabled={onlineBackfillSaving}
+              >
+                Not now
+              </button>
+              <button
+                type="button"
+                onClick={saveOnlineBackfill}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={onlineBackfillSaving}
+              >
+                {onlineBackfillSaving ? 'Saving...' : 'Save Details'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Share Link Modal */}
       {showShareModal && (

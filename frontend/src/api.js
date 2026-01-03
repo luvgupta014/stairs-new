@@ -816,6 +816,17 @@ export const registerForEvent = async (eventId, data = {}) => {
   }
 };
 
+// Backfill/update online tournament fields for an existing student registration
+export const updateOnlineRegistrationDetails = async (eventId, data = {}) => {
+  try {
+    const response = await api.patch(`/api/events/${eventId}/register/online-details`, data);
+    return response.data;
+  } catch (error) {
+    console.error('Update online registration details error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 export const unregisterFromEvent = async (eventId) => {
   try {
     const response = await api.delete(`/api/events/${eventId}/register`);
@@ -1154,6 +1165,16 @@ export const getEventParticipants = async (eventId) => {
   }
 };
 
+export const getEventStudentProfile = async (eventId, studentId) => {
+  try {
+    const response = await api.get(`/api/events/${eventId}/students/${studentId}/profile`);
+    return response.data;
+  } catch (error) {
+    console.error('Get event student profile error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 // Bulk add/register existing students to an event (EVENT_INCHARGE with studentManagement)
 export const bulkAddEventParticipants = async (eventId, identifiers = []) => {
   try {
@@ -1290,6 +1311,16 @@ export const downloadSampleResultSheet = async (eventId, isAdmin = false) => {
       error?.message ||
       'Failed to download sample sheet';
     throw new Error(msg);
+  }
+};
+
+export const getEventLeaderboard = async (eventId) => {
+  try {
+    const response = await api.get(`/api/events/${eventId}/leaderboard`);
+    return response.data;
+  } catch (error) {
+    console.error('Get event leaderboard error:', error);
+    throw error.response?.data || error.message;
   }
 };
 

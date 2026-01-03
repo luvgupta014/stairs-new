@@ -19,6 +19,7 @@ const paymentRoutes = require('./routes/payment');
 const certificateRoutes = require('./routes/certificates');
 const eventInchargeRoutes = require('./routes/eventIncharge');
 const mapsRoutes = require('./routes/maps');
+const { startEventUpdateScheduler } = require('./jobs/eventUpdateScheduler');
 
 // Import middleware
 const { errorResponse } = require('./utils/helpers');
@@ -336,6 +337,13 @@ const server = app.listen(PORT, () => {
   if (process.env.NODE_ENV !== 'production') {
     'http://160.187.22.41:3008',
     console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
+  }
+
+  // Background event updates (notifications + best-effort email)
+  try {
+    startEventUpdateScheduler();
+  } catch (e) {
+    console.error('Failed to start event update scheduler:', e);
   }
 });
 

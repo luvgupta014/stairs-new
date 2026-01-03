@@ -98,7 +98,12 @@ router.put('/profile', authenticate, requireStudent, async (req, res) => {
       club,
       coachName,
       coachMobile,
-      phone
+      phone,
+      // Optional social/gaming IDs
+      playstationId,
+      eaId,
+      alias,
+      instagramHandle
     } = req.body;
 
     console.log('Updating student profile:', req.body);
@@ -130,6 +135,10 @@ router.put('/profile', authenticate, requireStudent, async (req, res) => {
     if (club !== undefined) updateData.club = club || null;
     if (coachName !== undefined) updateData.coachName = coachName || null;
     if (coachMobile !== undefined) updateData.coachMobile = coachMobile || null;
+    if (playstationId !== undefined) updateData.playstationId = playstationId || null;
+    if (eaId !== undefined) updateData.eaId = eaId || null;
+    if (alias !== undefined) updateData.alias = alias || null;
+    if (instagramHandle !== undefined) updateData.instagramHandle = instagramHandle || null;
 
     console.log('Update data:', updateData);
 
