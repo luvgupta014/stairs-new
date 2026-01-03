@@ -6,7 +6,7 @@ import Spinner from '../../components/Spinner';
 import Footer from '../../components/Footer';
 import CategorySelector from '../../components/CategorySelector';
 import logo from '../../assets/logo.png';
-import { FaCalendar, FaMapMarkerAlt, FaUsers, FaTrophy, FaClock, FaArrowRight, FaLock, FaGlobe, FaRupeeSign, FaDumbbell } from 'react-icons/fa';
+import { FaCalendar, FaMapMarkerAlt, FaTrophy, FaClock, FaArrowRight, FaLock, FaGlobe, FaRupeeSign, FaDumbbell } from 'react-icons/fa';
 
 /**
  * PublicEventDetails Page
@@ -192,11 +192,6 @@ const PublicEventDetails = () => {
     });
   };
 
-  const getParticipantPercentage = () => {
-    if (!event?.maxParticipants || event.maxParticipants === 0) return 0;
-    return Math.min((event.currentParticipants || 0) / event.maxParticipants * 100, 100);
-  };
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
@@ -350,30 +345,7 @@ const PublicEventDetails = () => {
                     </div>
                   </div>
 
-                  {/* Participants */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                          <FaUsers className="w-6 h-6 text-purple-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Participants</p>
-                          <p className="text-lg font-bold text-gray-900">
-                            {event.currentParticipants || 0} / {event.maxParticipants || 'Unlimited'}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    {event.maxParticipants && (
-                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-1000 ease-out"
-                          style={{ width: `${getParticipantPercentage()}%` }}
-                        ></div>
-                      </div>
-                    )}
-                  </div>
+                  {/* Participants count intentionally hidden on public page */}
 
                   {/* Registration Fee */}
                   {event.studentFeeEnabled && event.studentFeeAmount > 0 && (
