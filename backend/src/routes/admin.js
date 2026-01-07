@@ -2340,6 +2340,7 @@ router.get('/events/:eventId/payments', authenticate, requireAdmin, async (req, 
 
       return {
         id: p.id,
+        userId: p.userId,
         type: p.type,
         amount: Number(p.amount) || 0,
         currency: p.currency || 'INR',

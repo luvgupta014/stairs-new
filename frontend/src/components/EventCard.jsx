@@ -12,6 +12,7 @@ const EventCard = ({
   onAction = () => {} 
 }) => {
   if (!event) return null;
+  const isStudent = userRole === 'student' || userRole === 'STUDENT';
   const hasCategories = !!(event.categoriesAvailable && event.categoriesAvailable.trim());
 
   const parseCategoryPreview = (text) => {
@@ -215,7 +216,15 @@ const EventCard = ({
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
             </svg>
-            {event.currentParticipants || 0} / {event.maxParticipants} participants
+            {isStudent ? (
+              <span>
+                Registration: {event?.maxParticipants && (event.currentParticipants || 0) >= event.maxParticipants ? 'Full' : 'Open'}
+              </span>
+            ) : (
+              <span>
+                {event.currentParticipants || 0} / {event.maxParticipants} participants
+              </span>
+            )}
           </div>
         </div>
 
@@ -244,7 +253,7 @@ const EventCard = ({
       <div className="p-4 bg-gray-50 border-t border-gray-200">
         <div className="flex flex-wrap gap-2">
           {/* Student Actions */}
-          {(userRole === 'student' || userRole === 'STUDENT') && (
+          {isStudent && (
             <>
               <button
                 onClick={(e) => {

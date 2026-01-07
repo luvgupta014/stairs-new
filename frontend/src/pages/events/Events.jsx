@@ -14,6 +14,7 @@ import {
   unregisterFromEvent,
   getStudentEventDetails,
   createStudentEventPaymentOrder,
+  markStudentEventPaymentAttempt,
   getEventInchargeAssignedEvents
 } from '../../api';
 import { useLocation } from 'react-router-dom';
@@ -203,13 +204,26 @@ const Events = () => {
         },
         theme: { color: '#4F46E5' },
         modal: {
-          ondismiss: () => {
-            setPayingEventId(null);
+          ondismiss: async () => {
+            try {
+              await markStudentEventPaymentAttempt(eventId, options.order_id, 'CANCELLED', { source: 'razorpay_ondismiss' });
+            } catch (e) {
+              console.warn('⚠️ Failed to record cancelled attempt:', e?.message || e);
+            } finally {
+              setPayingEventId(null);
+            }
           }
         }
       };
 
       const rz = new window.Razorpay(options);
+      rz.on('payment.failed', async (resp) => {
+        try {
+          await markStudentEventPaymentAttempt(eventId, options.order_id, 'FAILED', resp?.error || resp || {});
+        } catch (e) {
+          console.warn('⚠️ Failed to record failed attempt:', e?.message || e);
+        }
+      });
       rz.open();
     } catch (e) {
       console.error('❌ Failed to open Razorpay:', e);

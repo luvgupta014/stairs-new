@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getStudentEventDetails, getEventById, registerForEvent, unregisterFromEvent, createStudentEventPaymentOrder, getEventFeeSettings, updateEventFeeSettings, getEventInchargeAssignedEvents, shareEventViaEmail, inchargeUpdateEventDetails, updateOnlineRegistrationDetails } from '../../api';
+import { getStudentEventDetails, getEventById, registerForEvent, unregisterFromEvent, createStudentEventPaymentOrder, markStudentEventPaymentAttempt, getEventFeeSettings, updateEventFeeSettings, getEventInchargeAssignedEvents, shareEventViaEmail, inchargeUpdateEventDetails, updateOnlineRegistrationDetails } from '../../api';
 import Spinner from '../../components/Spinner';
 import Button from '../../components/Button';
 import BackButton from '../../components/BackButton';
@@ -434,6 +434,7 @@ const EventDetails = () => {
       const userObj = userStr ? JSON.parse(userStr) : {};
       const profile = userObj.profile || {};
 
+      const orderIdForAttempt = orderData.orderId;
       const options = {
         key: orderData.razorpayKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
         amount: orderData.amount,
@@ -481,13 +482,26 @@ const EventDetails = () => {
         },
         theme: { color: '#4F46E5' },
         modal: {
-          ondismiss: () => {
-            setPayingEventId(null);
+          ondismiss: async () => {
+            try {
+              await markStudentEventPaymentAttempt(eventId, orderIdForAttempt, 'CANCELLED', { source: 'razorpay_ondismiss' });
+            } catch (e) {
+              console.warn('⚠️ Failed to record cancelled attempt:', e?.message || e);
+            } finally {
+              setPayingEventId(null);
+            }
           }
         }
       };
 
       const razorpay = new window.Razorpay(options);
+      razorpay.on('payment.failed', async (resp) => {
+        try {
+          await markStudentEventPaymentAttempt(eventId, orderIdForAttempt, 'FAILED', resp?.error || resp || {});
+        } catch (e) {
+          console.warn('⚠️ Failed to record failed attempt:', e?.message || e);
+        }
+      });
       razorpay.open();
     } catch (error) {
       console.error('❌ Error opening Razorpay:', error);
@@ -1521,16 +1535,24 @@ const EventDetails = () => {
                 <div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Registered</span>
-                    <span className="font-medium">{event.currentParticipants || 0}/{event.maxParticipants}</span>
+                    {user?.role === 'STUDENT' ? (
+                      <span className="font-medium text-gray-700">
+                        {event?.maxParticipants && (event.currentParticipants || 0) >= event.maxParticipants ? 'Full' : 'Open'}
+                      </span>
+                    ) : (
+                      <span className="font-medium">{event.currentParticipants || 0}/{event.maxParticipants}</span>
+                    )}
                   </div>
-                  <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-blue-600 h-2 rounded-full"
-                      style={{
-                        width: `${Math.min((event.currentParticipants || 0) / event.maxParticipants * 100, 100)}%`
-                      }}
-                    />
-                  </div>
+                  {user?.role !== 'STUDENT' && Number(event?.maxParticipants) > 0 ? (
+                    <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full"
+                        style={{
+                          width: `${Math.min(((event.currentParticipants || 0) / event.maxParticipants) * 100, 100)}%`
+                        }}
+                      />
+                    </div>
+                  ) : null}
                 </div>
 
                 {event.isRegistered ? (

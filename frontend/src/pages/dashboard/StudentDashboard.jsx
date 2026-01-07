@@ -10,6 +10,7 @@ import {
   getStudentCertificates,
   getStudentEventDetails,
   createStudentEventPaymentOrder,
+  markStudentEventPaymentAttempt,
   getNotifications,
   getNotificationCount
 } from '../../api';
@@ -605,20 +606,31 @@ const StudentDashboard = () => {
           color: '#059669'
         },
         modal: {
-          ondismiss: function() {
+          ondismiss: async function() {
             console.log('⚠️ Payment cancelled by user');
-            setPayingEventId(null);
-            setRegisteringEventId(null);
-            setCheckoutData(null);
-            setPendingEventId(null);
+            try {
+              await markStudentEventPaymentAttempt(eventId, options.order_id, 'CANCELLED', { source: 'razorpay_ondismiss' });
+            } catch (e) {
+              console.warn('⚠️ Failed to record cancelled attempt:', e?.message || e);
+            } finally {
+              setPayingEventId(null);
+              setRegisteringEventId(null);
+              setCheckoutData(null);
+              setPendingEventId(null);
+            }
           }
         }
       };
 
       // STEP 7: Open Razorpay checkout
       const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', function (response) {
+      rzp.on('payment.failed', async function (response) {
         console.error('❌ Razorpay payment failed:', response);
+        try {
+          await markStudentEventPaymentAttempt(eventId, options.order_id, 'FAILED', response?.error || response || {});
+        } catch (e) {
+          console.warn('⚠️ Failed to record failed attempt:', e?.message || e);
+        }
         alert(`Payment failed: ${response.error?.description || 'Unknown error'}. Please try again.`);
         setPayingEventId(null);
         setRegisteringEventId(null);
@@ -1501,7 +1513,9 @@ const StudentDashboard = () => {
                   <p className="text-sm text-gray-600">📍 {event.location || event.venue}</p>
                   <p className="text-sm text-gray-600">🏷️ {event.sport}</p>
                   <p className="text-sm text-gray-600">👨‍🏫 {event.organizer?.name || event.coach?.name || 'Unknown Organizer'}</p>
-                  <p className="text-sm text-gray-600">👥 {event.currentParticipants || 0}/{event.maxParticipants || 'Unlimited'}</p>
+                  <p className="text-sm text-gray-600">
+                    📝 Registration: {event?.maxParticipants && (event.currentParticipants || 0) >= event.maxParticipants ? 'Full' : 'Open'}
+                  </p>
                   {(event.fees !== undefined || event.eventFee !== undefined) && (
                     <p className="text-sm text-gray-600">💰 ₹{event.fees || event.eventFee || 0}</p>
                   )}

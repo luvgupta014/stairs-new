@@ -528,6 +528,84 @@ router.post('/create-order-student-event', authenticate, requireStudent, async (
   }
 });
 
+// Student event fee: mark payment attempt as CANCELLED / FAILED (so admins can follow up)
+router.post('/student-event/mark-attempt', authenticate, requireStudent, async (req, res) => {
+  try {
+    const { eventId, razorpayOrderId, status, details } = req.body || {};
+
+    if (!eventId) return res.status(400).json(errorResponse('Event ID is required.', 400));
+    if (!razorpayOrderId) return res.status(400).json(errorResponse('razorpayOrderId is required.', 400));
+    if (!status) return res.status(400).json(errorResponse('status is required.', 400));
+
+    const nextStatus = String(status || '').toUpperCase();
+    if (nextStatus !== 'CANCELLED' && nextStatus !== 'FAILED') {
+      return res.status(400).json(errorResponse('Invalid status. Allowed: CANCELLED, FAILED.', 400));
+    }
+
+    // Find the student-event payment for this order
+    const payment = await prisma.payment.findFirst({
+      where: {
+        userId: req.user.id,
+        razorpayOrderId: String(razorpayOrderId),
+        type: 'EVENT_STUDENT_FEE'
+      }
+    });
+
+    if (!payment) {
+      return res.status(404).json(errorResponse('Payment record not found for this order.', 404));
+    }
+
+    if (String(payment.status || '').toUpperCase() === 'SUCCESS') {
+      // Don't override successful payments
+      return res.json(successResponse({
+        paymentId: payment.id,
+        status: payment.status,
+        ignored: true
+      }, 'Payment already successful; status update ignored.'));
+    }
+
+    let meta = {};
+    try { meta = payment.metadata ? JSON.parse(payment.metadata) : {}; } catch { meta = {}; }
+
+    // Best-effort guard: ensure this payment is for this event
+    if (meta?.eventId && meta.eventId !== eventId) {
+      return res.status(400).json(errorResponse('Payment does not belong to the given event.', 400));
+    }
+
+    const nowIso = new Date().toISOString();
+    const attempt = meta?.paymentAttempt && typeof meta.paymentAttempt === 'object' ? meta.paymentAttempt : {};
+    const normalizedDetails = details && typeof details === 'object' ? details : { message: details };
+
+    const updatedMeta = {
+      ...meta,
+      paymentAttempt: {
+        ...attempt,
+        lastStatus: nextStatus,
+        lastUpdatedAt: nowIso,
+        ...(nextStatus === 'CANCELLED'
+          ? { cancelledAt: nowIso, cancelledDetails: normalizedDetails }
+          : { failedAt: nowIso, failedDetails: normalizedDetails })
+      }
+    };
+
+    const updated = await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: nextStatus,
+        metadata: JSON.stringify(updatedMeta)
+      }
+    });
+
+    return res.json(successResponse({
+      paymentId: updated.id,
+      status: updated.status
+    }, 'Payment attempt status recorded.'));
+  } catch (error) {
+    console.error('❌ Mark student event payment attempt error:', error);
+    return res.status(500).json(errorResponse('Failed to record payment attempt status.', 500));
+  }
+});
+
 // Verify payment (unified for all user types and event payments)
 router.post('/verify', authenticate, async (req, res) => {
   try {

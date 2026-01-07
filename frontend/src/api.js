@@ -849,6 +849,23 @@ export const createStudentEventPaymentOrder = async (eventId, data = {}) => {
   }
 };
 
+// Student event fee: record cancelled/failed attempts so admins can follow up
+export const markStudentEventPaymentAttempt = async (eventId, razorpayOrderId, status, details = {}) => {
+  try {
+    const response = await api.post('/api/payment/student-event/mark-attempt', {
+      eventId,
+      razorpayOrderId,
+      status,
+      details
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Mark student event payment attempt error:', error);
+    // Swallowing is handled by callers; keep consistent throw shape
+    throw error.response?.data || error.message;
+  }
+};
+
 // Coordinator/coach event fee payment (event payment for certificate/results workflow)
 export const createEventPaymentOrder = async (eventId) => {
   try {

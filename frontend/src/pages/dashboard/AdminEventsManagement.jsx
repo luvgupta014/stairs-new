@@ -3000,6 +3000,12 @@ const AdminEventsManagement = () => {
                           <div className="text-2xl font-bold text-yellow-600">
                             {payments.filter(p => p.status === 'PENDING' || p.status === 'CREATED').length}
                           </div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            Failed/Cancelled:{' '}
+                            <span className="font-semibold text-red-700">
+                              {payments.filter(p => p.status === 'FAILED' || p.status === 'CANCELLED').length}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -3034,8 +3040,48 @@ const AdminEventsManagement = () => {
                                   <div className="text-sm font-medium text-gray-900">
                                     {payment.type || payment.description || 'Payment'}
                                   </div>
+                                  {payment.user?.name && (
+                                    <div className="text-xs text-gray-600">
+                                      {payment.user.name}
+                                      {payment.user.uniqueId ? ` • ${payment.user.uniqueId}` : ''}
+                                    </div>
+                                  )}
+                                  {(payment.user?.studentProfile?.sport || payment.user?.studentProfile?.sport2 || payment.user?.studentProfile?.sport3) && (
+                                    <div className="text-xs text-gray-600">
+                                      Sport:{' '}
+                                      {[
+                                        payment.user.studentProfile?.sport,
+                                        payment.user.studentProfile?.sport2,
+                                        payment.user.studentProfile?.sport3
+                                      ].filter(Boolean).join(', ')}
+                                    </div>
+                                  )}
+                                  {(payment.user?.email || payment.user?.phone) && (
+                                    <div className="text-xs text-gray-600">
+                                      {payment.user.email ? `Email: ${payment.user.email}` : ''}
+                                      {payment.user.email && payment.user.phone ? ' • ' : ''}
+                                      {payment.user.phone ? `Phone: ${payment.user.phone}` : ''}
+                                    </div>
+                                  )}
                                   {payment.userId && (
-                                    <div className="text-xs text-gray-500">User ID: {payment.userId}</div>
+                                    <div className="text-[11px] text-gray-500">User ID: {payment.userId}</div>
+                                  )}
+                                  {payment.metadata?.selectedCategory && (
+                                    <div className="text-[11px] text-gray-500">
+                                      Category: <span className="font-medium">{payment.metadata.selectedCategory}</span>
+                                    </div>
+                                  )}
+                                  {(payment.status === 'FAILED' || payment.status === 'CANCELLED') && payment.metadata?.paymentAttempt && (
+                                    <div className="text-[11px] text-red-700">
+                                      {payment.status === 'CANCELLED' ? 'Cancelled' : 'Failed'}:{' '}
+                                      {payment.metadata?.paymentAttempt?.cancelledDetails?.reason ||
+                                        payment.metadata?.paymentAttempt?.cancelledDetails?.source ||
+                                        payment.metadata?.paymentAttempt?.failedDetails?.description ||
+                                        payment.metadata?.paymentAttempt?.failedDetails?.reason ||
+                                        payment.metadata?.paymentAttempt?.failedDetails?.error_description ||
+                                        payment.metadata?.paymentAttempt?.failedDetails?.message ||
+                                        '—'}
+                                    </div>
                                   )}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
