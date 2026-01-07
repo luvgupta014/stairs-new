@@ -9,6 +9,7 @@ import CheckoutModal from '../../components/CheckoutModal';
 import CategorySelector from '../../components/CategorySelector';
 import CategoryPicker from '../../components/CategoryPicker';
 import { FaShare, FaCopy, FaEnvelope, FaUsers, FaTrophy, FaCertificate, FaInfoCircle } from 'react-icons/fa';
+import { getEventFeeInfo } from '../../utils/eventFee';
 
 /**
  * EventDetails Page
@@ -42,6 +43,8 @@ const EventDetails = () => {
   const [showOnlineBackfillModal, setShowOnlineBackfillModal] = useState(false);
   const [onlineBackfillSaving, setOnlineBackfillSaving] = useState(false);
   const [onlineBackfillError, setOnlineBackfillError] = useState('');
+
+  const feeInfo = useMemo(() => getEventFeeInfo(event, user?.role), [event, user?.role]);
 
   // Event Incharge permissions (per-event)
   const [inchargeAssignment, setInchargeAssignment] = useState(null);
@@ -1328,9 +1331,11 @@ const EventDetails = () => {
                   ) : null}
                   
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">Event Fee</dt>
+                    <dt className="text-sm font-medium text-gray-500">
+                      {feeInfo.kind === 'STUDENT_REGISTRATION' ? 'Registration Fee' : 'Event Fee'}
+                    </dt>
                     <dd className="mt-1 text-sm text-gray-900">
-                      {event.eventFee > 0 ? `₹${event.eventFee}` : 'Free'}
+                      {feeInfo.label}
                     </dd>
                   </div>
                   

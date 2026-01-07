@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getStudentEvents, registerForEvent, getStudentEventRegistrations, createStudentEventPaymentOrder, getStudentEventDetails, markStudentEventPaymentAttempt } from '../../api';
 import Spinner from '../../components/Spinner';
 import CheckoutModal from '../../components/CheckoutModal';
+import { getEventFeeInfo } from '../../utils/eventFee';
 
 const StudentEvents = () => {
   const [availableEvents, setAvailableEvents] = useState([]);
@@ -573,7 +574,9 @@ const StudentEvents = () => {
                 {/* Events Grid */}
                 {filteredEvents.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredEvents.map(event => (
+                    {filteredEvents.map(event => {
+                      const feeInfo = getEventFeeInfo(event, 'STUDENT');
+                      return (
                       <div key={event.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
                         <div className="flex justify-between items-start mb-4">
                           <div className="min-w-0">
@@ -595,7 +598,7 @@ const StudentEvents = () => {
                           <p className="text-sm text-gray-600">
                             📝 Registration: {event?.maxParticipants && (event.currentParticipants || 0) >= event.maxParticipants ? 'Full' : 'Open'}
                           </p>
-                          <p className="text-sm text-gray-600">💰 ₹{event.fees || event.eventFee || 0}</p>
+                          <p className="text-sm text-gray-600">💰 {feeInfo.label}</p>
                         </div>
 
                         {event.description && (
@@ -615,7 +618,8 @@ const StudentEvents = () => {
                           </button>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-12">

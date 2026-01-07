@@ -1,4 +1,5 @@
 import React from 'react';
+import { getEventFeeInfo } from '../utils/eventFee';
 
 /**
  * EventCard Component
@@ -13,6 +14,7 @@ const EventCard = ({
 }) => {
   if (!event) return null;
   const isStudent = userRole === 'student' || userRole === 'STUDENT';
+  const feeInfo = getEventFeeInfo(event, userRole);
   const hasCategories = !!(event.categoriesAvailable && event.categoriesAvailable.trim());
 
   const parseCategoryPreview = (text) => {
@@ -160,9 +162,9 @@ const EventCard = ({
             {event.sport}
           </span>
           {getLevelBadge()}
-          {event.eventFee > 0 && (
+          {!feeInfo.isFree && (
             <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded">
-              ₹{event.eventFee}
+              {feeInfo.label}
             </span>
           )}
         </div>

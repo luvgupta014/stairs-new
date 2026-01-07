@@ -20,6 +20,7 @@ import Spinner from '../../components/Spinner';
 import Modal from '../../components/Modal';
 import CheckoutModal from '../../components/CheckoutModal';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { getEventFeeInfo } from '../../utils/eventFee';
 
 const StudentDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -1516,9 +1517,9 @@ const StudentDashboard = () => {
                   <p className="text-sm text-gray-600">
                     📝 Registration: {event?.maxParticipants && (event.currentParticipants || 0) >= event.maxParticipants ? 'Full' : 'Open'}
                   </p>
-                  {(event.fees !== undefined || event.eventFee !== undefined) && (
-                    <p className="text-sm text-gray-600">💰 ₹{event.fees || event.eventFee || 0}</p>
-                  )}
+                  {((event?.studentFeeEnabled && (event?.studentFeeAmount || 0) > 0) || event.fees !== undefined || event.eventFee !== undefined) ? (
+                    <p className="text-sm text-gray-600">💰 {getEventFeeInfo(event, 'STUDENT').label}</p>
+                  ) : null}
                 </div>
 
                 <div className="flex space-x-2">
