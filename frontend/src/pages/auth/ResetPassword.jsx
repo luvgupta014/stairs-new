@@ -123,9 +123,27 @@ const ResetPassword = () => {
       console.log('✅ Reset password result:', result);
 
       if (result.success) {
-        setSuccessMessage('Your password has been updated successfully.');
-        setRedirectIn(4);
-        setStatus('success');
+        const payload = result?.data || null;
+        if (payload?.requiresVerification && payload?.userId) {
+          setSuccessMessage('Password updated. Your account still needs email verification — we sent a new verification code.');
+          setStatus('success');
+          // Take them directly to verify flow
+          setTimeout(() => {
+            navigate('/verify-otp', {
+              replace: true,
+              state: {
+                userId: payload.userId,
+                email: payload.email || formData.email,
+                role: payload.role || 'STUDENT',
+                name: payload.name
+              }
+            });
+          }, 800);
+        } else {
+          setSuccessMessage('Your password has been updated successfully.');
+          setRedirectIn(4);
+          setStatus('success');
+        }
       } else {
         setError(result.message || 'Failed to reset password.');
       }

@@ -26,9 +26,10 @@ export const parseLoginError = (error, role = 'user') => {
       lowerMessage.includes('verification required') ||
       lowerMessage.includes('not verified')) {
     return {
+      code: 'ACCOUNT_NOT_VERIFIED',
       type: 'warning',
       title: 'Account Verification Required',
-      message: 'Your account is not verified yet. Please check your email for verification instructions.'
+      message: 'Your account is not verified yet. Please verify your email to continue.'
     };
   }
 

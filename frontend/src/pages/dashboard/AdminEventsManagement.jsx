@@ -43,6 +43,7 @@ const AdminEventsManagement = () => {
   const [editSaving, setEditSaving] = useState(false);
   const [editMsg, setEditMsg] = useState('');
   const [editErr, setEditErr] = useState('');
+  const [categoriesDraft, setCategoriesDraft] = useState('');
   const [analytics, setAnalytics] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [globalPaymentSettings, setGlobalPaymentSettings] = useState({ perStudentBaseCharge: '', defaultEventFee: '' });
@@ -176,6 +177,7 @@ const AdminEventsManagement = () => {
       setEditSaving(false);
       setEditMsg('');
       setEditErr('');
+      setCategoriesDraft('');
       return;
     }
     setEditEventOriginal(ev);
@@ -193,6 +195,7 @@ const AdminEventsManagement = () => {
       maxParticipants: ev.maxParticipants ?? '',
       categoriesAvailable: ev.categoriesAvailable || ''
     });
+    setCategoriesDraft(ev.categoriesAvailable || '');
     setEditMsg('');
     setEditErr('');
   }, [eventDetailsModal?.event?.id]);
@@ -2320,6 +2323,14 @@ const AdminEventsManagement = () => {
                     </div>
                   ) : payments && payments.length > 0 ? (
                     <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg p-4 border border-indigo-200">
+                      {(() => {
+                        const totalAmount = payments.reduce((sum, p) => sum + (parseFloat(p.amount || p.value || 0)), 0);
+                        const paidAmount = payments
+                          .filter(p => p.status === 'COMPLETED' || p.status === 'SUCCESS' || p.status === 'PAID')
+                          .reduce((sum, p) => sum + (parseFloat(p.amount || p.value || 0)), 0);
+                        const remainingAmount = Math.max(totalAmount - paidAmount, 0);
+                        const pct = totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 0;
+                        return (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
                           <div>
                           <div className="text-xs text-gray-600 mb-1">Total Payments</div>
@@ -2328,7 +2339,20 @@ const AdminEventsManagement = () => {
                         <div>
                           <div className="text-xs text-gray-600 mb-1">Total Amount</div>
                           <div className="text-lg font-bold text-green-600">
-                            ₹{payments.reduce((sum, p) => sum + (parseFloat(p.amount || p.value || 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            Paid:{' '}
+                            <span className="font-semibold text-green-700">
+                              ₹{paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>{' '}
+                            <span className="text-gray-500">({pct}%)</span>
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            Remaining:{' '}
+                            <span className="font-semibold text-amber-700">
+                              ₹{remainingAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
                           </div>
                           </div>
                         <div>
@@ -2344,6 +2368,8 @@ const AdminEventsManagement = () => {
                           </div>
                         </div>
                       </div>
+                        );
+                      })()}
                       <button
                         onClick={() => setModalTab('payments')}
                         className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
@@ -2596,19 +2622,14 @@ const AdminEventsManagement = () => {
                     <label htmlFor="stable-edit-categories" className="block text-sm font-medium text-gray-700 mb-1">
                       Categories Available (optional)
                     </label>
-                    <textarea
-                      id="stable-edit-categories"
-                      name="categoriesAvailable"
-                      rows={4}
-                      defaultValue={event?.categoriesAvailable || ''}
-                      disabled={editSaving}
-                      autoComplete="off"
-                      className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${editSaving ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
-                      placeholder={`Age Groups: Group I (11-12), U-14\nStrokes / Event Types: Freestyle, Backstroke\nDistances: 50m, 100m`}
+                    <CategorySelector
+                      value={categoriesDraft}
+                      onChange={setCategoriesDraft}
+                      readOnly={false}
+                      className={editSaving ? 'opacity-60 pointer-events-none' : ''}
                     />
-                    <p className="text-xs text-gray-500 mt-2">
-                      Tip: one section per line, format <span className="font-mono">Label: item1, item2</span>.
-                    </p>
+                    {/* This hidden field is what the stable form submit reads via FormData */}
+                    <input type="hidden" name="categoriesAvailable" value={categoriesDraft} />
                   </div>
 
                   <div className="flex items-center justify-end gap-3 pt-2">
@@ -2978,7 +2999,15 @@ const AdminEventsManagement = () => {
                   <div className="space-y-4">
                     {/* Payment Summary */}
                     <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg p-6 border border-indigo-200">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      {(() => {
+                        const totalAmount = payments.reduce((sum, p) => sum + (parseFloat(p.amount || p.value || 0)), 0);
+                        const paidAmount = payments
+                          .filter(p => p.status === 'COMPLETED' || p.status === 'SUCCESS' || p.status === 'PAID')
+                          .reduce((sum, p) => sum + (parseFloat(p.amount || p.value || 0)), 0);
+                        const remainingAmount = Math.max(totalAmount - paidAmount, 0);
+                        const pct = totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 0;
+                        return (
+                      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                         <div className="bg-white rounded-lg p-4 shadow-sm">
                           <div className="text-sm text-gray-600 mb-1">Total Payments</div>
                           <div className="text-2xl font-bold text-gray-900">{payments.length}</div>
@@ -2986,7 +3015,20 @@ const AdminEventsManagement = () => {
                         <div className="bg-white rounded-lg p-4 shadow-sm">
                           <div className="text-sm text-gray-600 mb-1">Total Amount</div>
                           <div className="text-2xl font-bold text-green-600">
-                            ₹{payments.reduce((sum, p) => sum + (parseFloat(p.amount || p.value || 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            Paid ₹{paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                            <span className="text-gray-500">({pct}%)</span>
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            Remaining ₹{remainingAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div className="bg-white rounded-lg p-4 shadow-sm">
+                          <div className="text-sm text-gray-600 mb-1">Paid Amount</div>
+                          <div className="text-2xl font-bold text-green-700">
+                            ₹{paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
                         </div>
                         <div className="bg-white rounded-lg p-4 shadow-sm">
@@ -3008,6 +3050,8 @@ const AdminEventsManagement = () => {
                           </div>
                         </div>
                       </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Payments List */}

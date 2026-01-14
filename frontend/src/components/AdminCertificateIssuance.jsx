@@ -2,11 +2,15 @@ import React, { useState, useEffect } from 'react';
 import {
   getEventRegistrationOrdersAdmin,
   notifyCoordinatorForCompletion,
+  previewNotifyCoordinatorForCompletion,
   generateCertificates,
   getEventCertificatesAdmin,
   updateEventStatus,
   getEventParticipants,
-  generateCertificatesFromRegistrationsAdmin
+  generateCertificatesFromRegistrationsAdmin,
+  getEligibleStudents,
+  issueCertificates,
+  issueWinnerCertificates
 } from '../api';
 import Spinner from './Spinner';
 import {
@@ -22,11 +26,16 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
   const [registrationOrders, setRegistrationOrders] = useState([]);
   const [certificates, setCertificates] = useState([]);
   const [participants, setParticipants] = useState([]);
+  const [eligibleStudents, setEligibleStudents] = useState([]);
+  const [selectedStudents, setSelectedStudents] = useState([]);
+  const [selectedWinners, setSelectedWinners] = useState([]); // [{studentId, position, positionText}]
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [notifying, setNotifying] = useState(false);
-  const [activeTab, setActiveTab] = useState('orders'); // orders, certificates
+  const [activeTab, setActiveTab] = useState('issue'); // issue, orders, certificates
   const [notifyMessage, setNotifyMessage] = useState('');
+  const [notifyPreview, setNotifyPreview] = useState(null);
+  const [notifyForceResend, setNotifyForceResend] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -69,12 +78,119 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
       } else {
         setParticipants([]);
       }
+
+      // Notify preview (who will be contacted)
+      try {
+        const pv = await previewNotifyCoordinatorForCompletion(event.id);
+        if (pv?.success) setNotifyPreview(pv.data);
+        else setNotifyPreview(null);
+      } catch {
+        setNotifyPreview(null);
+      }
+
+      // Eligible students for issuing certificates (email + in-app notifications happen on backend)
+      try {
+        const elig = await getEligibleStudents(event.id, null);
+        if (elig?.success) {
+          setEligibleStudents(elig.data?.eligibleStudents || []);
+        } else {
+          setEligibleStudents([]);
+        }
+      } catch {
+        setEligibleStudents([]);
+      }
     } catch (err) {
       console.error('Failed to load data:', err);
       const msg = err?.message || err?.response?.data?.message || 'Failed to load certificate issuance data.';
       setError(msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleEligible = (studentId) => {
+    setSelectedStudents((prev) => {
+      if (prev.includes(studentId)) return prev.filter((id) => id !== studentId);
+      return [...prev, studentId];
+    });
+  };
+
+  const handleSelectAllEligible = () => {
+    if (selectedStudents.length === eligibleStudents.length) setSelectedStudents([]);
+    else setSelectedStudents(eligibleStudents.map((s) => s.id));
+  };
+
+  const handleWinnerToggle = (studentId) => {
+    setSelectedWinners((prev) => {
+      const exists = prev.find((w) => w.studentId === studentId);
+      if (exists) return prev.filter((w) => w.studentId !== studentId);
+      return [...prev, { studentId, position: 1, positionText: 'Winner' }];
+    });
+  };
+
+  const handleWinnerPositionChange = (studentId, position, positionText) => {
+    setSelectedWinners((prev) =>
+      prev.map((w) =>
+        w.studentId === studentId
+          ? { ...w, position: parseInt(position, 10) || 1, positionText: positionText || w.positionText }
+          : w
+      )
+    );
+  };
+
+  const handleIssueParticipantCertificates = async () => {
+    if (!selectedStudents.length) {
+      setError('Please select at least one student.');
+      return;
+    }
+    if (!window.confirm(`Issue participation certificates to ${selectedStudents.length} student(s)?`)) return;
+
+    try {
+      setProcessing(true);
+      setError('');
+      const resp = await issueCertificates({ eventId: event.id, orderId: null, selectedStudents });
+      if (resp?.success) {
+        const d = resp.data || {};
+        setSuccess(
+          `✅ Issued ${d.issued || 0} certificate(s). Notifications: ${d.notificationsCreated || 0}, Emails: ${d.emailsSent || 0}.`
+        );
+        setSelectedStudents([]);
+        await loadData();
+      } else {
+        setError(resp?.message || 'Failed to issue certificates.');
+      }
+    } catch (e) {
+      setError(e?.message || 'Failed to issue certificates.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleIssueWinnerCertificates = async () => {
+    if (!selectedWinners.length) {
+      setError('Please select at least one winner.');
+      return;
+    }
+    if (!window.confirm(`Issue winner certificates to ${selectedWinners.length} student(s)?`)) return;
+
+    try {
+      setProcessing(true);
+      setError('');
+      const resp = await issueWinnerCertificates({ eventId: event.id, selectedStudentsWithPositions: selectedWinners });
+      if (resp?.success) {
+        const d = resp.data || {};
+        setSuccess(
+          `✅ Issued ${d.issued || 0} winner certificate(s). Notifications: ${d.notificationsCreated || 0}, Emails: ${d.emailsSent || 0}.`
+        );
+        setSelectedWinners([]);
+        await loadData();
+      } else {
+        setError(resp?.message || 'Failed to issue winner certificates.');
+      }
+    } catch (e) {
+      setError(e?.message || 'Failed to issue winner certificates.');
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -85,13 +201,27 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
     try {
       setNotifying(true);
       setError('');
-      const response = await notifyCoordinatorForCompletion(event.id, messageToSend);
+      const preview = notifyPreview;
+      const targetCount = preview?.totalTargets || preview?.targets?.length || null;
+      const warning = notifyForceResend
+        ? 'This will resend notifications/emails (even if already sent). Continue?'
+        : 'This will notify coordinators/assigned users. Continue?';
+      const confirmMsg = targetCount
+        ? `${warning}\n\nRecipients: ${targetCount}\n\nMessage:\n${messageToSend}`
+        : `${warning}\n\nMessage:\n${messageToSend}`;
+      if (!window.confirm(confirmMsg)) {
+        setNotifying(false);
+        return;
+      }
+
+      const response = await notifyCoordinatorForCompletion(event.id, messageToSend, { forceResend: notifyForceResend });
       if (response.success) {
         const data = response.data;
         setSuccess(
           `✅ Notification sent! ${data.notificationsCreated || 0} dashboard notification(s), ${data.emailsSent || 0} email(s). ${data.totalStudentsForCertificates || 0} certificate(s) eligible.`
         );
         setNotifyMessage('');
+        setNotifyForceResend(false);
         await loadData();
       } else {
         setError(response.message || 'Failed to send notification');
@@ -205,6 +335,16 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
       <div className="border-b border-gray-200 mb-6">
         <nav className="-mb-px flex space-x-8">
           <button
+            onClick={() => setActiveTab('issue')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'issue'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Issue Certificates ({eligibleStudents.length})
+          </button>
+          <button
             onClick={() => setActiveTab('orders')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'orders'
@@ -226,6 +366,116 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
           </button>
         </nav>
       </div>
+
+      {/* Issue Tab */}
+      {activeTab === 'issue' && (
+        <div className="space-y-6">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="text-sm font-semibold text-blue-900">What happens when you issue?</div>
+            <div className="text-sm text-blue-800 mt-1">
+              Athletes receive an <span className="font-semibold">email</span> (if available) and an in-app{' '}
+              <span className="font-semibold">notification alert</span> with their certificate link.
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="font-semibold text-gray-900">Eligible Participants</div>
+              <button
+                type="button"
+                onClick={handleSelectAllEligible}
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+              >
+                {selectedStudents.length === eligibleStudents.length ? 'Clear' : 'Select All'}
+              </button>
+            </div>
+            <div className="text-xs text-gray-600 mt-1">
+              Only eligible (paid/approved) participants are shown.
+            </div>
+
+            {eligibleStudents.length ? (
+              <div className="mt-4 max-h-72 overflow-auto border border-gray-200 rounded-lg">
+                {eligibleStudents.map((s) => (
+                  <label key={s.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                    <input
+                      type="checkbox"
+                      checked={selectedStudents.includes(s.id)}
+                      onChange={() => handleToggleEligible(s.id)}
+                    />
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-gray-900 truncate">
+                        {s.name} {s.uniqueId ? <span className="text-xs text-gray-500">• {s.uniqueId}</span> : null}
+                      </div>
+                      <div className="text-xs text-gray-600 truncate">{s.email || 'No email on file'}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600 mt-3">No eligible students found.</div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleIssueParticipantCertificates}
+              disabled={processing || selectedStudents.length === 0}
+              className="mt-4 w-full bg-emerald-600 text-white py-2 rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {processing ? 'Processing…' : `Issue Participation Certificates (${selectedStudents.length})`}
+            </button>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="font-semibold text-gray-900">Issue Winner Certificates</div>
+            <div className="text-xs text-gray-600 mt-1">Select winners from eligible participants and set their position.</div>
+
+            {eligibleStudents.length ? (
+              <div className="mt-4 max-h-72 overflow-auto border border-gray-200 rounded-lg">
+                {eligibleStudents.map((s) => {
+                  const w = selectedWinners.find((x) => x.studentId === s.id);
+                  return (
+                    <div key={s.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                      <input
+                        type="checkbox"
+                        checked={!!w}
+                        onChange={() => handleWinnerToggle(s.id)}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold text-gray-900 truncate">
+                          {s.name} {s.uniqueId ? <span className="text-xs text-gray-500">• {s.uniqueId}</span> : null}
+                        </div>
+                        <div className="text-xs text-gray-600 truncate">{s.email || 'No email on file'}</div>
+                      </div>
+                      {w ? (
+                        <select
+                          value={w.position}
+                          onChange={(e) => handleWinnerPositionChange(s.id, e.target.value, null)}
+                          className="text-sm border border-gray-300 rounded-md px-2 py-1"
+                        >
+                          <option value={1}>Winner</option>
+                          <option value={2}>Runner-Up</option>
+                          <option value={3}>Second Runner-Up</option>
+                        </select>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600 mt-3">No eligible students found.</div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleIssueWinnerCertificates}
+              disabled={processing || selectedWinners.length === 0}
+              className="mt-4 w-full bg-indigo-600 text-white py-2 rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {processing ? 'Processing…' : `Issue Winner Certificates (${selectedWinners.length})`}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Orders Tab */}
       {activeTab === 'orders' && (
@@ -271,21 +521,34 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
                 Send notifications to all coaches/coordinators who have <strong>paid</strong> registration orders for this event. They will receive both in-app notifications and email notifications.
               </p>
               {(() => {
-                const paidOrders = registrationOrders.filter(order => order.paymentStatus === 'PAID');
-                if (paidOrders.length === 0) {
+                const targets = notifyPreview?.targets || [];
+                const totalTargets = notifyPreview?.totalTargets ?? targets.length;
+                const emailable = targets.filter(t => !!t.email).length;
+                const already = notifyPreview?.alreadyNotifiedCount || 0;
+
+                if (!targets.length) {
                   return (
                     <div className="bg-gray-100 border border-gray-300 rounded-lg p-4 mb-3">
                       <p className="text-sm text-gray-700 font-medium">
-                        ⚠️ No paid registration orders found for this event. Coaches must complete payment before notifications can be sent.
+                        ⚠️ No recipients found to notify for this event (no paid coordinators and no assigned users).
                       </p>
                     </div>
                   );
                 }
+
                 return (
                   <div className="bg-green-100 border border-green-300 rounded-lg p-3 mb-3">
-                    <p className="text-sm text-green-800 font-medium">
-                      ✅ Found {paidOrders.length} paid registration order(s) ready for notification. {paidOrders.reduce((sum, o) => sum + (o.totalStudents || o.registrationItems?.length || 0), 0)} student certificate(s) will be ready.
+                    <p className="text-sm text-green-900 font-medium">
+                      ✅ Ready to notify {totalTargets} recipient(s). Emails available for {emailable}/{totalTargets}.
+                      {notifyPreview?.mode === 'PAID_ORDERS' && already > 0 ? (
+                        <span className="text-green-800"> (Already notified: {already})</span>
+                      ) : null}
                     </p>
+                    <div className="text-xs text-green-800 mt-1">
+                      Recipients:{' '}
+                      {targets.slice(0, 3).map((t) => t.name || t.email || t.userId).join(', ')}
+                      {targets.length > 3 ? ` +${targets.length - 3} more` : ''}
+                    </div>
                   </div>
                 );
               })()}
@@ -305,9 +568,17 @@ const AdminCertificateIssuance = ({ event, onSuccess }) => {
                     Leave empty to use default message, or customize to include payment details, certificate information, etc.
                   </p>
                 </div>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={notifyForceResend}
+                    onChange={(e) => setNotifyForceResend(e.target.checked)}
+                  />
+                  Force resend (use only if you must send again)
+                </label>
                 <button
                   onClick={handleNotifyCompletion}
-                  disabled={notifying || registrationOrders.filter(order => order.paymentStatus === 'PAID').length === 0}
+                  disabled={notifying || !(notifyPreview?.targets || []).length}
                   className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center"
                 >
                   {notifying ? (

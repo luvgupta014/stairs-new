@@ -614,10 +614,10 @@ const StudentDashboard = () => {
             } catch (e) {
               console.warn('⚠️ Failed to record cancelled attempt:', e?.message || e);
             } finally {
-              setPayingEventId(null);
-              setRegisteringEventId(null);
-              setCheckoutData(null);
-              setPendingEventId(null);
+            setPayingEventId(null);
+            setRegisteringEventId(null);
+            setCheckoutData(null);
+            setPendingEventId(null);
             }
           }
         }

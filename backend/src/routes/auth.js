@@ -528,6 +528,73 @@ router.post('/verify-otp', async (req, res) => {
   }
 });
 
+// Request a new verification OTP by email (for unverified users who can't log in).
+router.post('/request-verification-otp', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email || !validateEmail(email)) {
+      return res.status(400).json(errorResponse('Valid email is required.', 400));
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        studentProfile: true,
+        coachProfile: true,
+        instituteProfile: true,
+        clubProfile: true
+      }
+    });
+
+    // Avoid account enumeration
+    if (!user) {
+      return res.json(successResponse(null, 'If the email exists, a verification code has been sent.'));
+    }
+
+    if (user.isVerified) {
+      return res.json(successResponse({ alreadyVerified: true }, 'Account is already verified. Please log in.'));
+    }
+
+    const otp = generateOTP();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+
+    await prisma.oTPRecord.create({
+      data: {
+        userId: user.id,
+        code: otp,
+        type: 'REGISTRATION',
+        expiresAt: otpExpires,
+        isUsed: false
+      }
+    });
+
+    const profileName =
+      user.studentProfile?.name ||
+      user.coachProfile?.name ||
+      user.instituteProfile?.name ||
+      user.clubProfile?.name ||
+      user.name ||
+      'User';
+
+    try {
+      await sendOTPEmail(email, otp, profileName);
+    } catch (emailError) {
+      console.error('❌ Failed to send verification OTP email:', emailError?.message || emailError);
+      // Still respond success to avoid leaking state; user can retry.
+    }
+
+    return res.json(successResponse({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      name: profileName
+    }, 'Verification code sent.'));
+  } catch (error) {
+    console.error('❌ Request verification OTP error:', error);
+    return res.status(500).json(errorResponse('Failed to request verification code.', 500));
+  }
+});
+
 // Resend OTP
 router.post('/resend-otp', async (req, res) => {
   try {
@@ -1551,7 +1618,13 @@ router.post('/reset-password', async (req, res) => {
 
     console.log('🔍 Looking for user with email:', email);
     const user = await prisma.user.findUnique({
-      where: { email }
+      where: { email },
+      include: {
+        studentProfile: true,
+        coachProfile: true,
+        instituteProfile: true,
+        clubProfile: true
+      }
     });
 
     if (!user) {
@@ -1561,7 +1634,8 @@ router.post('/reset-password', async (req, res) => {
 
     console.log('✅ User found:', {
       id: user.id,
-      email: user.email
+      email: user.email,
+      isVerified: user.isVerified
     });
 
     // Find valid reset token in OTPRecord
@@ -1613,7 +1687,48 @@ router.post('/reset-password', async (req, res) => {
     });
 
     console.log('🎉 === RESET PASSWORD COMPLETED ===');
-    res.json(successResponse(null, 'Password reset successful.'));
+
+    // If the user is still unverified, proactively send a verification OTP so they can log in.
+    if (!user.isVerified) {
+      const vOtp = generateOTP();
+      const vOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
+      try {
+        await prisma.oTPRecord.create({
+          data: {
+            userId: user.id,
+            code: vOtp,
+            type: 'REGISTRATION',
+            expiresAt: vOtpExpires,
+            isUsed: false
+          }
+        });
+      } catch (e) {
+        console.warn('⚠️ Failed to create verification OTP record after password reset:', e?.message || e);
+      }
+
+      const profileName =
+        user.studentProfile?.name ||
+        user.coachProfile?.name ||
+        user.instituteProfile?.name ||
+        user.clubProfile?.name ||
+        user.name ||
+        'User';
+      try {
+        await sendOTPEmail(email, vOtp, profileName);
+      } catch (e) {
+        console.warn('⚠️ Failed to send verification OTP email after password reset:', e?.message || e);
+      }
+
+      return res.json(successResponse({
+        requiresVerification: true,
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        name: profileName
+      }, 'Password reset successful. Please verify your email to log in.'));
+    }
+
+    return res.json(successResponse({ requiresVerification: false }, 'Password reset successful.'));
 
   } catch (error) {
     console.error('❌ === RESET PASSWORD ERROR ===');

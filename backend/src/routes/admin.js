@@ -4535,7 +4535,8 @@ router.get('/events/:eventId/registrations/orders', authenticate, requireAdmin, 
 router.post('/events/:eventId/registrations/notify-completion', authenticate, requireAdmin, async (req, res) => {
   try {
     const { eventId } = req.params;
-    const { notifyMessage } = req.body;
+    const { notifyMessage, forceResend } = req.body;
+    const force = !!forceResend;
 
     const event = await prisma.event.findUnique({
       where: { id: eventId }
@@ -4558,6 +4559,7 @@ router.post('/events/:eventId/registrations/notify-completion', authenticate, re
         paymentStatus: 'PAID' // Only notify coaches who have paid
       },
       include: {
+        // include all scalar fields (adminNotified/adminNotes/etc) + relations below
         registrationItems: {
           include: {
             student: {
@@ -4641,56 +4643,90 @@ router.post('/events/:eventId/registrations/notify-completion', authenticate, re
         _sum: { amount: true }
       }).then(r => r?._sum?.amount || 0).catch(() => 0);
 
+      // Idempotency/cooldown: avoid spamming the same users repeatedly unless forceResend is set
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recent = !force
+        ? await prisma.notification.findMany({
+            where: {
+              type: 'ORDER_COMPLETED',
+              createdAt: { gte: cutoff },
+              data: { contains: eventId }
+            },
+            select: { userId: true }
+          }).catch(() => [])
+        : [];
+      const recentlyNotifiedUserIds = new Set((recent || []).map((n) => n.userId));
+
       const results = await Promise.all(uniqueTargets.map(async (t) => {
         let dbNotification = null;
         let emailSent = false;
         const errors = [];
+        const skipped = { notification: false, email: false };
 
-        try {
-          dbNotification = await prisma.notification.create({
-            data: {
-              userId: t.userId,
-              type: 'ORDER_COMPLETED',
-              title: `Event Completed - Certificates Ready: ${event.name}`,
-              message: fallbackMessage,
-              data: JSON.stringify({
-                eventId,
-                eventName: event.name,
-                participantCount,
-                totalPaidAmount: paidStudentAmount,
-                notificationType: 'event_completion',
-                actionUrl: `/events/${eventId}`
-              })
-            }
-          });
-        } catch (e) {
-          errors.push(`Failed to create notification: ${e.message}`);
+        const skipForUser = !force && recentlyNotifiedUserIds.has(t.userId);
+
+        if (!skipForUser) {
+          try {
+            dbNotification = await prisma.notification.create({
+              data: {
+                userId: t.userId,
+                type: 'ORDER_COMPLETED',
+                title: `Event Completed - Certificates Ready: ${event.name}`,
+                message: fallbackMessage,
+                data: JSON.stringify({
+                  eventId,
+                  eventName: event.name,
+                  participantCount,
+                  totalPaidAmount: paidStudentAmount,
+                  notificationType: 'event_completion',
+                  actionUrl: `/events/${eventId}`
+                })
+              }
+            });
+          } catch (e) {
+            errors.push(`Failed to create notification: ${e.message}`);
+          }
+        } else {
+          skipped.notification = true;
         }
 
         if (t.email) {
-          try {
-            const emailResult = await sendEventCompletionEmail(
-              t.email,
-              t.name,
-              event.name,
-              participantCount,
-              paidStudentAmount,
-              notifyMessage || ''
-            );
-            emailSent = !!emailResult?.success;
-            if (!emailSent) errors.push(`Failed to send email: ${emailResult?.error || 'unknown error'}`);
-          } catch (e) {
-            errors.push(`Error sending email: ${e.message}`);
+          if (!skipForUser) {
+            try {
+              const emailResult = await sendEventCompletionEmail(
+                t.email,
+                t.name,
+                event.name,
+                participantCount,
+                paidStudentAmount,
+                notifyMessage || ''
+              );
+              emailSent = !!emailResult?.success;
+              if (!emailSent) errors.push(`Failed to send email: ${emailResult?.error || 'unknown error'}`);
+            } catch (e) {
+              errors.push(`Error sending email: ${e.message}`);
+            }
+          } else {
+            skipped.email = true;
           }
         } else {
           errors.push('Missing email, skipping email notification');
         }
 
-        return { userId: t.userId, name: t.name, notificationCreated: !!dbNotification, emailSent, errors };
+        return {
+          userId: t.userId,
+          name: t.name,
+          email: t.email || null,
+          notificationCreated: !!dbNotification,
+          emailSent,
+          skipped,
+          errors
+        };
       }));
 
       const notificationsCreated = results.filter(r => r.notificationCreated).length;
       const emailsSent = results.filter(r => r.emailSent).length;
+      const skippedCount = results.filter(r => r.skipped?.notification && r.skipped?.email).length;
       const totalErrors = results.reduce((s, r) => s + (r.errors?.length || 0), 0);
 
       return res.json(successResponse({
@@ -4700,20 +4736,38 @@ router.post('/events/:eventId/registrations/notify-completion', authenticate, re
         notificationsCreated,
         emailsSent,
         totalErrors,
+        alreadyNotified: !force && skippedCount === uniqueTargets.length,
+        skippedCount,
         coachesNotified: results.map(r => ({
           coachId: null,
           coachName: r.name,
           notificationCreated: r.notificationCreated,
           emailSent: r.emailSent,
+          skipped: r.skipped,
           errors: r.errors
         })),
-        message: `Notified ${notificationsCreated}/${uniqueTargets.length} user(s) via dashboard. ${emailsSent}/${uniqueTargets.length} email(s) sent.${totalErrors > 0 ? ` ${totalErrors} warning(s) occurred.` : ''}`
+        message: (!force && skippedCount === uniqueTargets.length)
+          ? `Already notified recently. No new notifications were sent.`
+          : `Notified ${notificationsCreated}/${uniqueTargets.length} user(s) via dashboard. ${emailsSent}/${uniqueTargets.length} email(s) sent.${totalErrors > 0 ? ` ${totalErrors} warning(s) occurred.` : ''}`
       }, 'Completion notification sent successfully.'));
+    }
+
+    // Idempotency for paid registration orders: by default, notify only orders not yet adminNotified.
+    const ordersToNotify = force ? registrationOrders : registrationOrders.filter(o => !o.adminNotified);
+    if (!ordersToNotify.length) {
+      return res.json(successResponse({
+        ordersNotified: 0,
+        notificationsCreated: 0,
+        emailsSent: 0,
+        totalErrors: 0,
+        alreadyNotified: true,
+        message: 'Already notified. (Use Force Resend if you need to send again.)'
+      }, 'No new notifications to send.'));
     }
 
     // Mark orders as notified and ready for certificate generation
     const updatedOrders = await Promise.all(
-      registrationOrders.map(order =>
+      ordersToNotify.map(order =>
         prisma.eventRegistrationOrder.update({
           where: { id: order.id },
           data: {
@@ -4725,7 +4779,7 @@ router.post('/events/:eventId/registrations/notify-completion', authenticate, re
     );
 
     // Send notifications to coaches (database notifications + emails) with comprehensive error handling
-    const notificationPromises = registrationOrders.map(async (order) => {
+    const notificationPromises = ordersToNotify.map(async (order) => {
       let dbNotification = null;
       let emailSent = false;
       const errors = [];
@@ -4836,6 +4890,72 @@ router.post('/events/:eventId/registrations/notify-completion', authenticate, re
   } catch (error) {
     console.error('❌ Notify completion error:', error);
     res.status(500).json(errorResponse('Failed to send completion notification: ' + error.message, 500));
+  }
+});
+
+// Preview who will be notified for final payment & certificates (safe, no side effects)
+router.get('/events/:eventId/registrations/notify-completion/preview', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    if (!event) return res.status(404).json(errorResponse('Event not found.', 404));
+
+    const registrationOrders = await prisma.eventRegistrationOrder.findMany({
+      where: { eventId, paymentStatus: 'PAID' },
+      include: {
+        coach: { include: { user: { select: { id: true, email: true } } } }
+      }
+    });
+
+    if (registrationOrders.length > 0) {
+      const targets = registrationOrders.map((o) => ({
+        userId: o.coach?.user?.id || null,
+        name: o.coach?.name || 'Coordinator',
+        email: o.coach?.user?.email || null,
+        adminNotified: !!o.adminNotified,
+        studentCount: o.registrationItems?.length || 0,
+        orderId: o.id
+      })).filter(t => t.userId);
+
+      const uniqueTargets = Array.from(new Map(targets.map(t => [t.userId, t])).values());
+      return res.json(successResponse({
+        mode: 'PAID_ORDERS',
+        event: { id: event.id, name: event.name, status: event.status },
+        targets: uniqueTargets,
+        totalTargets: uniqueTargets.length,
+        alreadyNotifiedCount: uniqueTargets.filter(t => t.adminNotified).length
+      }, 'Preview loaded.'));
+    }
+
+    // Fallback targets: event owner + assigned users
+    const targets = [];
+    const owner = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { coach: { select: { userId: true, name: true, user: { select: { email: true } } } } }
+    }).catch(() => null);
+    if (owner?.coach?.userId) {
+      targets.push({ userId: owner.coach.userId, name: owner.coach.name || 'Coordinator', email: owner.coach.user?.email || null });
+    }
+
+    const assignments = await prisma.eventAssignment.findMany({
+      where: { eventId, role: { in: ['INCHARGE', 'COORDINATOR', 'TEAM'] } },
+      include: { user: { select: { id: true, email: true, name: true } } }
+    }).catch(() => []);
+    assignments.forEach(a => {
+      if (a?.user?.id) targets.push({ userId: a.user.id, name: a.user.name || 'Assigned User', email: a.user.email || null });
+    });
+
+    const uniqueTargets = Array.from(new Map(targets.map(t => [t.userId, t])).values()).filter(t => t.userId);
+    return res.json(successResponse({
+      mode: 'ASSIGNED_USERS',
+      event: { id: event.id, name: event.name, status: event.status },
+      targets: uniqueTargets,
+      totalTargets: uniqueTargets.length
+    }, 'Preview loaded.'));
+  } catch (e) {
+    console.error('❌ Notify preview error:', e);
+    return res.status(500).json(errorResponse('Failed to load preview.', 500));
   }
 });
 

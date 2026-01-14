@@ -410,10 +410,10 @@ const StudentEvents = () => {
             } catch (e) {
               console.warn('⚠️ Failed to record cancelled attempt:', e?.message || e);
             } finally {
-              setPayingEventId(null);
-              setRegistering(null);
-              setCheckoutData(null);
-              setPendingEventId(null);
+            setPayingEventId(null);
+            setRegistering(null);
+            setCheckoutData(null);
+            setPendingEventId(null);
             }
           }
         }

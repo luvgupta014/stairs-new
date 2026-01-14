@@ -192,6 +192,49 @@ const PublicEventDetails = () => {
     });
   };
 
+  // Render description in a readable, consistent way across devices:
+  // - preserves paragraphs and line breaks
+  // - supports simple bullet lists (lines starting with "-", "•", "*")
+  const renderFormattedDescription = (description) => {
+    const raw = String(description || '').replace(/\r\n/g, '\n').trim();
+    if (!raw) return null;
+
+    const blocks = raw.split(/\n{2,}/g);
+    const nodes = [];
+
+    blocks.forEach((block, bi) => {
+      const lines = block.split('\n');
+      const bulletLines = lines.filter((l) => /^\s*[-•*]\s+/.test(l));
+      const isAllBullets = bulletLines.length === lines.length && lines.length > 0;
+
+      if (isAllBullets) {
+        nodes.push(
+          <ul key={`b-${bi}`} className="list-disc pl-6 space-y-1">
+            {lines.map((l, li) => (
+              <li key={`b-${bi}-${li}`}>{l.replace(/^\s*[-•*]\s+/, '').trim()}</li>
+            ))}
+          </ul>
+        );
+      } else {
+        // Paragraph with preserved single newlines
+        nodes.push(
+          <p key={`p-${bi}`} className="whitespace-pre-line">
+            {block}
+          </p>
+        );
+      }
+    });
+
+    return <div className="space-y-4">{nodes}</div>;
+  };
+
+  const getDescriptionPreview = (description, maxChars = 180) => {
+    const raw = String(description || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return '';
+    if (raw.length <= maxChars) return raw;
+    return `${raw.slice(0, maxChars - 1)}…`;
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
@@ -259,9 +302,9 @@ const PublicEventDetails = () => {
         </div>
 
         {/* Main Content */}
-        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-8">
+        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-8">
           {/* Event Title Card */}
-          <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-3xl shadow-2xl overflow-hidden transform transition-all hover:shadow-3xl mb-8">
+          <div className="bg-indigo-700 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-3xl shadow-2xl overflow-hidden transform transition-all hover:shadow-3xl mb-8">
             <div className="p-8 md:p-12 text-white">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
@@ -272,11 +315,11 @@ const PublicEventDetails = () => {
                 </span>
               </div>
               <h1 className="text-4xl md:text-5xl font-bold mb-4 leading-tight">{event.name}</h1>
-              {event.description && (
-                <p className="text-blue-100 text-lg md:text-xl leading-relaxed max-w-3xl">
-                  {event.description}
+              {event.description ? (
+                <p className="text-white/90 text-lg md:text-xl leading-relaxed max-w-3xl">
+                  {getDescriptionPreview(event.description)}
                 </p>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -291,6 +334,16 @@ const PublicEventDetails = () => {
                   </div>
                   Event Details
                 </h2>
+
+                {/* About (high-contrast, formatted) */}
+                {event.description ? (
+                  <div className="mb-8 pb-6 border-b border-gray-100">
+                    <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">About this event</p>
+                    <div className="text-base text-gray-900 leading-relaxed break-words">
+                      {renderFormattedDescription(event.description)}
+                    </div>
+                  </div>
+                ) : null}
                 
                 <div className="space-y-6">
                   {/* Sport */}

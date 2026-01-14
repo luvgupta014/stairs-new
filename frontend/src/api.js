@@ -442,6 +442,16 @@ export const forgotPassword = async (email) => {
   }
 };
 
+// Request a fresh email verification OTP for an existing (unverified) account.
+export const requestVerificationOtp = async (email) => {
+  try {
+    const response = await api.post('/api/auth/request-verification-otp', { email });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
 // Add reset password API
 export const resetPassword = async (email, otp, newPassword) => {
   try {
@@ -1810,11 +1820,21 @@ export const getEventRegistrationOrdersAdmin = async (eventId) => {
   }
 };
 
-export const notifyCoordinatorForCompletion = async (eventId, notifyMessage = '') => {
+export const notifyCoordinatorForCompletion = async (eventId, notifyMessage = '', options = {}) => {
   try {
     const response = await api.post(`/api/admin/events/${eventId}/registrations/notify-completion`, {
-      notifyMessage
+      notifyMessage,
+      forceResend: !!options.forceResend
     });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+export const previewNotifyCoordinatorForCompletion = async (eventId) => {
+  try {
+    const response = await api.get(`/api/admin/events/${eventId}/registrations/notify-completion/preview`);
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;

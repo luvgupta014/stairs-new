@@ -32,12 +32,12 @@ router.get('/admin/events/:eventId/payments', authenticate, async (req, res) => 
         return JSON.parse(v);
       } catch {
         return {};
-      }
+    }
     };
 
     // Payments model (covers student participation fee attempts; metadata.eventId ties to event)
     const rawPayments = await prisma.payment.findMany({
-      where: {
+          where: {
         // metadata is a string; broad filter then narrow via JSON.parse
         metadata: { contains: eventId }
       },
@@ -66,9 +66,9 @@ router.get('/admin/events/:eventId/payments', authenticate, async (req, res) => 
               }
             }
           }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
+            }
+          },
+          orderBy: { createdAt: 'desc' }
     }).catch(() => []);
 
     const paymentsForEvent = (rawPayments || [])

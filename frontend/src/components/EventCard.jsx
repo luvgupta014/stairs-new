@@ -1,5 +1,6 @@
 import React from 'react';
 import { getEventFeeInfo } from '../utils/eventFee';
+import { parseCategoriesAvailable } from '../utils/eventCategories';
 
 /**
  * EventCard Component
@@ -18,20 +19,10 @@ const EventCard = ({
   const hasCategories = !!(event.categoriesAvailable && event.categoriesAvailable.trim());
 
   const parseCategoryPreview = (text) => {
-    if (!text || typeof text !== 'string' || !text.trim()) return [];
-    // Prefer showing Age Groups if present; otherwise show the first section.
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    const findLine = (keywords) =>
-      lines.find(l => {
-        const lower = l.toLowerCase();
-        return keywords.some(k => lower.includes(k));
-      });
-    const ageLine = findLine(['age group', 'age', 'group', 'division', 'category', 'class', 'weight']);
-    const target = ageLine || lines[0] || '';
-    const match = target.match(/^([^:]+):\s*(.+)$/);
-    if (!match) return [];
-    const values = match[2].split(',').map(v => v.trim()).filter(Boolean);
-    return values.slice(0, 4);
+    const parsed = parseCategoriesAvailable(text);
+    const firstSection = (parsed.sections || [])[0];
+    if (!firstSection?.items?.length) return [];
+    return firstSection.items.slice(0, 4);
   };
 
   const getLevelBadge = () => {

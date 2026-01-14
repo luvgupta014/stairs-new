@@ -491,7 +491,7 @@ const EventDetails = () => {
             } catch (e) {
               console.warn('⚠️ Failed to record cancelled attempt:', e?.message || e);
             } finally {
-              setPayingEventId(null);
+            setPayingEventId(null);
             }
           }
         }
@@ -1545,18 +1545,18 @@ const EventDetails = () => {
                         {event?.maxParticipants && (event.currentParticipants || 0) >= event.maxParticipants ? 'Full' : 'Open'}
                       </span>
                     ) : (
-                      <span className="font-medium">{event.currentParticipants || 0}/{event.maxParticipants}</span>
+                    <span className="font-medium">{event.currentParticipants || 0}/{event.maxParticipants}</span>
                     )}
                   </div>
                   {user?.role !== 'STUDENT' && Number(event?.maxParticipants) > 0 ? (
-                    <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full"
-                        style={{
+                  <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full"
+                      style={{
                           width: `${Math.min(((event.currentParticipants || 0) / event.maxParticipants) * 100, 100)}%`
-                        }}
-                      />
-                    </div>
+                      }}
+                    />
+                  </div>
                   ) : null}
                 </div>
 

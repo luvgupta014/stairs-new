@@ -1,558 +1,253 @@
-import React, { useState, useEffect } from 'react';
-import { FaPlus, FaTimes } from 'react-icons/fa';
+import React, { useEffect, useMemo, useState } from 'react';
+import { FaPlus, FaTimes, FaArrowUp, FaArrowDown } from 'react-icons/fa';
+import { parseCategoriesAvailable, serializeCategoriesAvailable } from '../utils/eventCategories';
 
 /**
- * CategorySelector Component
- * Provides an easy-to-use interface for adding event categories
- * Replaces the free-form textarea with structured inputs
- * 
- * @param {string} value - Current categories text value
- * @param {function} onChange - Callback when categories change
- * @param {string} className - Additional CSS classes
- * @param {string} ageGroupLabel - Custom label for age groups section (default: "Age Groups")
- * @param {string} strokeLabel - Custom label for strokes section (default: "Strokes / Event Types")
- * @param {string} distanceLabel - Custom label for distances section (default: "Distances")
- * @param {boolean} readOnly - If true, displays categories in read-only mode (no editing)
+ * CategorySelector (v2)
+ * - Admin/creator: modern category builder UI (any number of sections + items)
+ * - Athlete/public: readOnly display of sections + items
+ *
+ * Backwards compatible: reads legacy text format; writes JSON v2 format.
  */
-const CategorySelector = ({ 
-  value = '', 
-  onChange, 
-  className = '',
-  ageGroupLabel = 'Age Groups',
-  strokeLabel = 'Strokes / Event Types',
-  distanceLabel = 'Distances',
-  readOnly = false
-}) => {
-  // Parse existing value into structured data (flexible parsing for different label names)
-  const parseCategories = (text) => {
-    if (!text) return { ageGroups: [], strokes: [], distances: [] };
-    
-    const lines = text.split('\n').filter(line => line.trim());
-    const result = { ageGroups: [], strokes: [], distances: [] };
-    
-    lines.forEach(line => {
-      const lower = line.toLowerCase();
-      // Flexible parsing - check for common variations
-      // Age Groups section (first section typically)
-      if (lower.includes('age group') || lower.includes('age') || lower.includes('group') || 
-          lower.includes('division') || lower.includes('category') || lower.includes('class')) {
-        // Match pattern: "Label: value1, value2, ..."
-        const match = line.match(/^[^:]+:\s*(.+)/i);
-        if (match && !result.ageGroups.length) { // Only if not already filled
-          result.ageGroups = match[1].split(',').map(g => g.trim()).filter(Boolean);
-        }
-      } 
-      // Strokes/Event Types section (middle section typically)
-      else if (lower.includes('stroke') || lower.includes('event type') || 
-               lower.includes('style') || lower.includes('type') || lower.includes('event')) {
-        const match = line.match(/^[^:]+:\s*(.+)/i);
-        if (match && !result.strokes.length) {
-          result.strokes = match[1].split(',').map(s => s.trim()).filter(Boolean);
-        }
-      } 
-      // Distances section (last section typically)
-      else if (lower.includes('distance') || lower.includes('length') || 
-               lower.includes('meter') || lower.includes('metre') || lower.includes('km')) {
-        const match = line.match(/^[^:]+:\s*(.+)/i);
-        if (match && !result.distances.length) {
-          result.distances = match[1].split(',').map(d => d.trim()).filter(Boolean);
-        }
-      }
-      // Fallback: if line has ":" and values, try to parse
-      else if (line.includes(':')) {
-        const match = line.match(/^([^:]+):\s*(.+)/i);
-        if (match) {
-          const label = match[1].trim().toLowerCase();
-          const values = match[2].split(',').map(v => v.trim()).filter(Boolean);
-          
-          // Try to categorize based on label
-          if (!result.ageGroups.length && (label.includes('age') || label.includes('group') || label.includes('division'))) {
-            result.ageGroups = values;
-          } else if (!result.strokes.length && (label.includes('stroke') || label.includes('type') || label.includes('event'))) {
-            result.strokes = values;
-          } else if (!result.distances.length && (label.includes('distance') || label.includes('length'))) {
-            result.distances = values;
-          }
-        }
-      }
-    });
-    
-    return result;
-  };
+const CategorySelector = ({ value = '', onChange = () => {}, className = '', readOnly = false }) => {
+  const initialModel = useMemo(() => parseCategoriesAvailable(value), [value]);
+  const [model, setModel] = useState(initialModel);
+  const [newSectionLabel, setNewSectionLabel] = useState('');
+  const [newItemBySection, setNewItemBySection] = useState({}); // { [sectionId]: string }
 
-  const [categories, setCategories] = useState(() => parseCategories(value));
-  const [newAgeGroup, setNewAgeGroup] = useState('');
-  const [newStroke, setNewStroke] = useState('');
-  const [newDistance, setNewDistance] = useState('');
-  const [showCustomNames, setShowCustomNames] = useState(false);
-  const [customAgeGroupLabel, setCustomAgeGroupLabel] = useState(ageGroupLabel);
-  const [customStrokeLabel, setCustomStrokeLabel] = useState(strokeLabel);
-  const [customDistanceLabel, setCustomDistanceLabel] = useState(distanceLabel);
-  
-  // Use custom labels if set, otherwise use props
-  const finalAgeGroupLabel = customAgeGroupLabel || ageGroupLabel;
-  const finalStrokeLabel = customStrokeLabel || strokeLabel;
-  const finalDistanceLabel = customDistanceLabel || distanceLabel;
-
-  // Update when value prop changes
   useEffect(() => {
-    if (value !== undefined && value !== null) {
-      setCategories(parseCategories(value || ''));
-    }
+    setModel(parseCategoriesAvailable(value));
   }, [value]);
 
-  // Format categories back to text (using custom labels if provided)
-  const formatCategories = (cats) => {
-    const parts = [];
-    if (cats.ageGroups.length > 0) {
-      parts.push(`${finalAgeGroupLabel}: ${cats.ageGroups.join(', ')}`);
-    }
-    if (cats.strokes.length > 0) {
-      parts.push(`${finalStrokeLabel}: ${cats.strokes.join(', ')}`);
-    }
-    if (cats.distances.length > 0) {
-      parts.push(`${finalDistanceLabel}: ${cats.distances.join(', ')}`);
-    }
-    return parts.join('\n');
-  };
-
-  // Update parent when categories change (only in edit mode)
+  // Emit changes upward (edit mode only)
   useEffect(() => {
-    if (!readOnly) {
-      const formatted = formatCategories(categories);
-      onChange(formatted);
-    }
+    if (readOnly) return;
+    onChange(serializeCategoriesAvailable(model));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categories, readOnly]);
+  }, [model, readOnly]);
 
-  const addAgeGroup = () => {
-    if (newAgeGroup.trim() && !categories.ageGroups.includes(newAgeGroup.trim())) {
-      setCategories(prev => ({
-        ...prev,
-        ageGroups: [...prev.ageGroups, newAgeGroup.trim()]
-      }));
-      setNewAgeGroup('');
-    }
+  const sections = model?.sections || [];
+
+  const addSection = () => {
+    const label = newSectionLabel.trim();
+    if (!label) return;
+    const exists = sections.some((s) => String(s.label).toLowerCase() === label.toLowerCase());
+    if (exists) return;
+    setModel((prev) => ({
+      ...(prev || {}),
+      sections: [...(prev?.sections || []), { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, label, items: [] }]
+    }));
+    setNewSectionLabel('');
   };
 
-  const removeAgeGroup = (group) => {
-    setCategories(prev => ({
-      ...prev,
-      ageGroups: prev.ageGroups.filter(g => g !== group)
+  const removeSection = (sectionId) => {
+    setModel((prev) => ({
+      ...(prev || {}),
+      sections: (prev?.sections || []).filter((s) => s.id !== sectionId)
+    }));
+    setNewItemBySection((prev) => {
+      const next = { ...(prev || {}) };
+      delete next[sectionId];
+      return next;
+    });
+  };
+
+  const moveSection = (sectionId, dir) => {
+    const idx = sections.findIndex((s) => s.id === sectionId);
+    if (idx < 0) return;
+    const nextIdx = dir === 'up' ? idx - 1 : idx + 1;
+    if (nextIdx < 0 || nextIdx >= sections.length) return;
+    const copy = [...sections];
+    const [item] = copy.splice(idx, 1);
+    copy.splice(nextIdx, 0, item);
+    setModel((prev) => ({ ...(prev || {}), sections: copy }));
+  };
+
+  const addItem = (sectionId) => {
+    const raw = String(newItemBySection?.[sectionId] || '').trim();
+    if (!raw) return;
+    setModel((prev) => ({
+      ...(prev || {}),
+      sections: (prev?.sections || []).map((s) => {
+        if (s.id !== sectionId) return s;
+        const items = Array.from(new Set([...(s.items || []).map((x) => String(x).trim()), raw])).filter(Boolean);
+        return { ...s, items };
+      })
+    }));
+    setNewItemBySection((prev) => ({ ...(prev || {}), [sectionId]: '' }));
+  };
+
+  const removeItem = (sectionId, item) => {
+    setModel((prev) => ({
+      ...(prev || {}),
+      sections: (prev?.sections || []).map((s) => {
+        if (s.id !== sectionId) return s;
+        return { ...s, items: (s.items || []).filter((x) => x !== item) };
+      })
     }));
   };
 
-  const addStroke = () => {
-    if (newStroke.trim() && !categories.strokes.includes(newStroke.trim())) {
-      setCategories(prev => ({
-        ...prev,
-        strokes: [...prev.strokes, newStroke.trim()]
-      }));
-      setNewStroke('');
-    }
-  };
-
-  const removeStroke = (stroke) => {
-    setCategories(prev => ({
-      ...prev,
-      strokes: prev.strokes.filter(s => s !== stroke)
-    }));
-  };
-
-  const addDistance = () => {
-    if (newDistance.trim() && !categories.distances.includes(newDistance.trim())) {
-      setCategories(prev => ({
-        ...prev,
-        distances: [...prev.distances, newDistance.trim()]
-      }));
-      setNewDistance('');
-    }
-  };
-
-  const removeDistance = (distance) => {
-    setCategories(prev => ({
-      ...prev,
-      distances: prev.distances.filter(d => d !== distance)
-    }));
-  };
-
-  // Common strokes for swimming
-  const commonStrokes = ['Freestyle', 'Backstroke', 'Breaststroke', 'Butterfly', 'Individual Medley'];
-  const commonDistances = ['25m', '50m', '100m', '200m', '400m', '800m', '1500m'];
-  const commonAgeGroups = [
-    'U-8',
-    'U-10',
-    'U-12',
-    'U-14',
-    'U-16',
-    'U-18',
-    'Senior (18+)',
-    'Open'
-  ];
-
-  // Read-only display mode
+  // Read-only display
   if (readOnly) {
-    if (!value || !value.trim()) {
+    if (!sections.length) {
       return (
-        <div className={`${className}`}>
-          <p className="text-sm text-gray-500 italic">No categories specified for this event.</p>
-        </div>
-      );
-    }
-
-    // Parse and display in a nice formatted way
-    const parsed = parseCategories(value);
-    const hasAnyCategories = parsed.ageGroups.length > 0 || parsed.strokes.length > 0 || parsed.distances.length > 0;
-
-    if (!hasAnyCategories) {
-      return (
-        <div className={`${className}`}>
+        <div className={className}>
           <p className="text-sm text-gray-500 italic">No categories specified for this event.</p>
         </div>
       );
     }
 
     return (
-      <div className={`space-y-3 ${className}`}>
-          {parsed.ageGroups.length > 0 && (
-            <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">{finalAgeGroupLabel}:</h4>
-              <div className="flex flex-wrap gap-2">
-                {parsed.ageGroups.map((group, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium"
-                  >
-                    {group}
-                  </span>
-                ))}
-              </div>
+      <div className={`space-y-4 ${className}`}>
+        {sections.map((s) => (
+          <div key={s.id}>
+            <div className="text-sm font-semibold text-gray-700 mb-2">{s.label}:</div>
+            <div className="flex flex-wrap gap-2">
+              {(s.items || []).map((it) => (
+                <span
+                  key={`${s.id}-${it}`}
+                  className="inline-flex items-center px-3 py-1 bg-blue-50 text-blue-800 rounded-full text-sm font-medium border border-blue-100"
+                >
+                  {it}
+                </span>
+              ))}
             </div>
-          )}
-          {parsed.strokes.length > 0 && (
-            <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">{finalStrokeLabel}:</h4>
-              <div className="flex flex-wrap gap-2">
-                {parsed.strokes.map((stroke, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium"
-                  >
-                    {stroke}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          {parsed.distances.length > 0 && (
-            <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">{finalDistanceLabel}:</h4>
-              <div className="flex flex-wrap gap-2">
-                {parsed.distances.map((distance, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium"
-                  >
-                    {distance}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
+        ))}
+      </div>
     );
   }
 
+  // Edit UI
   return (
-    <div className={`space-y-4 ${className}`}>
-      {/* Custom Section Names Toggle */}
-      <div className="mb-4 pb-4 border-b border-gray-200">
-        <button
-          type="button"
-          onClick={() => setShowCustomNames(!showCustomNames)}
-          className="text-sm text-blue-600 hover:text-blue-800 underline flex items-center gap-1"
-        >
-          {showCustomNames ? '▼' : '▶'} Customize Section Names
-        </button>
-        {showCustomNames && (
-          <div className="mt-3 space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-            <div>
-              <label htmlFor="category-custom-age-group-label" className="block text-xs font-medium text-gray-700 mb-1">
-                First Section Name (default: "Age Groups")
-              </label>
-              <input
-                type="text"
-                id="category-custom-age-group-label"
-                name="customAgeGroupLabel"
-                value={customAgeGroupLabel}
-                onChange={(e) => setCustomAgeGroupLabel(e.target.value)}
-                placeholder="e.g., Weight Classes, Age Divisions, Categories"
-                autoComplete="off"
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
-            <div>
-              <label htmlFor="category-custom-stroke-label" className="block text-xs font-medium text-gray-700 mb-1">
-                Second Section Name (default: "Strokes / Event Types")
-              </label>
-              <input
-                type="text"
-                id="category-custom-stroke-label"
-                name="customStrokeLabel"
-                value={customStrokeLabel}
-                onChange={(e) => setCustomStrokeLabel(e.target.value)}
-                placeholder="e.g., Divisions, Event Categories, Match Types"
-                autoComplete="off"
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
-            <div>
-              <label htmlFor="category-custom-distance-label" className="block text-xs font-medium text-gray-700 mb-1">
-                Third Section Name (default: "Distances")
-              </label>
-              <input
-                type="text"
-                id="category-custom-distance-label"
-                name="customDistanceLabel"
-                value={customDistanceLabel}
-                onChange={(e) => setCustomDistanceLabel(e.target.value)}
-                placeholder="e.g., Rounds, Sets, Attempts, Lengths"
-                autoComplete="off"
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
-            <p className="text-xs text-gray-500 mt-2">
-              💡 Customize section names to match your sport's terminology. Leave empty to use defaults.
-            </p>
-          </div>
-        )}
+    <div className={`space-y-5 ${className}`}>
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
+        <div className="text-sm font-semibold text-gray-900">Categories (for athlete registration)</div>
+        <div className="text-xs text-gray-700 mt-1">
+          Add one or more sections (e.g., Age Group, Stroke, Distance, Gender, Weight Class). Athletes will select one item from each section.
+        </div>
       </div>
 
-      {/* Age Groups Section */}
-      <div>
-        <label htmlFor="category-new-age-group" className="block text-sm font-medium text-gray-700 mb-2">
-          {finalAgeGroupLabel}
-        </label>
-        <div className="flex gap-2 mb-2">
+      {/* Add section */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">Add category section</label>
+        <div className="flex gap-2">
           <input
-            type="text"
-            id="category-new-age-group"
-            name="newAgeGroup"
-            value={newAgeGroup}
-            onChange={(e) => setNewAgeGroup(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addAgeGroup())}
-            placeholder="Type any age group (e.g., Group I (11-12), U-14, Senior, etc.)"
-            autoComplete="off"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+            value={newSectionLabel}
+            onChange={(e) => setNewSectionLabel(e.target.value)}
+            placeholder="Section name (e.g., Age Group)"
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
           />
           <button
             type="button"
-            onClick={addAgeGroup}
-            disabled={!newAgeGroup.trim()}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={addSection}
+            disabled={!newSectionLabel.trim()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
             <FaPlus className="w-3 h-3" />
             Add
           </button>
         </div>
-        <p className="text-xs text-gray-500 mb-2">
-          💡 You can add any custom {finalAgeGroupLabel.toLowerCase()}. Examples: "Group I (11-12)", "U-14", "Senior (18+)", "Open Category", or any format you need
-        </p>
-        {/* Quick add buttons for common age groups */}
-        <div className="mb-2 flex flex-wrap gap-2">
-          {commonAgeGroups.map((grp) => (
-            !categories.ageGroups.includes(grp) && (
-              <button
-                key={grp}
-                type="button"
-                onClick={() => {
-                  setCategories(prev => ({
-                    ...prev,
-                    ageGroups: [...prev.ageGroups, grp]
-                  }));
-                }}
-                className="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
-              >
-                + {grp}
-              </button>
-            )
-          ))}
+        <div className="text-xs text-gray-500 mt-2">
+          Tip: Keep section names short and consistent. Example flow: Age Group → Stroke → Distance.
         </div>
-        {categories.ageGroups.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {categories.ageGroups.map((group, index) => (
-              <span
-                key={index}
-                className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
-              >
-                {group}
-                <button
-                  type="button"
-                  onClick={() => removeAgeGroup(group)}
-                  className="hover:text-blue-600 focus:outline-none"
-                >
-                  <FaTimes className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
       </div>
 
-      {/* Strokes/Event Types Section */}
-      <div>
-        <label htmlFor="category-new-stroke" className="block text-sm font-medium text-gray-700 mb-2">
-          {finalStrokeLabel}
-        </label>
-        <div className="flex gap-2 mb-2">
-          <input
-            type="text"
-            id="category-new-stroke"
-            name="newStroke"
-            value={newStroke}
-            onChange={(e) => setNewStroke(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addStroke())}
-            placeholder="Type any stroke or event type (e.g., Freestyle, Relay, Mixed, etc.)"
-            autoComplete="off"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
-          />
-          <button
-            type="button"
-            onClick={addStroke}
-            disabled={!newStroke.trim()}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FaPlus className="w-3 h-3" />
-            Add
-          </button>
-        </div>
-        <p className="text-xs text-gray-500 mb-2">
-          💡 Quick-add common items below, or type any custom {finalStrokeLabel.toLowerCase()} above (e.g., "Relay", "Mixed", "Synchronized")
-        </p>
-        {/* Quick add buttons for common strokes */}
-        <div className="mb-2 flex flex-wrap gap-2">
-          {commonStrokes.map(stroke => (
-            !categories.strokes.includes(stroke) && (
-              <button
-                key={stroke}
-                type="button"
-                onClick={() => {
-                  setCategories(prev => ({
-                    ...prev,
-                    strokes: [...prev.strokes, stroke]
-                  }));
-                }}
-                className="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
-              >
-                + {stroke}
-              </button>
-            )
-          ))}
-        </div>
-        {categories.strokes.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {categories.strokes.map((stroke, index) => (
-              <span
-                key={index}
-                className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
-              >
-                {stroke}
-                <button
-                  type="button"
-                  onClick={() => removeStroke(stroke)}
-                  className="hover:text-purple-600 focus:outline-none"
-                >
-                  <FaTimes className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Sections */}
+      {sections.length ? (
+        <div className="space-y-4">
+          {sections.map((s, idx) => (
+            <div key={s.id} className="bg-white border border-gray-200 rounded-xl p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-gray-900 truncate">{s.label}</div>
+                  <div className="text-xs text-gray-500 mt-1">Athletes must pick one.</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => moveSection(s.id, 'up')}
+                    disabled={idx === 0}
+                    className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                    title="Move up"
+                  >
+                    <FaArrowUp className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveSection(s.id, 'down')}
+                    disabled={idx === sections.length - 1}
+                    className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                    title="Move down"
+                  >
+                    <FaArrowDown className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeSection(s.id)}
+                    className="p-2 border border-red-200 text-red-700 rounded-lg hover:bg-red-50"
+                    title="Remove section"
+                  >
+                    <FaTimes className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
 
-      {/* Distances Section */}
-      <div>
-        <label htmlFor="category-new-distance" className="block text-sm font-medium text-gray-700 mb-2">
-          {finalDistanceLabel}
-        </label>
-        <div className="flex gap-2 mb-2">
-          <input
-            type="text"
-            id="category-new-distance"
-            name="newDistance"
-            value={newDistance}
-            onChange={(e) => setNewDistance(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addDistance())}
-            placeholder="Type any distance (e.g., 50m, 100m, 1km, Marathon, etc.)"
-            autoComplete="off"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
-          />
-          <button
-            type="button"
-            onClick={addDistance}
-            disabled={!newDistance.trim()}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FaPlus className="w-3 h-3" />
-            Add
-          </button>
-        </div>
-        <p className="text-xs text-gray-500 mb-2">
-          💡 Quick-add common items below, or type any custom {finalDistanceLabel.toLowerCase()} above (e.g., "1km", "Marathon", "Sprint", or any format you need)
-        </p>
-        {/* Quick add buttons for common distances */}
-        <div className="mb-2 flex flex-wrap gap-2">
-          {commonDistances.map(distance => (
-            !categories.distances.includes(distance) && (
-              <button
-                key={distance}
-                type="button"
-                onClick={() => {
-                  setCategories(prev => ({
-                    ...prev,
-                    distances: [...prev.distances, distance]
-                  }));
-                }}
-                className="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
-              >
-                + {distance}
-              </button>
-            )
-          ))}
-        </div>
-        {categories.distances.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {categories.distances.map((distance, index) => (
-              <span
-                key={index}
-                className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
-              >
-                {distance}
-                <button
-                  type="button"
-                  onClick={() => removeDistance(distance)}
-                  className="hover:text-green-600 focus:outline-none"
-                >
-                  <FaTimes className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+              {/* Add item */}
+              <div className="mt-4">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Add item</label>
+                <div className="flex gap-2">
+                  <input
+                    value={newItemBySection?.[s.id] || ''}
+                    onChange={(e) => setNewItemBySection((p) => ({ ...(p || {}), [s.id]: e.target.value }))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addItem(s.id);
+                      }
+                    }}
+                    placeholder={`Add an option for "${s.label}"`}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => addItem(s.id)}
+                    disabled={!String(newItemBySection?.[s.id] || '').trim()}
+                    className="px-3 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
 
-      {/* Preview */}
-      {categories.ageGroups.length > 0 || categories.strokes.length > 0 || categories.distances.length > 0 ? (
-        <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-          <p className="text-xs font-medium text-gray-700 mb-2">Preview (as athletes will see it):</p>
-          <pre className="text-xs text-gray-600 whitespace-pre-wrap font-sans">
-            {formatCategories(categories)}
-          </pre>
+              {/* Items */}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(s.items || []).length ? (
+                  (s.items || []).map((it) => (
+                    <span
+                      key={`${s.id}-${it}`}
+                      className="inline-flex items-center gap-2 px-3 py-1 bg-gray-50 border border-gray-200 rounded-full text-sm"
+                    >
+                      <span className="text-gray-800">{it}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeItem(s.id, it)}
+                        className="text-gray-500 hover:text-red-600"
+                        title="Remove item"
+                      >
+                        <FaTimes className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs text-gray-500">No items yet — add at least one.</span>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
-        <p className="text-xs text-gray-500 mt-2">
-          Add categories above. This information will be displayed to athletes during registration.
-        </p>
+        <div className="text-sm text-gray-600">No sections yet. Add a section above.</div>
       )}
     </div>
   );

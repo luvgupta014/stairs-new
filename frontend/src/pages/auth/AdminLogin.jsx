@@ -5,15 +5,19 @@ import { useAuth } from '../../contexts/AuthContext';
 import LoginLayout from '../../components/LoginLayout';
 import ErrorPopup from '../../components/ErrorPopup';
 import { parseLoginError } from '../../utils/errorUtils';
+import { requestVerificationOtp } from '../../api';
 
 const AdminLogin = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [lastEmail, setLastEmail] = useState('');
   const [errorPopup, setErrorPopup] = useState({
     isOpen: false,
     title: '',
     message: '',
-    type: 'error'
+    type: 'error',
+    primaryAction: null,
+    secondaryAction: null
   });
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -21,6 +25,7 @@ const AdminLogin = () => {
   const handleLogin = async (formData) => {
     setLoading(true);
     setError('');
+    setLastEmail(formData?.email || '');
     setErrorPopup({ isOpen: false, title: '', message: '', type: 'error' });
 
     try {
@@ -37,11 +42,29 @@ const AdminLogin = () => {
       } else {
         // Parse error and show popup
         const errorConfig = parseLoginError(response.message || response, 'admin');
+        const needsVerify = errorConfig?.code === 'ACCOUNT_NOT_VERIFIED';
         setErrorPopup({
           isOpen: true,
           title: errorConfig.title,
           message: errorConfig.message,
-          type: errorConfig.type
+          type: errorConfig.type,
+          primaryAction: needsVerify ? {
+            label: 'Resend & Verify',
+            onClick: async () => {
+              try {
+                const resp = await requestVerificationOtp(formData?.email || lastEmail);
+                const p = resp?.data;
+                if (p?.userId) {
+                  navigate('/verify-otp', { state: { userId: p.userId, email: p.email || formData?.email || lastEmail, role: p.role || 'ADMIN', name: p.name } });
+                } else {
+                  setErrorPopup((prev) => ({ ...prev, isOpen: true, message: 'If your account exists, a verification code has been sent. Please check your email (and spam) and try again.' }));
+                }
+              } catch (e) {
+                setErrorPopup((prev) => ({ ...prev, isOpen: true, message: e?.message || 'Failed to request verification code. Please try again.' }));
+              }
+            }
+          } : null,
+          secondaryAction: needsVerify ? { label: 'Close', onClick: closeErrorPopup } : null
         });
       }
     } catch (err) {
@@ -49,11 +72,29 @@ const AdminLogin = () => {
       // Parse catch errors too
       const errorMessage = err.response?.data?.message || err.message || 'Login failed. Please check your credentials and try again.';
       const errorConfig = parseLoginError(errorMessage, 'admin');
+      const needsVerify = errorConfig?.code === 'ACCOUNT_NOT_VERIFIED';
       setErrorPopup({
         isOpen: true,
         title: errorConfig.title,
         message: errorConfig.message,
-        type: errorConfig.type
+        type: errorConfig.type,
+        primaryAction: needsVerify ? {
+          label: 'Resend & Verify',
+          onClick: async () => {
+            try {
+              const resp = await requestVerificationOtp(lastEmail);
+              const p = resp?.data;
+              if (p?.userId) {
+                navigate('/verify-otp', { state: { userId: p.userId, email: p.email || lastEmail, role: p.role || 'ADMIN', name: p.name } });
+              } else {
+                setErrorPopup((prev) => ({ ...prev, isOpen: true, message: 'If your account exists, a verification code has been sent. Please check your email (and spam) and try again.' }));
+              }
+            } catch (e) {
+              setErrorPopup((prev) => ({ ...prev, isOpen: true, message: e?.message || 'Failed to request verification code. Please try again.' }));
+            }
+          }
+        } : null,
+        secondaryAction: needsVerify ? { label: 'Close', onClick: closeErrorPopup } : null
       });
     } finally {
       setLoading(false);
@@ -157,6 +198,8 @@ const AdminLogin = () => {
         title={errorPopup.title}
         message={errorPopup.message}
         type={errorPopup.type}
+        primaryAction={errorPopup.primaryAction}
+        secondaryAction={errorPopup.secondaryAction}
       />
     </div>
   );

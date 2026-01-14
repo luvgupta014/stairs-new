@@ -7,7 +7,9 @@ const ErrorPopup = ({
   onClose, 
   title = "Error", 
   message, 
-  type = "error" // error, warning, network, auth
+  type = "error", // error, warning, network, auth
+  primaryAction = null, // { label: string, onClick: fn }
+  secondaryAction = null // { label: string, onClick: fn }
 }) => {
   useEffect(() => {
     const handleEscape = (e) => {
@@ -168,14 +170,32 @@ const ErrorPopup = ({
                 </div>
               )}
 
-              {/* Action Button */}
-              <div className="flex justify-end">
-                <button
-                  onClick={onClose}
-                  className={`px-6 py-2 ${buttonColor} text-white rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500`}
-                >
-                  {type === 'auth' ? 'Try Again' : type === 'network' ? 'Retry' : 'Understood'}
-                </button>
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3">
+                {secondaryAction?.label && typeof secondaryAction?.onClick === 'function' ? (
+                  <button
+                    onClick={secondaryAction.onClick}
+                    className="px-6 py-2 border border-gray-300 hover:border-gray-400 text-gray-800 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300"
+                  >
+                    {secondaryAction.label}
+                  </button>
+                ) : null}
+
+                {primaryAction?.label && typeof primaryAction?.onClick === 'function' ? (
+                  <button
+                    onClick={primaryAction.onClick}
+                    className={`px-6 py-2 ${buttonColor} text-white rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500`}
+                  >
+                    {primaryAction.label}
+                  </button>
+                ) : (
+                  <button
+                    onClick={onClose}
+                    className={`px-6 py-2 ${buttonColor} text-white rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500`}
+                  >
+                    {type === 'auth' ? 'Try Again' : type === 'network' ? 'Retry' : 'Understood'}
+                  </button>
+                )}
               </div>
             </div>
           </motion.div>
