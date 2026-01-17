@@ -1797,31 +1797,14 @@ router.post('/coach/payment', async (req, res) => {
     }
 
     if (subscriptionType) {
-      // Proration logic: If coach has existing subscription, calculate prorated amount
-      const existingExpiry = coach.subscriptionExpiresAt;
-      const now = new Date();
-      let expirationDate = new Date();
+      // Premium members (coaches) use financial year (April 1 - March 31)
+      const { getFinancialYearEnd } = require('../utils/financialYear');
+      const expirationDate = getFinancialYearEnd(); // March 31st of current FY
       
-      if (subscriptionType === 'MONTHLY') {
-        expirationDate.setMonth(expirationDate.getMonth() + 1);
-      } else if (subscriptionType === 'ANNUAL') {
-        expirationDate.setFullYear(expirationDate.getFullYear() + 1);
-      }
-
-      // If coach has active subscription, extend from current expiry date (proration)
-      if (existingExpiry && existingExpiry > now) {
-        // Extend from existing expiry date
-        expirationDate = new Date(existingExpiry);
-        if (subscriptionType === 'MONTHLY') {
-          expirationDate.setMonth(expirationDate.getMonth() + 1);
-        } else if (subscriptionType === 'ANNUAL') {
-          expirationDate.setFullYear(expirationDate.getFullYear() + 1);
-        }
-        console.log(`📅 Proration: Extending subscription from ${existingExpiry.toISOString()} to ${expirationDate.toISOString()}`);
-      }
-
-      updateData.subscriptionType = subscriptionType;
+      // Always set to ANNUAL for coaches (premium members)
+      updateData.subscriptionType = 'ANNUAL';
       updateData.subscriptionExpiresAt = expirationDate;
+      console.log(`📅 Premium member subscription: Financial year expiry (${expirationDate.toISOString()})`);
     }
 
     const updatedCoach = await prisma.coach.update({

@@ -10,7 +10,7 @@ export const paymentPlans = {
         name: 'Coordinator Plan',
         price: 2000,
         originalPrice: 2000,
-        duration: 'month',
+        duration: 'year', // Premium members have annual subscription (financial year: April 1 - March 31)
         popular: true,
         features: [
           'Unlimited students',

@@ -140,9 +140,9 @@ const ResetPassword = () => {
             });
           }, 800);
         } else {
-          setSuccessMessage('Your password has been updated successfully.');
-          setRedirectIn(4);
-          setStatus('success');
+        setSuccessMessage('Your password has been updated successfully.');
+        setRedirectIn(4);
+        setStatus('success');
         }
       } else {
         setError(result.message || 'Failed to reset password.');

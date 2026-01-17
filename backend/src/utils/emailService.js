@@ -1696,19 +1696,84 @@ const sendWinnerCertificateIssuedEmail = async ({ to, athleteName, eventName, sp
   }
 };
 
-module.exports = {
-  sendEventShareEmail,
-  sendTournamentRegistrationEmail,
-  sendOTPEmail,
-  sendPasswordResetEmail,
-  sendWelcomeEmail,
-  sendEventModerationEmail,
-  sendOrderStatusEmail,
-  sendPaymentReceiptEmail,
-  sendEventCompletionEmail,
-  sendAssignmentEmail,
-  sendEventInchargeInviteEmail,
-  sendCertificateIssuedEmail,
-  sendWinnerCertificateIssuedEmail,
-  sendEmail
+/**
+ * Send subscription renewal reminder email for premium members
+ * @param {string} email - Recipient email
+ * @param {string} name - User name
+ * @param {Date} expiryDate - Subscription expiry date
+ * @param {number} daysRemaining - Days until expiry
+ * @param {string} financialYear - Financial year label (e.g., "2025-26")
+ * @returns {Promise<Object>} Email send result
+ */
+const sendSubscriptionRenewalReminderEmail = async (email, name, expiryDate, daysRemaining, financialYear) => {
+  try {
+    if (!transporter) {
+      console.warn('⚠️ Email service not available - Subscription reminder email not sent');
+      return { success: false, error: 'Email service not configured' };
+    }
+
+    const expiryDateStr = expiryDate.toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    const urgencyColor = daysRemaining <= 7 ? '#dc2626' : daysRemaining <= 30 ? '#f59e0b' : '#2563eb';
+    const urgencyText = daysRemaining <= 7 ? 'URGENT' : daysRemaining <= 30 ? 'ACTION REQUIRED' : 'REMINDER';
+
+    const mailOptions = {
+      from: `"STAIRS Talent Hub" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: `${daysRemaining <= 7 ? '⚠️ URGENT: ' : ''}Premium Membership Renewal Reminder - ${financialYear}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #111827; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f3f4f6; }
+            .container { background-color: #ffffff; border-radius: 12px; padding: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+            .header { background: linear-gradient(135deg, ${urgencyColor} 0%, ${urgencyColor}dd 100%); border-radius: 8px; padding: 20px; text-align: center; color: white; margin-bottom: 24px; }
+            .header h1 { margin: 0; font-size: 24px; font-weight: 700; }
+            .badge { display: inline-block; padding: 4px 12px; background-color: ${urgencyColor}; color: white; border-radius: 999px; font-size: 12px; font-weight: 600; margin-top: 8px; }
+            .countdown { text-align: center; padding: 24px; background: linear-gradient(135deg, #f0f9ff 0%, #e0e7ff 100%); border-radius: 8px; margin: 24px 0; }
+            .countdown-number { font-size: 48px; font-weight: 700; color: ${urgencyColor}; margin: 8px 0; }
+            .cta-button { display: inline-block; margin: 24px 0; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); color: #ffffff !important; text-decoration: none; padding: 16px 32px; border-radius: 10px; font-weight: 700; font-size: 16px; text-align: center; }
+            .footer { margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px; text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🔄 Premium Membership Renewal</h1>
+              <div class="badge">${urgencyText}</div>
+            </div>
+            <h2>Hello ${name}!</h2>
+            <p>Your premium membership for Financial Year <strong>${financialYear}</strong> expires on ${expiryDateStr}.</p>
+            <div class="countdown">
+              <div style="font-size: 14px; color: #6b7280;">Days Remaining</div>
+              <div class="countdown-number">${daysRemaining}</div>
+            </div>
+            <div style="text-align: center;">
+              <a href="${process.env.FRONTEND_URL || 'https://stairs-talent-hub.com'}/dashboard/coach" class="cta-button">Renew Membership Now</a>
+            </div>
+            ${daysRemaining <= 7 ? `<div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 16px; border-radius: 8px; margin: 24px 0;"><p style="margin: 0; color: #991b1b; font-weight: 600;">⚠️ URGENT: Your subscription expires in ${daysRemaining} days!</p></div>` : ''}
+            <div class="footer">
+              <p>© ${new Date().getFullYear()} STAIRS Talent Hub. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `Premium Membership Renewal Reminder\n\nHello ${name}!\n\nYour premium membership for Financial Year ${financialYear} expires on ${expiryDateStr}.\nDays Remaining: ${daysRemaining} days\n\n${daysRemaining <= 7 ? '⚠️ URGENT: Please renew immediately.\n' : ''}Renew: ${process.env.FRONTEND_URL || 'https://stairs-talent-hub.com'}/dashboard/coach\n\n© ${new Date().getFullYear()} STAIRS Talent Hub`
+    };
+
+    console.log(`📧 Sending subscription renewal reminder to: ${email} (${daysRemaining} days remaining)`);
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Subscription renewal reminder email sent successfully:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('❌ Error sending subscription renewal reminder email:', error);
+    return { success: false, error: error.message };
+  }
 };

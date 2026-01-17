@@ -66,52 +66,52 @@ const CategoryPicker = ({ categoriesText = '', value = '', onChange = () => {}, 
 
         return (
           <div key={s.id} className="bg-white rounded-lg border-2 border-gray-200 p-4 hover:border-blue-300 transition-colors">
-            <label className="block text-sm font-semibold text-gray-800 mb-3 flex items-center">
-              <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold mr-2">
+          <label className="block text-sm font-semibold text-gray-800 mb-3 flex items-center">
+            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold mr-2">
                 {idx + 1}
               </span>
               {s.label}
-              <span className="ml-2 text-red-500 text-xs">*</span>
-            </label>
+            <span className="ml-2 text-red-500 text-xs">*</span>
+          </label>
 
-            <div className="relative">
-              <button
-                type="button"
+          <div className="relative">
+            <button
+              type="button"
                 onClick={() => setOpenIndex(openIndex === idx ? null : idx)}
-                className={`w-full px-4 py-3 text-left bg-gray-50 border-2 rounded-lg transition-all ${
+              className={`w-full px-4 py-3 text-left bg-gray-50 border-2 rounded-lg transition-all ${
                   chosen ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-blue-400'
-                } focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between`}
-              >
+              } focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between`}
+            >
                 <span className={chosen ? 'text-gray-900 font-medium' : 'text-gray-500'}>
                   {chosen || `Select ${s.label}`}
-                </span>
+              </span>
                 <FaChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${openIndex === idx ? 'transform rotate-180' : ''}`} />
-              </button>
-
+            </button>
+            
               {openIndex === idx && (
-                <>
+              <>
                   <div className="fixed inset-0 z-10" onClick={() => setOpenIndex(null)} />
-                  <div className="absolute z-20 w-full mt-2 bg-white border-2 border-gray-200 rounded-lg shadow-xl max-h-60 overflow-auto">
+                <div className="absolute z-20 w-full mt-2 bg-white border-2 border-gray-200 rounded-lg shadow-xl max-h-60 overflow-auto">
                     {items.map((it) => (
-                      <button
+                    <button
                         key={`${s.id}-${it}`}
-                        type="button"
+                      type="button"
                         onClick={() => selectValue(idx, it)}
-                        className={`w-full px-4 py-3 text-left text-sm transition-colors flex items-center justify-between ${
+                      className={`w-full px-4 py-3 text-left text-sm transition-colors flex items-center justify-between ${
                           chosen === it
-                            ? 'bg-blue-50 text-blue-700 font-medium border-l-4 border-blue-500'
-                            : 'text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
+                          ? 'bg-blue-50 text-blue-700 font-medium border-l-4 border-blue-500' 
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
                         <span>{it}</span>
                         {chosen === it && <FaCheck className="w-4 h-4 text-blue-600" />}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
+        </div>
         );
       })}
 

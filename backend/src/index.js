@@ -20,6 +20,7 @@ const certificateRoutes = require('./routes/certificates');
 const eventInchargeRoutes = require('./routes/eventIncharge');
 const mapsRoutes = require('./routes/maps');
 const { startEventUpdateScheduler } = require('./jobs/eventUpdateScheduler');
+const { startSubscriptionReminderScheduler } = require('./jobs/subscriptionReminderScheduler');
 
 // Import middleware
 const { errorResponse } = require('./utils/helpers');
@@ -342,6 +343,7 @@ const server = app.listen(PORT, () => {
   // Background event updates (notifications + best-effort email)
   try {
     startEventUpdateScheduler();
+    startSubscriptionReminderScheduler();
   } catch (e) {
     console.error('Failed to start event update scheduler:', e);
   }

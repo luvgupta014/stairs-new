@@ -215,7 +215,7 @@ const EventCard = ({
               </span>
             ) : (
               <span>
-                {event.currentParticipants || 0} / {event.maxParticipants} participants
+            {event.currentParticipants || 0} / {event.maxParticipants} participants
               </span>
             )}
           </div>

@@ -14,6 +14,8 @@ const {
 const { sendEventModerationEmail, sendOrderStatusEmail, sendEventCompletionEmail, sendAssignmentEmail, sendEventInchargeInviteEmail } = require('../utils/emailService');
 const EventService = require('../services/eventService');
 const { generateEventUID, generateUID } = require('../utils/uidGenerator');
+const { calculateCommission, calculateBulkCommission } = require('../utils/razorpayCommission');
+const { getFinancialYearStart, getFinancialYearEnd, getFinancialYearLabel, getDaysRemainingInFinancialYear } = require('../utils/financialYear');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -4213,6 +4215,193 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
       });
     }
 
+    // Calculate Razorpay commission for all transactions
+    const allTransactions = [
+      ...filteredEventOrders.map(o => ({ amount: o.totalAmount || 0, type: 'ORDER' })),
+      ...filteredPayments.map(p => ({ amount: p.amount || 0, type: 'PAYMENT' }))
+    ];
+    const commissionData = calculateBulkCommission(allTransactions);
+    
+    // Individual revenue breakdowns
+    // 1. Subscriptions per user
+    const subscriptionBreakdown = {};
+    filteredPayments.filter(p => {
+      const t = String(p.type || '').toUpperCase();
+      return t === 'REGISTRATION' || t.startsWith('SUBSCRIPTION');
+    }).forEach(payment => {
+      const userId = payment.userId || 'unknown';
+      const userName = payment.user?.coachProfile?.name || 
+                      payment.user?.instituteProfile?.name ||
+                      payment.user?.clubProfile?.name ||
+                      payment.user?.studentProfile?.name ||
+                      payment.user?.email ||
+                      'Unknown';
+      const userType = payment.userType || payment.user?.role || 'UNKNOWN';
+      if (!subscriptionBreakdown[userId]) {
+        subscriptionBreakdown[userId] = {
+          userId,
+          userName,
+          userType,
+          userEmail: payment.user?.email || '',
+          totalAmount: 0,
+          count: 0
+        };
+      }
+      subscriptionBreakdown[userId].totalAmount += Number(payment.amount) || 0;
+      subscriptionBreakdown[userId].count++;
+    });
+    const subscriptionsByUser = Object.values(subscriptionBreakdown);
+
+    // 2. Coordinator event fees per coordinator
+    const coordinatorFeeBreakdown = {};
+    filteredPayments.filter(p => {
+      const t = String(p.type || '').toUpperCase();
+      return t === 'EVENT_REGISTRATION' || t === 'EVENT_FEE';
+    }).forEach(payment => {
+      // Try to get coordinator info from metadata or user
+      let coordinatorId = payment.userId || 'unknown';
+      let coordinatorName = payment.user?.coachProfile?.name || 
+                           payment.user?.instituteProfile?.name ||
+                           payment.user?.clubProfile?.name ||
+                           'Unknown';
+      let coordinatorEmail = payment.user?.email || '';
+      
+      // Parse metadata to get event info
+      let eventId = null;
+      let eventName = null;
+      try {
+        if (payment.metadata) {
+          const meta = typeof payment.metadata === 'string' ? JSON.parse(payment.metadata) : payment.metadata;
+          eventId = meta.eventId || null;
+          eventName = meta.eventName || null;
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+
+      const key = `${coordinatorId}_${eventId || 'noevent'}`;
+      if (!coordinatorFeeBreakdown[key]) {
+        coordinatorFeeBreakdown[key] = {
+          coordinatorId,
+          coordinatorName,
+          coordinatorEmail,
+          eventId,
+          eventName,
+          totalAmount: 0,
+          count: 0
+        };
+      }
+      coordinatorFeeBreakdown[key].totalAmount += Number(payment.amount) || 0;
+      coordinatorFeeBreakdown[key].count++;
+    });
+    const coordinatorFeesByCoordinator = Object.values(coordinatorFeeBreakdown);
+
+    // 3. Athlete event fees per athlete
+    const athleteFeeBreakdown = {};
+    filteredPayments.filter(p => {
+      return String(p.type || '').toUpperCase() === 'EVENT_STUDENT_FEE';
+    }).forEach(payment => {
+      const userId = payment.userId || 'unknown';
+      const studentName = payment.user?.studentProfile?.name || 
+                         payment.user?.name ||
+                         'Unknown';
+      const studentEmail = payment.user?.email || '';
+      const studentUniqueId = payment.user?.uniqueId || '';
+      const studentSport = payment.user?.studentProfile?.sport || '';
+      
+      // Parse metadata to get event info
+      let eventId = null;
+      let eventName = null;
+      try {
+        if (payment.metadata) {
+          const meta = typeof payment.metadata === 'string' ? JSON.parse(payment.metadata) : payment.metadata;
+          eventId = meta.eventId || null;
+          eventName = meta.eventName || null;
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+
+      const key = `${userId}_${eventId || 'noevent'}`;
+      if (!athleteFeeBreakdown[key]) {
+        athleteFeeBreakdown[key] = {
+          userId,
+          studentName,
+          studentEmail,
+          studentUniqueId,
+          studentSport,
+          eventId,
+          eventName,
+          totalAmount: 0,
+          count: 0
+        };
+      }
+      athleteFeeBreakdown[key].totalAmount += Number(payment.amount) || 0;
+      athleteFeeBreakdown[key].count++;
+    });
+    const athleteFeesByAthlete = Object.values(athleteFeeBreakdown);
+
+    // 4. Event-wise revenue aggregation (for event table)
+    const eventRevenueBreakdown = {};
+    // Add from event orders
+    filteredEventOrders.forEach(order => {
+      const eventId = order.eventId || 'unknown';
+      const eventName = order.event?.name || 'Unknown Event';
+      if (!eventRevenueBreakdown[eventId]) {
+        eventRevenueBreakdown[eventId] = {
+          eventId,
+          eventName,
+          sport: order.event?.sport || '',
+          totalRevenue: 0,
+          totalCommission: 0,
+          netRevenue: 0,
+          orderCount: 0,
+          paymentCount: 0
+        };
+      }
+      const amount = Number(order.totalAmount) || 0;
+      eventRevenueBreakdown[eventId].totalRevenue += amount;
+      eventRevenueBreakdown[eventId].totalCommission += calculateCommission(amount);
+      eventRevenueBreakdown[eventId].orderCount++;
+    });
+    // Add from payments (both coordinator and student fees)
+    filteredPayments.forEach(payment => {
+      let eventId = null;
+      let eventName = null;
+      try {
+        if (payment.metadata) {
+          const meta = typeof payment.metadata === 'string' ? JSON.parse(payment.metadata) : payment.metadata;
+          eventId = meta.eventId || null;
+          eventName = meta.eventName || null;
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+      if (eventId) {
+        if (!eventRevenueBreakdown[eventId]) {
+          eventRevenueBreakdown[eventId] = {
+            eventId,
+            eventName: eventName || 'Unknown Event',
+            sport: '',
+            totalRevenue: 0,
+            totalCommission: 0,
+            netRevenue: 0,
+            orderCount: 0,
+            paymentCount: 0
+          };
+        }
+        const amount = Number(payment.amount) || 0;
+        eventRevenueBreakdown[eventId].totalRevenue += amount;
+        eventRevenueBreakdown[eventId].totalCommission += calculateCommission(amount);
+        eventRevenueBreakdown[eventId].paymentCount++;
+      }
+    });
+    // Calculate net revenue for each event
+    Object.values(eventRevenueBreakdown).forEach(event => {
+      event.netRevenue = event.totalRevenue - event.totalCommission;
+    });
+    const eventWiseRevenue = Object.values(eventRevenueBreakdown).sort((a, b) => b.totalRevenue - a.totalRevenue);
+
     const dashboardData = {
       summary: {
         totalRevenue,
@@ -4223,7 +4412,14 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
         paymentBuckets,
         premiumMemberCount: premiumMembers.length,
         totalActiveCoaches: activeCoaches,
-        premiumPercentage: activeCoaches > 0 ? (premiumMembers.length / activeCoaches * 100).toFixed(2) : 0
+        premiumPercentage: activeCoaches > 0 ? (premiumMembers.length / activeCoaches * 100).toFixed(2) : 0,
+        // Razorpay commission
+        razorpayCommission: {
+          totalGross: commissionData.totalGross,
+          totalCommission: commissionData.totalCommission,
+          totalNet: commissionData.totalNet,
+          commissionRate: 2.5 // percentage
+        }
       },
       membership: membershipRevenue,
       orders: orderRevenue,
@@ -4233,6 +4429,14 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
       topSpenders,
       recentTransactions,
       dailyRevenue,
+      // Individual revenue breakdowns
+      individualBreakdowns: {
+        subscriptionsByUser: subscriptionsByUser.sort((a, b) => b.totalAmount - a.totalAmount),
+        coordinatorFeesByCoordinator: coordinatorFeesByCoordinator.sort((a, b) => b.totalAmount - a.totalAmount),
+        athleteFeesByAthlete: athleteFeesByAthlete.sort((a, b) => b.totalAmount - a.totalAmount)
+      },
+      // Event-wise revenue
+      eventWiseRevenue,
       lastUpdatedAt: new Date().toISOString(),
       appliedFilters: {
         source: sourceFilter,
@@ -4269,6 +4473,182 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
       console.error('Prisma error meta:', JSON.stringify(error.meta, null, 2));
     }
     res.status(500).json(errorResponse(`Failed to retrieve revenue dashboard data: ${error.message}`, 500));
+  }
+});
+
+// Get event-wise revenue details (all users with their paid amounts for a specific event)
+router.get('/revenue/events/:eventId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    
+    // Resolve event
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        name: true,
+        sport: true,
+        startDate: true
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json(errorResponse('Event not found.', 404));
+    }
+
+    // Get all payments for this event (from metadata)
+    const allPayments = await prisma.$queryRaw`
+      SELECT 
+        p.id, p."userId", p."userType", p.type, p.amount, 
+        p.currency, p."razorpayOrderId", p."razorpayPaymentId", p.status, 
+        p.description, p.metadata, p."createdAt", p."updatedAt"
+      FROM payments p
+      WHERE p.status::text = 'SUCCESS'
+      AND (p.metadata::text LIKE ${`%${eventId}%`} OR p.metadata::text LIKE ${`%"eventId":"${eventId}"%`})
+      ORDER BY p."createdAt" DESC
+    `.then(async (payments) => {
+      // Fetch user details for each payment
+      return Promise.all((payments || []).map(async (payment) => {
+        const user = payment.userId ? await prisma.user.findUnique({
+          where: { id: payment.userId },
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            uniqueId: true,
+            role: true,
+            studentProfile: { select: { name: true, sport: true } },
+            coachProfile: { select: { name: true } },
+            instituteProfile: { select: { name: true } },
+            clubProfile: { select: { name: true } }
+          }
+        }) : null;
+        
+        // Parse metadata
+        let metadata = {};
+        try {
+          metadata = typeof payment.metadata === 'string' ? JSON.parse(payment.metadata) : (payment.metadata || {});
+        } catch (e) {
+          // Ignore parse errors
+        }
+
+        return {
+          ...payment,
+          user,
+          metadata
+        };
+      }));
+    });
+
+    // Get event orders for this event
+    const eventOrders = await prisma.eventOrder.findMany({
+      where: {
+        eventId: event.id,
+        paymentStatus: 'SUCCESS'
+      },
+      include: {
+        coach: {
+          select: {
+            id: true,
+            name: true,
+            user: {
+              select: {
+                email: true,
+                phone: true,
+                uniqueId: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Aggregate user payments for this event
+    const userPayments = {};
+    allPayments.forEach(payment => {
+      const userId = payment.userId || 'unknown';
+      const userName = payment.user?.studentProfile?.name || 
+                      payment.user?.coachProfile?.name ||
+                      payment.user?.instituteProfile?.name ||
+                      payment.user?.clubProfile?.name ||
+                      payment.user?.email ||
+                      'Unknown';
+      const userUniqueId = payment.user?.uniqueId || '';
+      const userEmail = payment.user?.email || '';
+      const userPhone = payment.user?.phone || '';
+      const userRole = payment.user?.role || payment.userType || 'UNKNOWN';
+      const paymentType = payment.type || 'UNKNOWN';
+
+      if (!userPayments[userId]) {
+        userPayments[userId] = {
+          userId,
+          userName,
+          userUniqueId,
+          userEmail,
+          userPhone,
+          userRole,
+          payments: [],
+          totalPaid: 0,
+          paymentCount: 0
+        };
+      }
+      
+      const amount = Number(payment.amount) || 0;
+      userPayments[userId].payments.push({
+        id: payment.id,
+        amount,
+        paymentType,
+        status: payment.status,
+        razorpayPaymentId: payment.razorpayPaymentId,
+        createdAt: payment.createdAt,
+        commission: calculateCommission(amount)
+      });
+      userPayments[userId].totalPaid += amount;
+      userPayments[userId].paymentCount++;
+    });
+
+    // Calculate totals
+    const totalRevenue = allPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) +
+                        eventOrders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+    const totalCommission = calculateCommission(totalRevenue);
+    const netRevenue = totalRevenue - totalCommission;
+
+    res.json(successResponse({
+      event: {
+        id: event.id,
+        name: event.name,
+        sport: event.sport,
+        startDate: event.startDate
+      },
+      userPayments: Object.values(userPayments).map(up => ({
+        ...up,
+        commission: calculateCommission(up.totalPaid),
+        netAmount: up.totalPaid - calculateCommission(up.totalPaid)
+      })),
+      eventOrders: eventOrders.map(order => ({
+        id: order.id,
+        coachName: order.coach?.name || 'Unknown',
+        coachEmail: order.coach?.user?.email || '',
+        coachUniqueId: order.coach?.user?.uniqueId || '',
+        totalAmount: order.totalAmount || 0,
+        commission: calculateCommission(order.totalAmount || 0),
+        netAmount: (order.totalAmount || 0) - calculateCommission(order.totalAmount || 0),
+        createdAt: order.createdAt
+      })),
+      summary: {
+        totalRevenue,
+        totalCommission,
+        netRevenue,
+        totalUsers: Object.keys(userPayments).length,
+        totalOrders: eventOrders.length,
+        totalPayments: allPayments.length
+      }
+    }, 'Event revenue details retrieved successfully.'));
+
+  } catch (error) {
+    console.error('❌ Get event revenue details error:', error);
+    res.status(500).json(errorResponse(`Failed to retrieve event revenue details: ${error.message}`, 500));
   }
 });
 
@@ -4666,25 +5046,25 @@ router.post('/events/:eventId/registrations/notify-completion', authenticate, re
         const skipForUser = !force && recentlyNotifiedUserIds.has(t.userId);
 
         if (!skipForUser) {
-          try {
-            dbNotification = await prisma.notification.create({
-              data: {
-                userId: t.userId,
-                type: 'ORDER_COMPLETED',
-                title: `Event Completed - Certificates Ready: ${event.name}`,
-                message: fallbackMessage,
-                data: JSON.stringify({
-                  eventId,
-                  eventName: event.name,
-                  participantCount,
-                  totalPaidAmount: paidStudentAmount,
-                  notificationType: 'event_completion',
-                  actionUrl: `/events/${eventId}`
-                })
-              }
-            });
-          } catch (e) {
-            errors.push(`Failed to create notification: ${e.message}`);
+        try {
+          dbNotification = await prisma.notification.create({
+            data: {
+              userId: t.userId,
+              type: 'ORDER_COMPLETED',
+              title: `Event Completed - Certificates Ready: ${event.name}`,
+              message: fallbackMessage,
+              data: JSON.stringify({
+                eventId,
+                eventName: event.name,
+                participantCount,
+                totalPaidAmount: paidStudentAmount,
+                notificationType: 'event_completion',
+                actionUrl: `/events/${eventId}`
+              })
+            }
+          });
+        } catch (e) {
+          errors.push(`Failed to create notification: ${e.message}`);
           }
         } else {
           skipped.notification = true;
@@ -4692,19 +5072,19 @@ router.post('/events/:eventId/registrations/notify-completion', authenticate, re
 
         if (t.email) {
           if (!skipForUser) {
-            try {
-              const emailResult = await sendEventCompletionEmail(
-                t.email,
-                t.name,
-                event.name,
-                participantCount,
-                paidStudentAmount,
-                notifyMessage || ''
-              );
-              emailSent = !!emailResult?.success;
-              if (!emailSent) errors.push(`Failed to send email: ${emailResult?.error || 'unknown error'}`);
-            } catch (e) {
-              errors.push(`Error sending email: ${e.message}`);
+          try {
+            const emailResult = await sendEventCompletionEmail(
+              t.email,
+              t.name,
+              event.name,
+              participantCount,
+              paidStudentAmount,
+              notifyMessage || ''
+            );
+            emailSent = !!emailResult?.success;
+            if (!emailSent) errors.push(`Failed to send email: ${emailResult?.error || 'unknown error'}`);
+          } catch (e) {
+            errors.push(`Error sending email: ${e.message}`);
             }
           } else {
             skipped.email = true;

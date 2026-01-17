@@ -36,7 +36,7 @@ const CategorySelector = ({ value = '', onChange = () => {}, className = '', rea
     setModel((prev) => ({
       ...(prev || {}),
       sections: [...(prev?.sections || []), { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, label, items: [] }]
-    }));
+      }));
     setNewSectionLabel('');
   };
 
@@ -102,19 +102,19 @@ const CategorySelector = ({ value = '', onChange = () => {}, className = '', rea
         {sections.map((s) => (
           <div key={s.id}>
             <div className="text-sm font-semibold text-gray-700 mb-2">{s.label}:</div>
-            <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2">
               {(s.items || []).map((it) => (
-                <span
+                  <span
                   key={`${s.id}-${it}`}
                   className="inline-flex items-center px-3 py-1 bg-blue-50 text-blue-800 rounded-full text-sm font-medium border border-blue-100"
-                >
+                  >
                   {it}
-                </span>
-              ))}
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
         ))}
-      </div>
+        </div>
     );
   }
 
@@ -125,7 +125,7 @@ const CategorySelector = ({ value = '', onChange = () => {}, className = '', rea
         <div className="text-sm font-semibold text-gray-900">Categories (for athlete registration)</div>
         <div className="text-xs text-gray-700 mt-1">
           Add one or more sections (e.g., Age Group, Stroke, Distance, Gender, Weight Class). Athletes will select one item from each section.
-        </div>
+          </div>
       </div>
 
       {/* Add section */}
@@ -164,40 +164,40 @@ const CategorySelector = ({ value = '', onChange = () => {}, className = '', rea
                   <div className="text-xs text-gray-500 mt-1">Athletes must pick one.</div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
+          <button
+            type="button"
                     onClick={() => moveSection(s.id, 'up')}
                     disabled={idx === 0}
                     className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
                     title="Move up"
-                  >
+          >
                     <FaArrowUp className="w-3 h-3" />
-                  </button>
-                  <button
-                    type="button"
+          </button>
+              <button
+                type="button"
                     onClick={() => moveSection(s.id, 'down')}
                     disabled={idx === sections.length - 1}
                     className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
                     title="Move down"
                   >
                     <FaArrowDown className="w-3 h-3" />
-                  </button>
-                  <button
-                    type="button"
+              </button>
+                <button
+                  type="button"
                     onClick={() => removeSection(s.id)}
                     className="p-2 border border-red-200 text-red-700 rounded-lg hover:bg-red-50"
                     title="Remove section"
-                  >
-                    <FaTimes className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
+                >
+                  <FaTimes className="w-3 h-3" />
+                </button>
+          </div>
+      </div>
 
               {/* Add item */}
               <div className="mt-4">
                 <label className="block text-xs font-medium text-gray-700 mb-1">Add item</label>
                 <div className="flex gap-2">
-                  <input
+          <input
                     value={newItemBySection?.[s.id] || ''}
                     onChange={(e) => setNewItemBySection((p) => ({ ...(p || {}), [s.id]: e.target.value }))}
                     onKeyDown={(e) => {
@@ -208,41 +208,41 @@ const CategorySelector = ({ value = '', onChange = () => {}, className = '', rea
                     }}
                     placeholder={`Add an option for "${s.label}"`}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button
-                    type="button"
+          />
+          <button
+            type="button"
                     onClick={() => addItem(s.id)}
                     disabled={!String(newItemBySection?.[s.id] || '').trim()}
                     className="px-3 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
+          >
+            Add
+          </button>
+        </div>
+        </div>
 
               {/* Items */}
               <div className="mt-3 flex flex-wrap gap-2">
                 {(s.items || []).length ? (
                   (s.items || []).map((it) => (
-                    <span
+              <span
                       key={`${s.id}-${it}`}
                       className="inline-flex items-center gap-2 px-3 py-1 bg-gray-50 border border-gray-200 rounded-full text-sm"
-                    >
+              >
                       <span className="text-gray-800">{it}</span>
-                      <button
-                        type="button"
+                <button
+                  type="button"
                         onClick={() => removeItem(s.id, it)}
                         className="text-gray-500 hover:text-red-600"
                         title="Remove item"
-                      >
-                        <FaTimes className="w-3 h-3" />
-                      </button>
-                    </span>
+                >
+                  <FaTimes className="w-3 h-3" />
+                </button>
+              </span>
                   ))
                 ) : (
                   <span className="text-xs text-gray-500">No items yet — add at least one.</span>
-                )}
-              </div>
+        )}
+      </div>
             </div>
           ))}
         </div>

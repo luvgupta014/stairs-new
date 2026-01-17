@@ -719,24 +719,21 @@ router.post('/verify', authenticate, async (req, res) => {
     if (userType) {
       console.log(`🔄 Updating ${userType} profile for user ${req.user.id}`);
 
-      // Get existing subscription for proration
-      let existingSubscription = null;
-      if (userType.toLowerCase() === 'coach') {
-        existingSubscription = await prisma.coach.findUnique({
-          where: { userId: req.user.id },
-          select: { subscriptionExpiresAt: true, subscriptionType: true }
-        });
-      }
-
       const now = new Date();
-      let subscriptionExpiresAt = new Date();
-      subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1); // 1 month subscription
+      let subscriptionExpiresAt;
+      let subscriptionType;
 
-      // Proration: If user has active subscription, extend from current expiry
-      if (existingSubscription?.subscriptionExpiresAt && existingSubscription.subscriptionExpiresAt > now) {
-        subscriptionExpiresAt = new Date(existingSubscription.subscriptionExpiresAt);
-        subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1);
-        console.log(`📅 Proration: Extending subscription from ${existingSubscription.subscriptionExpiresAt.toISOString()} to ${subscriptionExpiresAt.toISOString()}`);
+      // Premium members (coordinators/coaches) use financial year (April 1 - March 31)
+      if (userType.toLowerCase() === 'coach') {
+        const { getFinancialYearEnd } = require('../utils/financialYear');
+        subscriptionExpiresAt = getFinancialYearEnd(); // March 31st of current FY
+        subscriptionType = 'ANNUAL'; // Premium members have annual subscriptions
+        console.log(`📅 Premium member subscription: Financial year expiry (${subscriptionExpiresAt.toISOString()})`);
+      } else {
+        // Other user types use monthly subscriptions
+        subscriptionExpiresAt = new Date();
+        subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1); // 1 month subscription
+        subscriptionType = 'MONTHLY';
       }
 
       if (userType.toLowerCase() === 'coach') {
@@ -745,7 +742,7 @@ router.post('/verify', authenticate, async (req, res) => {
           data: {
             paymentStatus: 'SUCCESS',
             isActive: true,
-            subscriptionType: 'MONTHLY',
+            subscriptionType: subscriptionType,
             subscriptionExpiresAt: subscriptionExpiresAt
           }
         });
@@ -756,7 +753,7 @@ router.post('/verify', authenticate, async (req, res) => {
           data: {
             paymentStatus: 'SUCCESS',
             isActive: true,
-            subscriptionType: 'MONTHLY',
+            subscriptionType: subscriptionType,
             subscriptionExpiresAt: subscriptionExpiresAt
           }
         });
@@ -767,7 +764,7 @@ router.post('/verify', authenticate, async (req, res) => {
           data: {
             paymentStatus: 'SUCCESS',
             isActive: true,
-            subscriptionType: 'MONTHLY',
+            subscriptionType: subscriptionType,
             subscriptionExpiresAt: subscriptionExpiresAt
           }
         });
@@ -778,7 +775,7 @@ router.post('/verify', authenticate, async (req, res) => {
           data: {
             paymentStatus: 'SUCCESS',
             isActive: true,
-            subscriptionType: 'MONTHLY',
+            subscriptionType: subscriptionType,
             subscriptionExpiresAt: subscriptionExpiresAt
           }
         });
@@ -1123,24 +1120,21 @@ router.post('/verify-payment', authenticate, async (req, res) => {
     if (userType) {
       console.log(`🔄 Updating ${userType} profile for user ${req.user.id}`);
 
-      // Get existing subscription for proration
-      let existingSubscription = null;
-      if (userType.toLowerCase() === 'coach') {
-        existingSubscription = await prisma.coach.findUnique({
-          where: { userId: req.user.id },
-          select: { subscriptionExpiresAt: true, subscriptionType: true }
-        });
-      }
-
       const now = new Date();
-      let subscriptionExpiresAt = new Date();
-      subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1); // 1 month subscription
+      let subscriptionExpiresAt;
+      let subscriptionType;
 
-      // Proration: If user has active subscription, extend from current expiry
-      if (existingSubscription?.subscriptionExpiresAt && existingSubscription.subscriptionExpiresAt > now) {
-        subscriptionExpiresAt = new Date(existingSubscription.subscriptionExpiresAt);
-        subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1);
-        console.log(`📅 Proration: Extending subscription from ${existingSubscription.subscriptionExpiresAt.toISOString()} to ${subscriptionExpiresAt.toISOString()}`);
+      // Premium members (coordinators/coaches) use financial year (April 1 - March 31)
+      if (userType.toLowerCase() === 'coach') {
+        const { getFinancialYearEnd } = require('../utils/financialYear');
+        subscriptionExpiresAt = getFinancialYearEnd(); // March 31st of current FY
+        subscriptionType = 'ANNUAL'; // Premium members have annual subscriptions
+        console.log(`📅 Premium member subscription: Financial year expiry (${subscriptionExpiresAt.toISOString()})`);
+      } else {
+        // Other user types use monthly subscriptions
+        subscriptionExpiresAt = new Date();
+        subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1); // 1 month subscription
+        subscriptionType = 'MONTHLY';
       }
 
       if (userType.toLowerCase() === 'coach') {
@@ -1149,7 +1143,7 @@ router.post('/verify-payment', authenticate, async (req, res) => {
           data: {
             paymentStatus: 'SUCCESS',
             isActive: true,
-            subscriptionType: 'MONTHLY',
+            subscriptionType: subscriptionType,
             subscriptionExpiresAt: subscriptionExpiresAt
           }
         });
@@ -1160,7 +1154,7 @@ router.post('/verify-payment', authenticate, async (req, res) => {
           data: {
             paymentStatus: 'SUCCESS',
             isActive: true,
-            subscriptionType: 'MONTHLY',
+            subscriptionType: subscriptionType,
             subscriptionExpiresAt: subscriptionExpiresAt
           }
         });
@@ -1171,7 +1165,7 @@ router.post('/verify-payment', authenticate, async (req, res) => {
           data: {
             paymentStatus: 'SUCCESS',
             isActive: true,
-            subscriptionType: 'MONTHLY',
+            subscriptionType: subscriptionType,
             subscriptionExpiresAt: subscriptionExpiresAt
           }
         });
@@ -1182,7 +1176,7 @@ router.post('/verify-payment', authenticate, async (req, res) => {
           data: {
             paymentStatus: 'SUCCESS',
             isActive: true,
-            subscriptionType: 'MONTHLY',
+            subscriptionType: subscriptionType,
             subscriptionExpiresAt: subscriptionExpiresAt
           }
         });

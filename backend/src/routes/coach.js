@@ -2487,32 +2487,21 @@ router.post('/verify-payment', authenticate, requireCoach, async (req, res) => {
       return res.status(404).json(errorResponse('Payment record not found.', 404));
     }
 
-    // Update coach status with proration logic
-    const coach = await prisma.coach.findUnique({
-      where: { id: req.coach.id },
-      select: { subscriptionExpiresAt: true, subscriptionType: true }
-    });
-
-    const now = new Date();
-    let subscriptionExpiresAt = new Date();
-    subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1);
-
-    // Proration: If coach has active subscription, extend from current expiry
-    if (coach?.subscriptionExpiresAt && coach.subscriptionExpiresAt > now) {
-      subscriptionExpiresAt = new Date(coach.subscriptionExpiresAt);
-      subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1);
-      console.log(`📅 Proration: Extending subscription from ${coach.subscriptionExpiresAt.toISOString()} to ${subscriptionExpiresAt.toISOString()}`);
-    }
+    // Update coach status with financial year logic (premium members use FY: Apr 1 - Mar 31)
+    const { getFinancialYearEnd } = require('../utils/financialYear');
+    const subscriptionExpiresAt = getFinancialYearEnd(); // March 31st of current FY
+    const subscriptionType = 'ANNUAL'; // Premium members have annual subscriptions
 
     await prisma.coach.update({
       where: { id: req.coach.id },
       data: {
         paymentStatus: 'SUCCESS',
         isActive: true,
-        subscriptionType: 'MONTHLY',
-        subscriptionExpiresAt
+        subscriptionType: subscriptionType,
+        subscriptionExpiresAt: subscriptionExpiresAt
       }
     });
+    console.log(`📅 Premium member subscription: Financial year expiry (${subscriptionExpiresAt.toISOString()})`);
 
     res.json(successResponse({
       paymentId: razorpay_payment_id,

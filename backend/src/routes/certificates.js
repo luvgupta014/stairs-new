@@ -241,18 +241,18 @@ router.post('/issue', authenticate, requireAdminOrCertificateManager, async (req
 
       try {
         if (studentRow?.user?.id) {
-          await prisma.notification.create({
-            data: {
+      await prisma.notification.create({
+        data: {
               userId: studentRow.user.id,
-              type: 'GENERAL',
-              title: '🎓 Certificate Issued!',
-              message: `Your certificate for ${event.name} has been issued. You can download it from your dashboard.`,
-              data: JSON.stringify({
-                certificateId: certificate.id,
-                certificateUrl: certificate.certificateUrl
-              })
-            }
-          });
+          type: 'GENERAL',
+          title: '🎓 Certificate Issued!',
+          message: `Your certificate for ${event.name} has been issued. You can download it from your dashboard.`,
+          data: JSON.stringify({ 
+            certificateId: certificate.id,
+            certificateUrl: certificate.certificateUrl 
+          })
+        }
+      });
           notificationsCreated += 1;
         }
       } catch (nErr) {
@@ -423,18 +423,18 @@ router.post('/issue-winner', authenticate, requireAdminOrCertificateManager, asy
 
       try {
         if (studentRow?.user?.id) {
-          await prisma.notification.create({
-            data: {
+      await prisma.notification.create({
+        data: {
               userId: studentRow.user.id,
-              type: 'GENERAL',
-              title: '🏆 Winner Certificate Issued!',
-              message: `Congratulations! Your winner certificate (${studentData.positionText || `Position ${studentData.position}`}) for ${event.name} has been issued.`,
-              data: JSON.stringify({
-                certificateId: certificate.id,
-                certificateUrl: certificate.certificateUrl
-              })
-            }
-          });
+          type: 'GENERAL',
+          title: '🏆 Winner Certificate Issued!',
+          message: `Congratulations! Your winner certificate (${studentData.positionText || `Position ${studentData.position}`}) for ${event.name} has been issued.`,
+          data: JSON.stringify({ 
+            certificateId: certificate.id,
+            certificateUrl: certificate.certificateUrl 
+          })
+        }
+      });
           notificationsCreated += 1;
         }
       } catch (nErr) {

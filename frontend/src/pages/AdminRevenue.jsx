@@ -127,13 +127,95 @@ const AdminRevenue = () => {
     
     let csv = 'Revenue Report\n\n';
     csv += `Date Range: ${dateRange} days\n`;
-    csv += `Total Revenue: ${formatCurrency(data.summary.totalRevenue)}\n\n`;
+    csv += `Generated: ${new Date().toLocaleString('en-IN')}\n\n`;
     
-    csv += 'Top Spenders\n';
-    csv += 'Name,Email,Phone,Total Spent,Orders\n';
-    data.topSpenders.forEach(spender => {
-      csv += `${spender.name},${spender.email},${spender.phone},${spender.totalSpent},${spender.orderCount}\n`;
-    });
+    // Summary
+    csv += 'SUMMARY\n';
+    csv += `Total Revenue (Gross),${formatCurrency(data.summary?.totalRevenue || 0)}\n`;
+    if (data.summary?.razorpayCommission) {
+      csv += `Razorpay Commission,${formatCurrency(data.summary.razorpayCommission.totalCommission || 0)}\n`;
+      csv += `Net Revenue (After Commission),${formatCurrency(data.summary.razorpayCommission.totalNet || 0)}\n`;
+    }
+    csv += `Order Revenue,${formatCurrency(data.summary?.orderRevenue || 0)}\n`;
+    csv += `Payment Revenue,${formatCurrency(data.summary?.paymentRevenue || 0)}\n`;
+    csv += `Premium Members,${data.summary?.premiumMemberCount || 0}\n\n`;
+    
+    // Payment Buckets
+    if (data.summary?.paymentBuckets) {
+      csv += 'REVENUE BY CATEGORY\n';
+      csv += 'Category,Count,Amount\n';
+      const buckets = data.summary.paymentBuckets;
+      csv += `Subscriptions,${buckets.subscriptions?.count || 0},${formatCurrency(buckets.subscriptions?.amount || 0)}\n`;
+      csv += `Coordinator Event Fees,${buckets.coordinatorEventFees?.count || 0},${formatCurrency(buckets.coordinatorEventFees?.amount || 0)}\n`;
+      csv += `Student Event Fees,${buckets.studentEventFees?.count || 0},${formatCurrency(buckets.studentEventFees?.amount || 0)}\n`;
+      csv += `Other,${buckets.other?.count || 0},${formatCurrency(buckets.other?.amount || 0)}\n\n`;
+    }
+    
+    // Individual Breakdowns
+    if (data.individualBreakdowns) {
+      // Subscriptions by User
+      if (data.individualBreakdowns.subscriptionsByUser?.length > 0) {
+        csv += 'SUBSCRIPTIONS BY USER\n';
+        csv += 'User Name,User Type,Email,Total Amount,Transaction Count\n';
+        data.individualBreakdowns.subscriptionsByUser.forEach(sub => {
+          csv += `${sub.userName || 'Unknown'},${sub.userType || 'UNKNOWN'},${sub.userEmail || ''},${formatCurrency(sub.totalAmount || 0)},${sub.count || 0}\n`;
+        });
+        csv += '\n';
+      }
+      
+      // Coordinator Fees by Coordinator
+      if (data.individualBreakdowns.coordinatorFeesByCoordinator?.length > 0) {
+        csv += 'COORDINATOR EVENT FEES BY COORDINATOR\n';
+        csv += 'Coordinator Name,Email,Event Name,Total Amount,Transaction Count\n';
+        data.individualBreakdowns.coordinatorFeesByCoordinator.forEach(fee => {
+          csv += `${fee.coordinatorName || 'Unknown'},${fee.coordinatorEmail || ''},${fee.eventName || 'N/A'},${formatCurrency(fee.totalAmount || 0)},${fee.count || 0}\n`;
+        });
+        csv += '\n';
+      }
+      
+      // Athlete Fees by Athlete
+      if (data.individualBreakdowns.athleteFeesByAthlete?.length > 0) {
+        csv += 'ATHLETE EVENT FEES BY ATHLETE\n';
+        csv += 'Athlete Name,Unique ID,Email,Event Name,Sport,Total Amount,Transaction Count\n';
+        data.individualBreakdowns.athleteFeesByAthlete.forEach(fee => {
+          csv += `${fee.studentName || 'Unknown'},${fee.studentUniqueId || ''},${fee.studentEmail || ''},${fee.eventName || 'N/A'},${fee.studentSport || ''},${formatCurrency(fee.totalAmount || 0)},${fee.count || 0}\n`;
+        });
+        csv += '\n';
+      }
+    }
+    
+    // Event-wise Revenue
+    if (data.eventWiseRevenue?.length > 0) {
+      csv += 'EVENT-WISE REVENUE\n';
+      csv += 'Event Name,Sport,Total Revenue (Gross),Razorpay Commission,Net Revenue,Orders,Payments\n';
+      data.eventWiseRevenue.forEach(event => {
+        const commission = event.totalCommission || 0;
+        const netRevenue = event.netRevenue || (event.totalRevenue - commission);
+        csv += `${event.eventName || 'Unknown'},${event.sport || ''},${formatCurrency(event.totalRevenue || 0)},${formatCurrency(commission)},${formatCurrency(netRevenue)},${event.orderCount || 0},${event.paymentCount || 0}\n`;
+      });
+      csv += '\n';
+    }
+    
+    // Top Spenders
+    if (data.topSpenders?.length > 0) {
+      csv += 'TOP SPENDERS\n';
+      csv += 'Rank,Name,Email,Phone,Total Spent,Orders,Avg Order Value\n';
+      data.topSpenders.forEach((spender, index) => {
+        csv += `${index + 1},${spender.name || 'Unknown'},${spender.email || ''},${spender.phone || ''},${formatCurrency(spender.totalSpent || 0)},${spender.orderCount || 0},${formatCurrency(spender.avgOrderValue || 0)}\n`;
+      });
+      csv += '\n';
+    }
+    
+    // Recent Transactions
+    if (data.recentTransactions?.length > 0) {
+      csv += 'RECENT TRANSACTIONS\n';
+      csv += 'Date,Type,Status,Description,Customer,Amount,Razorpay Commission,Net Amount\n';
+      data.recentTransactions.forEach(txn => {
+        const commission = (txn.amount || 0) * 0.025; // 2.5% commission
+        const netAmount = (txn.amount || 0) - commission;
+        csv += `${formatDate(txn.date)},${txn.type || ''},${txn.status || ''},"${(txn.description || '').replace(/"/g, '""')}",${txn.customer?.name || 'Unknown'},${formatCurrency(txn.amount || 0)},${formatCurrency(commission)},${formatCurrency(netAmount)}\n`;
+      });
+    }
     
     return csv;
   };
@@ -370,7 +452,7 @@ const AdminRevenue = () => {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -451,6 +533,29 @@ const AdminRevenue = () => {
               </div>
             )}
           </div>
+
+          {/* Razorpay Commission Card */}
+          {summary?.razorpayCommission && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-600 text-sm">Razorpay Commission</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                    {formatCurrency(summary.razorpayCommission.totalCommission)}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {summary.razorpayCommission.commissionRate}% of {formatCurrency(summary.razorpayCommission.totalGross)}
+                  </p>
+                  <p className="text-xs text-green-600 mt-1 font-medium">
+                    Net: {formatCurrency(summary.razorpayCommission.totalNet)}
+                  </p>
+                </div>
+                <div className="bg-orange-100 p-3 rounded-full">
+                  <FaRupeeSign className="text-orange-600 text-xl" />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -496,6 +601,26 @@ const AdminRevenue = () => {
                 }`}
               >
                 Recent Transactions
+              </button>
+              <button
+                onClick={() => setActiveTab('breakdowns')}
+                className={`py-4 px-2 border-b-2 font-medium text-sm ${
+                  activeTab === 'breakdowns'
+                    ? 'border-green-600 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Individual Breakdowns
+              </button>
+              <button
+                onClick={() => setActiveTab('events')}
+                className={`py-4 px-2 border-b-2 font-medium text-sm ${
+                  activeTab === 'events'
+                    ? 'border-green-600 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Event-Wise Revenue ({dashboardData?.eventWiseRevenue?.length || 0})
               </button>
             </div>
           </div>
@@ -939,6 +1064,151 @@ const AdminRevenue = () => {
                       No recent transactions found
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* Individual Breakdowns Tab */}
+            {activeTab === 'breakdowns' && (
+              <div className="space-y-6">
+                {/* Subscriptions by User */}
+                {dashboardData?.individualBreakdowns?.subscriptionsByUser?.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Subscriptions by User</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User Name</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User Type</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Amount</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {dashboardData.individualBreakdowns.subscriptionsByUser.map((sub, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm text-gray-900">{sub.userName || 'Unknown'}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{sub.userType || 'UNKNOWN'}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{sub.userEmail || ''}</td>
+                              <td className="px-4 py-3 text-sm text-green-600 font-medium">{formatCurrency(sub.totalAmount || 0)}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{sub.count || 0}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Coordinator Fees by Coordinator */}
+                {dashboardData?.individualBreakdowns?.coordinatorFeesByCoordinator?.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Coordinator Event Fees by Coordinator</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Coordinator</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Event</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Amount</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {dashboardData.individualBreakdowns.coordinatorFeesByCoordinator.map((fee, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm text-gray-900">{fee.coordinatorName || 'Unknown'}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{fee.coordinatorEmail || ''}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{fee.eventName || 'N/A'}</td>
+                              <td className="px-4 py-3 text-sm text-green-600 font-medium">{formatCurrency(fee.totalAmount || 0)}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{fee.count || 0}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Athlete Fees by Athlete */}
+                {dashboardData?.individualBreakdowns?.athleteFeesByAthlete?.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Athlete Event Fees by Athlete</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Athlete Name</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unique ID</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Event</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sport</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Amount</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {dashboardData.individualBreakdowns.athleteFeesByAthlete.map((fee, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm text-gray-900">{fee.studentName || 'Unknown'}</td>
+                              <td className="px-4 py-3 text-sm text-blue-600 font-mono">{fee.studentUniqueId || ''}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{fee.studentEmail || ''}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{fee.eventName || 'N/A'}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{fee.studentSport || ''}</td>
+                              <td className="px-4 py-3 text-sm text-green-600 font-medium">{formatCurrency(fee.totalAmount || 0)}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">{fee.count || 0}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Event-Wise Revenue Tab */}
+            {activeTab === 'events' && (
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Event-Wise Revenue</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Event Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sport</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Revenue</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Commission</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Net Revenue</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Orders</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payments</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {dashboardData?.eventWiseRevenue?.length > 0 ? (
+                        dashboardData.eventWiseRevenue.map((event) => (
+                          <tr key={event.eventId} className="hover:bg-gray-50 cursor-pointer" onClick={() => window.open(`/admin/revenue/events/${event.eventId}`, '_blank')}>
+                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">{event.eventName || 'Unknown'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{event.sport || ''}</td>
+                            <td className="px-4 py-3 text-sm text-green-600 font-medium">{formatCurrency(event.totalRevenue || 0)}</td>
+                            <td className="px-4 py-3 text-sm text-orange-600">{formatCurrency(event.totalCommission || 0)}</td>
+                            <td className="px-4 py-3 text-sm text-blue-600 font-medium">{formatCurrency(event.netRevenue || 0)}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{event.orderCount || 0}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{event.paymentCount || 0}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="7" className="px-4 py-8 text-center text-gray-500">
+                            No event revenue data available
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
