@@ -4530,6 +4530,204 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
   }
 });
 
+// Export revenue dashboard as Excel (.xlsx)
+// POST /api/admin/revenue/export.xlsx
+// Body: dashboardData JSON returned by /revenue/dashboard
+router.post('/revenue/export.xlsx', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const XLSX = require('xlsx');
+    const data = req.body;
+
+    if (!data || typeof data !== 'object') {
+      return res.status(400).json(errorResponse('Missing dashboard data for export.', 400));
+    }
+
+    const title = 'STAIRS Talent Hub';
+    const subtitle = 'Revenue Dashboard Export';
+    const generatedAt = new Date().toLocaleString('en-IN');
+
+    const wb = XLSX.utils.book_new();
+
+    const addSheet = (name, aoa, colWidths = []) => {
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      if (colWidths.length) ws['!cols'] = colWidths.map(wch => ({ wch }));
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    };
+
+    const num = (n) => {
+      const v = Number(n);
+      return Number.isFinite(v) ? Number(v.toFixed(2)) : null;
+    };
+
+    // Metadata
+    const applied = data.appliedFilters || {};
+
+    addSheet('Metadata', [
+      [title, subtitle],
+      ['Generated At (IST)', generatedAt],
+      ['Last Updated At', data.lastUpdatedAt ? new Date(data.lastUpdatedAt).toLocaleString('en-IN') : ''],
+      ['Date Range From', data.dateRange?.from || ''],
+      ['Date Range To', data.dateRange?.to || ''],
+      [],
+      ['Applied Filters', ''],
+      ['Source', applied.source || 'ALL'],
+      ['Payment Types', Array.isArray(applied.paymentTypes) ? applied.paymentTypes.join(', ') : ''],
+      ['User Types', Array.isArray(applied.userTypes) ? applied.userTypes.join(', ') : ''],
+      ['Min Amount', applied.minAmount ?? ''],
+      ['Max Amount', applied.maxAmount ?? ''],
+      ['Search (q)', applied.q || '']
+    ], [28, 70]);
+
+    // Summary
+    const s = data.summary || {};
+    addSheet('Summary', [
+      [title, subtitle],
+      ['Generated At (IST)', generatedAt],
+      [],
+      ['Metric', 'Value (INR) / Count'],
+      ['Total Revenue (Gross)', num(s.totalRevenue || 0)],
+      ['Razorpay Commission', s.razorpayCommission ? num(s.razorpayCommission.totalCommission || 0) : null],
+      ['Net Revenue (After Commission)', s.razorpayCommission ? num(s.razorpayCommission.totalNet || 0) : null],
+      ['Order Revenue', num(s.orderRevenue || 0)],
+      ['Payment Revenue', num(s.paymentRevenue || 0)],
+      ['Premium Members (count)', Number(s.premiumMemberCount || 0)]
+    ], [34, 28]);
+
+    // By Category
+    const b = s.paymentBuckets || {};
+    addSheet('By Category', [
+      [title, subtitle],
+      ['Generated At (IST)', generatedAt],
+      [],
+      ['Category', 'Count', 'Amount (INR)'],
+      ['Subscriptions', Number(b.subscriptions?.count || 0), num(b.subscriptions?.amount || 0)],
+      ['Coordinator Event Fees', Number(b.coordinatorEventFees?.count || 0), num(b.coordinatorEventFees?.amount || 0)],
+      ['Student Event Fees', Number(b.studentEventFees?.count || 0), num(b.studentEventFees?.amount || 0)],
+      ['Other', Number(b.other?.count || 0), num(b.other?.amount || 0)]
+    ], [26, 10, 18]);
+
+    // Event-wise
+    const eventWise = data.eventWiseRevenue || [];
+    addSheet('Event-wise', [
+      [title, subtitle],
+      ['Generated At (IST)', generatedAt],
+      [],
+      ['Event ID', 'Event Name', 'Sport', 'Orders', 'Payments', 'Gross (INR)', 'Commission (INR)', 'Net (INR)'],
+      ...eventWise.map(e => ([
+        e.eventId || '',
+        e.eventName || '',
+        e.sport || '',
+        Number(e.orderCount || 0),
+        Number(e.paymentCount || 0),
+        num(e.totalRevenue || 0),
+        num(e.totalCommission || 0),
+        num(e.netRevenue || 0)
+      ]))
+    ], [22, 40, 18, 10, 10, 16, 18, 16]);
+
+    // Individual Breakdowns: Subscriptions
+    const subs = data.individualBreakdowns?.subscriptionsByUser || [];
+    addSheet('Subscriptions', [
+      [title, subtitle],
+      ['Generated At (IST)', generatedAt],
+      [],
+      ['User Name', 'User Type', 'Email', 'Transactions', 'Total (INR)'],
+      ...subs.map(x => ([
+        x.userName || 'Unknown',
+        x.userType || 'UNKNOWN',
+        x.userEmail || '',
+        Number(x.count || 0),
+        num(x.totalAmount || 0)
+      ]))
+    ], [28, 14, 32, 14, 16]);
+
+    // Individual Breakdowns: Coordinator Event Fees
+    const coordFees = data.individualBreakdowns?.coordinatorFeesByCoordinator || [];
+    addSheet('Coord Event Fees', [
+      [title, subtitle],
+      ['Generated At (IST)', generatedAt],
+      [],
+      ['Coordinator Name', 'Email', 'Event Name', 'Transactions', 'Total (INR)'],
+      ...coordFees.map(x => ([
+        x.coordinatorName || 'Unknown',
+        x.coordinatorEmail || '',
+        x.eventName || 'N/A',
+        Number(x.count || 0),
+        num(x.totalAmount || 0)
+      ]))
+    ], [28, 32, 40, 14, 16]);
+
+    // Individual Breakdowns: Athlete Event Fees
+    const athleteFees = data.individualBreakdowns?.athleteFeesByAthlete || [];
+    addSheet('Athlete Event Fees', [
+      [title, subtitle],
+      ['Generated At (IST)', generatedAt],
+      [],
+      ['Athlete Name', 'Unique ID', 'Email', 'Event Name', 'Sport', 'Transactions', 'Total (INR)'],
+      ...athleteFees.map(x => ([
+        x.studentName || 'Unknown',
+        x.studentUniqueId || '',
+        x.studentEmail || '',
+        x.eventName || 'N/A',
+        x.studentSport || '',
+        Number(x.count || 0),
+        num(x.totalAmount || 0)
+      ]))
+    ], [28, 16, 32, 40, 18, 14, 16]);
+
+    // Top Spenders
+    const spenders = data.topSpenders || [];
+    addSheet('Top Spenders', [
+      [title, subtitle],
+      ['Generated At (IST)', generatedAt],
+      [],
+      ['Rank', 'Name', 'Email', 'Phone', 'Orders', 'Total Spent (INR)', 'Avg Order (INR)'],
+      ...spenders.map((x, idx) => ([
+        idx + 1,
+        x.name || 'Unknown',
+        x.email || '',
+        x.phone || '',
+        Number(x.orderCount || 0),
+        num(x.totalSpent || 0),
+        num(x.avgOrderValue || 0)
+      ]))
+    ], [8, 28, 32, 18, 10, 18, 18]);
+
+    // Transactions
+    const txns = data.recentTransactions || [];
+    addSheet('Transactions', [
+      [title, subtitle],
+      ['Generated At (IST)', generatedAt],
+      [],
+      ['Date', 'Source', 'Type', 'Status', 'Description', 'Customer Name', 'Customer Type', 'Customer Email', 'Customer UID', 'Event Name', 'Sport', 'Amount (INR)'],
+      ...txns.map(t => ([
+        t.date ? new Date(t.date).toISOString().split('T')[0] : '',
+        t.type === 'ORDER' ? 'ORDERS' : 'PAYMENTS',
+        t.type || '',
+        t.status || '',
+        t.description || '',
+        t.customer?.name || '',
+        t.customer?.type || '',
+        t.customer?.email || '',
+        t.customer?.uniqueId || '',
+        t.eventName || '',
+        t.sport || '',
+        num(t.amount || 0)
+      ]))
+    ], [12, 10, 18, 10, 50, 26, 16, 32, 14, 36, 18, 14]);
+
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const filename = `STAIRS-Revenue-Report-${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(buffer);
+  } catch (err) {
+    console.error('❌ Revenue export xlsx error:', err);
+    return res.status(500).json(errorResponse('Failed to export revenue dashboard.', 500));
+  }
+});
+
 // Get event-wise revenue details (all users with their paid amounts for a specific event)
 router.get('/revenue/events/:eventId', authenticate, requireAdmin, async (req, res) => {
   try {
