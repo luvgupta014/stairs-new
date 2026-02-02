@@ -145,7 +145,8 @@ const AdminRevenue = () => {
     if (!dashboardData) return;
 
     // Lazy-load xlsx only when exporting (keeps bundle smaller)
-    const XLSX = await import('xlsx');
+    // Use the ESM build for Vite/Rollup compatibility
+    const XLSX = await import('xlsx/xlsx.mjs');
 
     const title = 'STAIRS Talent Hub';
     const subtitle = 'Revenue Dashboard Export';
