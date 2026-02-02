@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { FaRupeeSign, FaTrophy, FaCertificate, FaMedal, FaChartLine, FaUsers, FaCrown, FaCalendarAlt, FaDownload, FaFilter } from 'react-icons/fa';
 import api from '../api';
 import BackButton from '../components/BackButton';
+import { useNavigate } from 'react-router-dom';
 
 const AdminRevenue = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState(null);
   const [dateRange, setDateRange] = useState('90');
@@ -13,6 +15,9 @@ const AdminRevenue = () => {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [selectedTrendPoint, setSelectedTrendPoint] = useState(null); // { date, label, revenue, orders, payments }
+  const [hoverTrendPoint, setHoverTrendPoint] = useState(null); // { xPct, yPct, day }
   const [source, setSource] = useState('ALL'); // ALL | PAYMENTS | ORDERS
   const [paymentBucket, setPaymentBucket] = useState('ALL'); // ALL | SUBSCRIPTIONS | COORDINATOR_EVENT_FEES | STUDENT_EVENT_FEES | OTHER
   const [userType, setUserType] = useState('ALL'); // ALL | STUDENT | COACH | INSTITUTE | CLUB | ADMIN
@@ -33,6 +38,18 @@ const AdminRevenue = () => {
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoRefresh, dateRange]);
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    if (!showExportMenu) return;
+    const onClick = (e) => {
+      if (!e.target.closest('[data-export-menu]')) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [showExportMenu]);
 
   const fetchRevenueDashboard = async (silent = false) => {
     try {
@@ -112,112 +129,510 @@ const AdminRevenue = () => {
   };
 
   const exportData = () => {
-    // Convert dashboard data to CSV
+    // Convert dashboard data to a company-ready CSV
     const csv = generateCSV(dashboardData);
-    const blob = new Blob([csv], { type: 'text/csv' });
+    // Add UTF-8 BOM for Excel compatibility
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `revenue-report-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `STAIRS-Revenue-Report-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const exportExcel = async () => {
+    if (!dashboardData) return;
+
+    // Lazy-load xlsx only when exporting (keeps bundle smaller)
+    const XLSX = await import('xlsx');
+
+    const title = 'STAIRS Talent Hub';
+    const subtitle = 'Revenue Dashboard Export';
+    const generatedAt = new Date().toLocaleString('en-IN');
+    const dateRangeLabel = dateRange === 'ytd' ? 'Year to Date (YTD)' : `${dateRange} days`;
+
+    const toIsoDate = (d) => {
+      if (!d) return '';
+      const dt = new Date(d);
+      if (Number.isNaN(dt.getTime())) return '';
+      return dt.toISOString().split('T')[0];
+    };
+    const num = (n) => {
+      const v = Number(n);
+      return Number.isFinite(v) ? Number(v.toFixed(2)) : null;
+    };
+
+    const wb = XLSX.utils.book_new();
+
+    // Sheet: Metadata
+    const metadataAoA = [
+      [title, ''],
+      [subtitle, ''],
+      [],
+      ['Generated At (IST)', generatedAt],
+      ['Date Range', dateRangeLabel],
+      ['Last Updated At', dashboardData.lastUpdatedAt ? new Date(dashboardData.lastUpdatedAt).toLocaleString('en-IN') : ''],
+      [],
+      ['Applied Filters', ''],
+      ['Source', source || 'ALL'],
+      ['Bucket', paymentBucket || 'ALL'],
+      ['User Type', userType || 'ALL'],
+      ['Search', (query || '').trim()],
+      ['Min Amount (INR)', minAmount === '' ? '' : String(minAmount)],
+      ['Max Amount (INR)', maxAmount === '' ? '' : String(maxAmount)]
+    ];
+    const wsMeta = XLSX.utils.aoa_to_sheet(metadataAoA);
+    wsMeta['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } },
+      { s: { r: 7, c: 0 }, e: { r: 7, c: 1 } }
+    ];
+    wsMeta['!cols'] = [{ wch: 28 }, { wch: 50 }];
+    XLSX.utils.book_append_sheet(wb, wsMeta, 'Metadata');
+
+    // Sheet: Summary
+    const s = dashboardData.summary || {};
+    const wsSummary = XLSX.utils.aoa_to_sheet([
+      [title, ''],
+      [subtitle, ''],
+      ['Generated At (IST)', generatedAt],
+      ['Date Range', dateRangeLabel],
+      [],
+      ['Metric', 'Value (INR) / Count'],
+      ['Total Revenue (Gross)', num(s.totalRevenue || 0)],
+      ['Razorpay Commission', s.razorpayCommission ? num(s.razorpayCommission.totalCommission || 0) : null],
+      ['Net Revenue (After Commission)', s.razorpayCommission ? num(s.razorpayCommission.totalNet || 0) : null],
+      ['Order Revenue', num(s.orderRevenue || 0)],
+      ['Payment Revenue', num(s.paymentRevenue || 0)],
+      ['Premium Members (count)', Number(s.premiumMemberCount || 0)]
+    ]);
+    wsSummary['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } }
+    ];
+    wsSummary['!cols'] = [{ wch: 34 }, { wch: 24 }];
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+
+    // Sheet: Revenue by Category
+    const b = s.paymentBuckets || {};
+    const wsBuckets = XLSX.utils.aoa_to_sheet([
+      [title, '', ''],
+      [subtitle, '', ''],
+      ['Generated At (IST)', generatedAt, ''],
+      ['Date Range', dateRangeLabel, ''],
+      [],
+      ['Category', 'Count', 'Amount (INR)'],
+      ['Subscriptions', Number(b.subscriptions?.count || 0), num(b.subscriptions?.amount || 0)],
+      ['Coordinator Event Fees', Number(b.coordinatorEventFees?.count || 0), num(b.coordinatorEventFees?.amount || 0)],
+      ['Student Event Fees', Number(b.studentEventFees?.count || 0), num(b.studentEventFees?.amount || 0)],
+      ['Other', Number(b.other?.count || 0), num(b.other?.amount || 0)]
+    ]);
+    wsBuckets['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } }
+    ];
+    wsBuckets['!cols'] = [{ wch: 26 }, { wch: 10 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, wsBuckets, 'By Category');
+
+    // Sheet: Subscriptions by User
+    const subs = dashboardData.individualBreakdowns?.subscriptionsByUser || [];
+    const subsRows = [
+      [title, '', '', '', ''],
+      [subtitle, '', '', '', ''],
+      ['Generated At (IST)', generatedAt, '', '', ''],
+      ['Date Range', dateRangeLabel, '', '', ''],
+      [],
+      ['User Name', 'User Type', 'Email', 'Transactions', 'Total (INR)'],
+      ...subs.map((x) => [
+        x.userName || 'Unknown',
+        x.userType || 'UNKNOWN',
+        x.userEmail || '',
+        Number(x.count || 0),
+        num(x.totalAmount || 0)
+      ])
+    ];
+    const wsSubs = XLSX.utils.aoa_to_sheet(subsRows);
+    wsSubs['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } }
+    ];
+    wsSubs['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 32 }, { wch: 14 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, wsSubs, 'Subscriptions');
+
+    // Sheet: Coordinator Event Fees
+    const coordFees = dashboardData.individualBreakdowns?.coordinatorFeesByCoordinator || [];
+    const coordRows = [
+      [title, '', '', '', ''],
+      [subtitle, '', '', '', ''],
+      ['Generated At (IST)', generatedAt, '', '', ''],
+      ['Date Range', dateRangeLabel, '', '', ''],
+      [],
+      ['Coordinator Name', 'Email', 'Event Name', 'Transactions', 'Total (INR)'],
+      ...coordFees.map((x) => [
+        x.coordinatorName || 'Unknown',
+        x.coordinatorEmail || '',
+        x.eventName || 'N/A',
+        Number(x.count || 0),
+        num(x.totalAmount || 0)
+      ])
+    ];
+    const wsCoord = XLSX.utils.aoa_to_sheet(coordRows);
+    wsCoord['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } }
+    ];
+    wsCoord['!cols'] = [{ wch: 28 }, { wch: 32 }, { wch: 36 }, { wch: 14 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, wsCoord, 'Coord Event Fees');
+
+    // Sheet: Athlete Event Fees
+    const athleteFees = dashboardData.individualBreakdowns?.athleteFeesByAthlete || [];
+    const athleteRows = [
+      [title, '', '', '', '', '', ''],
+      [subtitle, '', '', '', '', '', ''],
+      ['Generated At (IST)', generatedAt, '', '', '', '', ''],
+      ['Date Range', dateRangeLabel, '', '', '', '', ''],
+      [],
+      ['Athlete Name', 'Unique ID', 'Email', 'Event Name', 'Sport', 'Transactions', 'Total (INR)'],
+      ...athleteFees.map((x) => [
+        x.studentName || 'Unknown',
+        x.studentUniqueId || '',
+        x.studentEmail || '',
+        x.eventName || 'N/A',
+        x.studentSport || '',
+        Number(x.count || 0),
+        num(x.totalAmount || 0)
+      ])
+    ];
+    const wsAthlete = XLSX.utils.aoa_to_sheet(athleteRows);
+    wsAthlete['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }
+    ];
+    wsAthlete['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 32 }, { wch: 36 }, { wch: 18 }, { wch: 14 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, wsAthlete, 'Athlete Event Fees');
+
+    // Sheet: Event-wise Revenue
+    const eventWise = dashboardData.eventWiseRevenue || [];
+    const eventRows = [
+      [title, '', '', '', '', '', ''],
+      [subtitle, '', '', '', '', '', ''],
+      ['Generated At (IST)', generatedAt, '', '', '', '', ''],
+      ['Date Range', dateRangeLabel, '', '', '', '', ''],
+      [],
+      ['Event Name', 'Sport', 'Orders', 'Payments', 'Gross (INR)', 'Commission (INR)', 'Net (INR)'],
+      ...eventWise.map((x) => [
+        x.eventName || 'Unknown',
+        x.sport || '',
+        Number(x.orderCount || 0),
+        Number(x.paymentCount || 0),
+        num(x.totalRevenue || 0),
+        num(x.totalCommission || 0),
+        num(x.netRevenue || ((Number(x.totalRevenue || 0)) - Number(x.totalCommission || 0)))
+      ])
+    ];
+    const wsEvent = XLSX.utils.aoa_to_sheet(eventRows);
+    wsEvent['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }
+    ];
+    wsEvent['!cols'] = [{ wch: 40 }, { wch: 18 }, { wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 18 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, wsEvent, 'Event-wise');
+
+    // Sheet: Top Spenders
+    const spenders = dashboardData.topSpenders || [];
+    const spenderRows = [
+      [title, '', '', '', '', '', ''],
+      [subtitle, '', '', '', '', '', ''],
+      ['Generated At (IST)', generatedAt, '', '', '', '', ''],
+      ['Date Range', dateRangeLabel, '', '', '', '', ''],
+      [],
+      ['Rank', 'Name', 'Email', 'Phone', 'Orders', 'Total Spent (INR)', 'Avg Order (INR)'],
+      ...spenders.map((x, idx) => [
+        idx + 1,
+        x.name || 'Unknown',
+        x.email || '',
+        x.phone || '',
+        Number(x.orderCount || 0),
+        num(x.totalSpent || 0),
+        num(x.avgOrderValue || 0)
+      ])
+    ];
+    const wsSpenders = XLSX.utils.aoa_to_sheet(spenderRows);
+    wsSpenders['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }
+    ];
+    wsSpenders['!cols'] = [{ wch: 8 }, { wch: 26 }, { wch: 32 }, { wch: 18 }, { wch: 10 }, { wch: 18 }, { wch: 18 }];
+    XLSX.utils.book_append_sheet(wb, wsSpenders, 'Top Spenders');
+
+    // Sheet: Transactions
+    const txns = dashboardData.recentTransactions || [];
+    const commissionRate = 0.025;
+    const txnRows = [
+      [title, '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+      [subtitle, '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+      ['Generated At (IST)', generatedAt, '', '', '', '', '', '', '', '', '', '', '', '', ''],
+      ['Date Range', dateRangeLabel, '', '', '', '', '', '', '', '', '', '', '', '', ''],
+      [],
+      ['Date', 'Source', 'Type', 'Status', 'Description', 'Customer Name', 'Customer Type', 'Customer Email', 'Customer UID', 'Event Name', 'Sport', 'Amount (INR)', 'Commission Rate', 'Commission (INR)', 'Net (INR)'],
+      ...txns.map((t) => {
+        const amt = Number(t.amount || 0);
+        const commission = amt * commissionRate;
+        const net = amt - commission;
+        return [
+          toIsoDate(t.date),
+          t.type === 'ORDER' ? 'ORDERS' : 'PAYMENTS',
+          t.type || '',
+          t.status || '',
+          t.description || '',
+          t.customer?.name || 'Unknown',
+          t.customer?.type || '',
+          t.customer?.email || '',
+          t.customer?.uniqueId || '',
+          t.eventName || '',
+          t.sport || '',
+          num(amt),
+          `${(commissionRate * 100).toFixed(2)}%`,
+          num(commission),
+          num(net)
+        ];
+      })
+    ];
+    const wsTxns = XLSX.utils.aoa_to_sheet(txnRows);
+    wsTxns['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 14 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 14 } }
+    ];
+    wsTxns['!cols'] = [
+      { wch: 12 }, { wch: 10 }, { wch: 18 }, { wch: 10 }, { wch: 50 },
+      { wch: 26 }, { wch: 16 }, { wch: 32 }, { wch: 14 }, { wch: 36 },
+      { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }
+    ];
+    XLSX.utils.book_append_sheet(wb, wsTxns, 'Transactions');
+
+    const filename = `STAIRS-Revenue-Report-${new Date().toISOString().split('T')[0]}.xlsx`;
+    const arrayBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   const generateCSV = (data) => {
     if (!data) return '';
-    
-    let csv = 'Revenue Report\n\n';
-    csv += `Date Range: ${dateRange} days\n`;
-    csv += `Generated: ${new Date().toLocaleString('en-IN')}\n\n`;
-    
-    // Summary
-    csv += 'SUMMARY\n';
-    csv += `Total Revenue (Gross),${formatCurrency(data.summary?.totalRevenue || 0)}\n`;
+
+    // CSV helpers (Excel-friendly, proper escaping)
+    const csvEscape = (value) => {
+      if (value === null || value === undefined) return '';
+      const s = String(value).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      if (/[",\n]/.test(s) || /^\s|\s$/.test(s)) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+    const addRow = (rows, cells) => rows.push(cells.map(csvEscape).join(','));
+    const addBlank = (rows) => rows.push('');
+    const asNumber = (n) => {
+      const v = Number(n);
+      if (!Number.isFinite(v)) return '';
+      // Keep 2 decimals for finance exports
+      return v.toFixed(2);
+    };
+    const asISODate = (d) => {
+      if (!d) return '';
+      const dt = new Date(d);
+      if (Number.isNaN(dt.getTime())) return '';
+      return dt.toISOString().split('T')[0];
+    };
+
+    // Build rows
+    const rows = [];
+    rows.push('sep=,'); // Excel hint for separator
+    addRow(rows, ['STAIRS Talent Hub - Revenue Dashboard Export']);
+    addBlank(rows);
+
+    // Report metadata
+    addRow(rows, ['SECTION', 'METADATA']);
+    addRow(rows, ['Generated At (IST)', new Date().toLocaleString('en-IN')]);
+    addRow(rows, ['Date Range', dateRange === 'ytd' ? 'Year to Date (YTD)' : `${dateRange} days`]);
+    addRow(rows, ['Last Updated At', data.lastUpdatedAt ? new Date(data.lastUpdatedAt).toLocaleString('en-IN') : '']);
+    // Filters
+    addRow(rows, ['Filter: Source', source || 'ALL']);
+    addRow(rows, ['Filter: Bucket', paymentBucket || 'ALL']);
+    addRow(rows, ['Filter: User Type', userType || 'ALL']);
+    addRow(rows, ['Filter: Search', (query || '').trim()]);
+    addRow(rows, ['Filter: Min Amount (INR)', minAmount === '' ? '' : String(minAmount)]);
+    addRow(rows, ['Filter: Max Amount (INR)', maxAmount === '' ? '' : String(maxAmount)]);
+    addBlank(rows);
+
+    // Summary (numbers are plain INR, no currency symbol)
+    addRow(rows, ['SECTION', 'SUMMARY']);
+    addRow(rows, ['Metric', 'Value']);
+    addRow(rows, ['Total Revenue (Gross) INR', asNumber(data.summary?.totalRevenue || 0)]);
     if (data.summary?.razorpayCommission) {
-      csv += `Razorpay Commission,${formatCurrency(data.summary.razorpayCommission.totalCommission || 0)}\n`;
-      csv += `Net Revenue (After Commission),${formatCurrency(data.summary.razorpayCommission.totalNet || 0)}\n`;
+      addRow(rows, ['Razorpay Commission INR', asNumber(data.summary.razorpayCommission.totalCommission || 0)]);
+      addRow(rows, ['Net Revenue (After Commission) INR', asNumber(data.summary.razorpayCommission.totalNet || 0)]);
     }
-    csv += `Order Revenue,${formatCurrency(data.summary?.orderRevenue || 0)}\n`;
-    csv += `Payment Revenue,${formatCurrency(data.summary?.paymentRevenue || 0)}\n`;
-    csv += `Premium Members,${data.summary?.premiumMemberCount || 0}\n\n`;
-    
-    // Payment Buckets
+    addRow(rows, ['Order Revenue INR', asNumber(data.summary?.orderRevenue || 0)]);
+    addRow(rows, ['Payment Revenue INR', asNumber(data.summary?.paymentRevenue || 0)]);
+    addRow(rows, ['Premium Members (count)', String(data.summary?.premiumMemberCount || 0)]);
+    addBlank(rows);
+
+    // Revenue by category
     if (data.summary?.paymentBuckets) {
-      csv += 'REVENUE BY CATEGORY\n';
-      csv += 'Category,Count,Amount\n';
       const buckets = data.summary.paymentBuckets;
-      csv += `Subscriptions,${buckets.subscriptions?.count || 0},${formatCurrency(buckets.subscriptions?.amount || 0)}\n`;
-      csv += `Coordinator Event Fees,${buckets.coordinatorEventFees?.count || 0},${formatCurrency(buckets.coordinatorEventFees?.amount || 0)}\n`;
-      csv += `Student Event Fees,${buckets.studentEventFees?.count || 0},${formatCurrency(buckets.studentEventFees?.amount || 0)}\n`;
-      csv += `Other,${buckets.other?.count || 0},${formatCurrency(buckets.other?.amount || 0)}\n\n`;
+      addRow(rows, ['SECTION', 'REVENUE BY CATEGORY']);
+      addRow(rows, ['Category', 'Count', 'Amount INR']);
+      addRow(rows, ['Subscriptions', String(buckets.subscriptions?.count || 0), asNumber(buckets.subscriptions?.amount || 0)]);
+      addRow(rows, ['Coordinator Event Fees', String(buckets.coordinatorEventFees?.count || 0), asNumber(buckets.coordinatorEventFees?.amount || 0)]);
+      addRow(rows, ['Student Event Fees', String(buckets.studentEventFees?.count || 0), asNumber(buckets.studentEventFees?.amount || 0)]);
+      addRow(rows, ['Other', String(buckets.other?.count || 0), asNumber(buckets.other?.amount || 0)]);
+      addBlank(rows);
     }
-    
+
     // Individual Breakdowns
     if (data.individualBreakdowns) {
-      // Subscriptions by User
-      if (data.individualBreakdowns.subscriptionsByUser?.length > 0) {
-        csv += 'SUBSCRIPTIONS BY USER\n';
-        csv += 'User Name,User Type,Email,Total Amount,Transaction Count\n';
-        data.individualBreakdowns.subscriptionsByUser.forEach(sub => {
-          csv += `${sub.userName || 'Unknown'},${sub.userType || 'UNKNOWN'},${sub.userEmail || ''},${formatCurrency(sub.totalAmount || 0)},${sub.count || 0}\n`;
+      const breakdowns = data.individualBreakdowns;
+
+      if (Array.isArray(breakdowns.subscriptionsByUser) && breakdowns.subscriptionsByUser.length > 0) {
+        addRow(rows, ['SECTION', 'SUBSCRIPTIONS BY USER']);
+        addRow(rows, ['User Name', 'User Type', 'Email', 'Transactions', 'Total INR']);
+        breakdowns.subscriptionsByUser.forEach((sub) => {
+          addRow(rows, [
+            sub.userName || 'Unknown',
+            sub.userType || 'UNKNOWN',
+            sub.userEmail || '',
+            String(sub.count || 0),
+            asNumber(sub.totalAmount || 0)
+          ]);
         });
-        csv += '\n';
+        addBlank(rows);
       }
-      
-      // Coordinator Fees by Coordinator
-      if (data.individualBreakdowns.coordinatorFeesByCoordinator?.length > 0) {
-        csv += 'COORDINATOR EVENT FEES BY COORDINATOR\n';
-        csv += 'Coordinator Name,Email,Event Name,Total Amount,Transaction Count\n';
-        data.individualBreakdowns.coordinatorFeesByCoordinator.forEach(fee => {
-          csv += `${fee.coordinatorName || 'Unknown'},${fee.coordinatorEmail || ''},${fee.eventName || 'N/A'},${formatCurrency(fee.totalAmount || 0)},${fee.count || 0}\n`;
+
+      if (Array.isArray(breakdowns.coordinatorFeesByCoordinator) && breakdowns.coordinatorFeesByCoordinator.length > 0) {
+        addRow(rows, ['SECTION', 'COORDINATOR EVENT FEES BY COORDINATOR']);
+        addRow(rows, ['Coordinator Name', 'Email', 'Event Name', 'Transactions', 'Total INR']);
+        breakdowns.coordinatorFeesByCoordinator.forEach((fee) => {
+          addRow(rows, [
+            fee.coordinatorName || 'Unknown',
+            fee.coordinatorEmail || '',
+            fee.eventName || 'N/A',
+            String(fee.count || 0),
+            asNumber(fee.totalAmount || 0)
+          ]);
         });
-        csv += '\n';
+        addBlank(rows);
       }
-      
-      // Athlete Fees by Athlete
-      if (data.individualBreakdowns.athleteFeesByAthlete?.length > 0) {
-        csv += 'ATHLETE EVENT FEES BY ATHLETE\n';
-        csv += 'Athlete Name,Unique ID,Email,Event Name,Sport,Total Amount,Transaction Count\n';
-        data.individualBreakdowns.athleteFeesByAthlete.forEach(fee => {
-          csv += `${fee.studentName || 'Unknown'},${fee.studentUniqueId || ''},${fee.studentEmail || ''},${fee.eventName || 'N/A'},${fee.studentSport || ''},${formatCurrency(fee.totalAmount || 0)},${fee.count || 0}\n`;
+
+      if (Array.isArray(breakdowns.athleteFeesByAthlete) && breakdowns.athleteFeesByAthlete.length > 0) {
+        addRow(rows, ['SECTION', 'ATHLETE EVENT FEES BY ATHLETE']);
+        addRow(rows, ['Athlete Name', 'Unique ID', 'Email', 'Event Name', 'Sport', 'Transactions', 'Total INR']);
+        breakdowns.athleteFeesByAthlete.forEach((fee) => {
+          addRow(rows, [
+            fee.studentName || 'Unknown',
+            fee.studentUniqueId || '',
+            fee.studentEmail || '',
+            fee.eventName || 'N/A',
+            fee.studentSport || '',
+            String(fee.count || 0),
+            asNumber(fee.totalAmount || 0)
+          ]);
         });
-        csv += '\n';
+        addBlank(rows);
       }
     }
-    
+
     // Event-wise Revenue
-    if (data.eventWiseRevenue?.length > 0) {
-      csv += 'EVENT-WISE REVENUE\n';
-      csv += 'Event Name,Sport,Total Revenue (Gross),Razorpay Commission,Net Revenue,Orders,Payments\n';
-      data.eventWiseRevenue.forEach(event => {
-        const commission = event.totalCommission || 0;
-        const netRevenue = event.netRevenue || (event.totalRevenue - commission);
-        csv += `${event.eventName || 'Unknown'},${event.sport || ''},${formatCurrency(event.totalRevenue || 0)},${formatCurrency(commission)},${formatCurrency(netRevenue)},${event.orderCount || 0},${event.paymentCount || 0}\n`;
+    if (Array.isArray(data.eventWiseRevenue) && data.eventWiseRevenue.length > 0) {
+      addRow(rows, ['SECTION', 'EVENT-WISE REVENUE']);
+      addRow(rows, ['Event Name', 'Sport', 'Orders', 'Payments', 'Gross INR', 'Commission INR', 'Net INR']);
+      data.eventWiseRevenue.forEach((event) => {
+        const commission = Number(event.totalCommission || 0);
+        const gross = Number(event.totalRevenue || 0);
+        const net = Number(event.netRevenue || (gross - commission));
+        addRow(rows, [
+          event.eventName || 'Unknown',
+          event.sport || '',
+          String(event.orderCount || 0),
+          String(event.paymentCount || 0),
+          asNumber(gross),
+          asNumber(commission),
+          asNumber(net)
+        ]);
       });
-      csv += '\n';
+      addBlank(rows);
     }
-    
+
     // Top Spenders
-    if (data.topSpenders?.length > 0) {
-      csv += 'TOP SPENDERS\n';
-      csv += 'Rank,Name,Email,Phone,Total Spent,Orders,Avg Order Value\n';
+    if (Array.isArray(data.topSpenders) && data.topSpenders.length > 0) {
+      addRow(rows, ['SECTION', 'TOP SPENDERS']);
+      addRow(rows, ['Rank', 'Name', 'Email', 'Phone', 'Orders', 'Total Spent INR', 'Avg Order INR']);
       data.topSpenders.forEach((spender, index) => {
-        csv += `${index + 1},${spender.name || 'Unknown'},${spender.email || ''},${spender.phone || ''},${formatCurrency(spender.totalSpent || 0)},${spender.orderCount || 0},${formatCurrency(spender.avgOrderValue || 0)}\n`;
+        addRow(rows, [
+          String(index + 1),
+          spender.name || 'Unknown',
+          spender.email || '',
+          spender.phone || '',
+          String(spender.orderCount || 0),
+          asNumber(spender.totalSpent || 0),
+          asNumber(spender.avgOrderValue || 0)
+        ]);
       });
-      csv += '\n';
+      addBlank(rows);
     }
-    
+
     // Recent Transactions
-    if (data.recentTransactions?.length > 0) {
-      csv += 'RECENT TRANSACTIONS\n';
-      csv += 'Date,Type,Status,Description,Customer,Amount,Razorpay Commission,Net Amount\n';
-      data.recentTransactions.forEach(txn => {
-        const commission = (txn.amount || 0) * 0.025; // 2.5% commission
-        const netAmount = (txn.amount || 0) - commission;
-        csv += `${formatDate(txn.date)},${txn.type || ''},${txn.status || ''},"${(txn.description || '').replace(/"/g, '""')}",${txn.customer?.name || 'Unknown'},${formatCurrency(txn.amount || 0)},${formatCurrency(commission)},${formatCurrency(netAmount)}\n`;
+    if (Array.isArray(data.recentTransactions) && data.recentTransactions.length > 0) {
+      const commissionRate = 0.025; // Razorpay approx. 2.5% (fallback when backend doesn't provide commission)
+      addRow(rows, ['SECTION', 'RECENT TRANSACTIONS (last 20)']);
+      addRow(rows, [
+        'Date',
+        'Source',
+        'Type',
+        'Status',
+        'Description',
+        'Customer Name',
+        'Customer Type',
+        'Customer Email',
+        'Customer UID',
+        'Event Name',
+        'Sport',
+        'Amount INR',
+        'Commission Rate',
+        'Commission INR (est.)',
+        'Net INR (est.)'
+      ]);
+      data.recentTransactions.forEach((txn) => {
+        const amt = Number(txn.amount || 0);
+        const commission = amt * commissionRate;
+        const net = amt - commission;
+        addRow(rows, [
+          asISODate(txn.date),
+          txn.type === 'ORDER' ? 'ORDERS' : 'PAYMENTS',
+          txn.type || '',
+          txn.status || '',
+          txn.description || '',
+          txn.customer?.name || 'Unknown',
+          txn.customer?.type || '',
+          txn.customer?.email || '',
+          txn.customer?.uniqueId || '',
+          txn.eventName || '',
+          txn.sport || '',
+          asNumber(amt),
+          `${(commissionRate * 100).toFixed(2)}%`,
+          asNumber(commission),
+          asNumber(net)
+        ]);
       });
+      addBlank(rows);
     }
-    
-    return csv;
+
+    // Use CRLF for maximum Excel compatibility
+    return rows.join('\r\n');
   };
 
   if (loading) {
@@ -280,13 +695,40 @@ const AdminRevenue = () => {
                 <option value="ytd">Year to Date (YTD)</option>
                 <option value="10000">All Time</option>
               </select>
-              <button
-                onClick={exportData}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-              >
-                <FaDownload />
-                Export
-              </button>
+              <div className="relative" data-export-menu>
+                <button
+                  onClick={() => setShowExportMenu(v => !v)}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  title="Export"
+                  aria-haspopup="menu"
+                  aria-expanded={showExportMenu ? 'true' : 'false'}
+                >
+                  <FaDownload />
+                  Export
+                  <span className="text-white/90">▾</span>
+                </button>
+                {showExportMenu && (
+                  <div
+                    className="absolute right-0 mt-2 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden"
+                    role="menu"
+                  >
+                    <button
+                      onClick={() => { setShowExportMenu(false); exportExcel(); }}
+                      className="w-full text-left px-4 py-3 text-sm hover:bg-gray-50"
+                      role="menuitem"
+                    >
+                      Export Excel (.xlsx)
+                    </button>
+                    <button
+                      onClick={() => { setShowExportMenu(false); exportData(); }}
+                      className="w-full text-left px-4 py-3 text-sm hover:bg-gray-50 border-t border-gray-100"
+                      role="menuitem"
+                    >
+                      Export CSV (.csv)
+                    </button>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => fetchRevenueDashboard(false)}
                 className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
@@ -734,6 +1176,26 @@ const AdminRevenue = () => {
                                 <div key={i} className="border-t border-gray-100"></div>
                               ))}
                             </div>
+
+                            {/* Single tooltip for both chart types */}
+                            {hoverTrendPoint?.day && (
+                              <div
+                                className="absolute z-30 bg-gray-900 text-white text-xs rounded px-3 py-2 whitespace-nowrap shadow-lg pointer-events-none"
+                                style={{
+                                  left: `calc(${hoverTrendPoint.xPct}% )`,
+                                  top: `calc(${hoverTrendPoint.yPct}% - 56px)`,
+                                  transform: 'translateX(-50%)'
+                                }}
+                              >
+                                <div className="font-semibold">
+                                  {hoverTrendPoint.day.label || formatDate(hoverTrendPoint.day.date)}
+                                </div>
+                                <div className="text-green-300">{formatCurrency(hoverTrendPoint.day.revenue)}</div>
+                                <div className="text-gray-300 text-xs">
+                                  {hoverTrendPoint.day.orders} orders, {hoverTrendPoint.day.payments} payments
+                                </div>
+                              </div>
+                            )}
                             
                             {chartType === 'bar' ? (
                               /* Bar Chart */
@@ -743,22 +1205,28 @@ const AdminRevenue = () => {
                                   const heightPercent = (day.revenue / maxRevenue) * 100;
                                   const labelIndexes = [0, Math.floor(dailyRevenue.length/4), Math.floor(dailyRevenue.length/2), Math.floor(3*dailyRevenue.length/4), dailyRevenue.length-1];
                                   const showLabel = labelIndexes.includes(index);
+                                  const xPct = (index / Math.max(1, dailyRevenue.length - 1)) * 100;
+                                  const yPct = 100 - ((day.revenue / maxRevenue) * 100);
                                   
                                   return (
-                                    <div key={index} className="flex flex-col items-center group relative" style={{width: `${100/dailyRevenue.length}%`, maxWidth: '40px'}}>
-                                      {/* Tooltip */}
-                                      <div className="hidden group-hover:flex absolute bottom-full mb-2 bg-gray-900 text-white text-xs rounded px-3 py-2 whitespace-nowrap z-20 flex-col items-center shadow-lg">
-                                        <div className="font-semibold">{day.label || formatDate(day.date)}</div>
-                                        <div className="text-green-300">{formatCurrency(day.revenue)}</div>
-                                        <div className="text-gray-300 text-xs">{day.orders} orders, {day.payments} payments</div>
-                                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900"></div>
-                                      </div>
+                                    <div
+                                      key={index}
+                                      className="flex flex-col items-center relative"
+                                      style={{width: `${100/dailyRevenue.length}%`, maxWidth: '40px'}}
+                                      onMouseEnter={() => setHoverTrendPoint({ xPct, yPct, day })}
+                                      onMouseLeave={() => setHoverTrendPoint(null)}
+                                    >
                                       {/* Bar */}
                                       <div 
                                         className="w-full bg-gradient-to-t from-green-600 to-green-400 rounded-t hover:from-green-700 hover:to-green-500 transition-all cursor-pointer"
                                         style={{ 
                                           height: `${heightPercent}%`,
                                           minHeight: day.revenue > 0 ? '2px' : '0px'
+                                        }}
+                                        onClick={() => {
+                                          setSelectedTrendPoint(prev =>
+                                            prev?.date === day.date ? null : day
+                                          );
                                         }}
                                       ></div>
                                       {/* Date Label */}
@@ -803,6 +1271,13 @@ const AdminRevenue = () => {
                                         r="4"
                                         fill="#16a34a"
                                         className="hover:r-6 cursor-pointer transition-all"
+                                        onMouseEnter={() => setHoverTrendPoint({ xPct: x, yPct: y, day })}
+                                        onMouseLeave={() => setHoverTrendPoint(null)}
+                                        onClick={() => {
+                                          setSelectedTrendPoint(prev =>
+                                            prev?.date === day.date ? null : day
+                                          );
+                                        }}
                                       />
                                       {showLabel && (
                                         <text
@@ -815,43 +1290,6 @@ const AdminRevenue = () => {
                                           {day.label || new Date(day.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
                                         </text>
                                       )}
-                                      {/* Tooltip group */}
-                                      <g className="opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
-                                        {(() => {
-                                          // Assume SVG height is 200px for calculation, or get dynamically if needed
-                                          const svgHeight = 200;
-                                          const yPx = (svgHeight * y) / 100;
-                                          const xPx = (svgHeight * x) / 100; // If needed for x
-                                          return (
-                                            <>
-                                              <rect
-                                                x={xPx - 60}
-                                                y={yPx - 50}
-                                                width="120"
-                                                height="40"
-                                                fill="#1f2937"
-                                                rx="4"
-                                              />
-                                              <text
-                                                x={xPx}
-                                                y={yPx - 35}
-                                                textAnchor="middle"
-                                                className="text-xs fill-white font-semibold"
-                                              >
-                                                {day.label || formatDate(day.date)}
-                                              </text>
-                                              <text
-                                                x={xPx}
-                                                y={yPx - 20}
-                                                textAnchor="middle"
-                                                className="text-xs fill-green-300"
-                                              >
-                                                {formatCurrency(day.revenue)}
-                                              </text>
-                                            </>
-                                          );
-                                        })()}
-                                      </g>
                                     </g>
                                   );
                                 })}
@@ -859,6 +1297,38 @@ const AdminRevenue = () => {
                             )}
                           </div>
                         </div>
+
+                        {/* Drill-down panel (interactive) */}
+                        {selectedTrendPoint && (
+                          <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
+                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-semibold text-gray-900">
+                                  Selected: {selectedTrendPoint.label || formatDate(selectedTrendPoint.date)}
+                                </div>
+                                <div className="text-sm text-gray-700">
+                                  Revenue: <span className="font-semibold text-green-700">{formatCurrency(selectedTrendPoint.revenue)}</span>
+                                  {' '}• Orders: <span className="font-semibold">{selectedTrendPoint.orders}</span>
+                                  {' '}• Payments: <span className="font-semibold">{selectedTrendPoint.payments}</span>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => { setSelectedTrendPoint(null); }}
+                                  className="px-3 py-2 text-sm rounded-lg bg-white border border-green-300 text-green-700 hover:bg-green-100"
+                                >
+                                  Clear selection
+                                </button>
+                                <button
+                                  onClick={() => setActiveTab('transactions')}
+                                  className="px-3 py-2 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700"
+                                >
+                                  View recent transactions
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         {/* X-axis label */}
                         <div className="flex justify-center mt-8 text-xs text-gray-500 font-medium">Date</div>
                       </div>
@@ -1190,8 +1660,19 @@ const AdminRevenue = () => {
                     <tbody className="bg-white divide-y divide-gray-200">
                       {dashboardData?.eventWiseRevenue?.length > 0 ? (
                         dashboardData.eventWiseRevenue.map((event) => (
-                          <tr key={event.eventId} className="hover:bg-gray-50 cursor-pointer" onClick={() => window.open(`/admin/revenue/events/${event.eventId}`, '_blank')}>
-                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">{event.eventName || 'Unknown'}</td>
+                          <tr
+                            key={event.eventId}
+                            className="hover:bg-gray-50 cursor-pointer"
+                            onClick={() => {
+                              if (event.eventId && event.eventId !== 'unknown') {
+                                navigate(`/events/${event.eventId}`);
+                              }
+                            }}
+                            title={event.eventId && event.eventId !== 'unknown' ? 'Open event details' : 'Event ID missing'}
+                          >
+                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                              {event.eventName && event.eventName !== 'Unknown Event' ? event.eventName : 'Unknown Event'}
+                            </td>
                             <td className="px-4 py-3 text-sm text-gray-600">{event.sport || ''}</td>
                             <td className="px-4 py-3 text-sm text-green-600 font-medium">{formatCurrency(event.totalRevenue || 0)}</td>
                             <td className="px-4 py-3 text-sm text-orange-600">{formatCurrency(event.totalCommission || 0)}</td>

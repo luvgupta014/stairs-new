@@ -15,9 +15,9 @@ const Header = () => {
   const [totalItems, setTotalItems] = useState(0);
 
   const handleLogout = () => {
-    // Clear auth and return to the general landing/login page
+    // Navigate to landing first so ProtectedRoute can't bounce to role-specific login during state teardown
+    navigate('/', { replace: true });
     logout();
-    navigate('/');
   };
 
   // Memoized function to load notifications

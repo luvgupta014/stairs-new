@@ -69,6 +69,14 @@ export default function AdminDashboard() {
     totalPages: 1
   });
 
+  // Reset pagination when filters change
+  useEffect(() => {
+    setRegistrationPagination(prev => ({
+      ...prev,
+      page: 1
+    }));
+  }, [registrationFilters.role, registrationFilters.status, registrationFilters.search]);
+
   // Modal states
   const [infoModal, setInfoModal] = useState({
     isOpen: false,
@@ -250,8 +258,14 @@ export default function AdminDashboard() {
         };
         
         setStats(statsData);
-        setRecentUsers(users || []);
+        const usersArray = Array.isArray(users) ? users : [];
+        setRecentUsers(usersArray);
         setPendingEvents(pendingEventsData || recentEvents || []);
+        
+        console.log('📊 Recent users set:', {
+          count: usersArray.length,
+          sample: usersArray.slice(0, 2)
+        });
         
         dashboardCache.current = {
           timestamp: now,
@@ -444,6 +458,11 @@ export default function AdminDashboard() {
       ...prev,
       [key]: value
     }));
+    // Reset to page 1 when filters change
+    setRegistrationPagination(prev => ({
+      ...prev,
+      page: 1
+    }));
   };
 
   const getUserName = (user) => {
@@ -461,7 +480,18 @@ export default function AdminDashboard() {
 
   // Filter recent users based on filters with pagination (pure computation)
   const getFilteredRecentUsers = () => {
+    if (!recentUsers || recentUsers.length === 0) {
+      return {
+        users: [],
+        total: 0,
+        totalPages: 1,
+        page: 1
+      };
+    }
+
     const filtered = recentUsers.filter(user => {
+      if (!user) return false;
+      
       const userName = getUserName(user);
       const matchesRole = !registrationFilters.role || user.role === registrationFilters.role;
       const matchesStatus = !registrationFilters.status || 
@@ -476,9 +506,9 @@ export default function AdminDashboard() {
     });
 
     const total = filtered.length;
-    const limit = registrationPagination.limit;
-    const totalPages = Math.max(1, Math.ceil((total || 1) / (limit || 10)));
-    const currentPage = Math.min(registrationPagination.page, totalPages);
+    const limit = registrationPagination.limit || 10;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const currentPage = Math.min(Math.max(1, registrationPagination.page || 1), totalPages);
 
     const start = (currentPage - 1) * limit;
     const end = start + limit;

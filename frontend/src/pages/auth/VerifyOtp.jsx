@@ -78,6 +78,8 @@ const VerifyOtp = () => {
 
       if (response.data.success) {
         // Store token
+        // Store token (use canonical key `authToken`, keep `token` for backward compatibility)
+        localStorage.setItem('authToken', response.data.data.token);
         localStorage.setItem('token', response.data.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
 

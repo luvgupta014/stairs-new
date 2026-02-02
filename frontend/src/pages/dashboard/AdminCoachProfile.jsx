@@ -113,7 +113,14 @@ const AdminCoachProfile = ({ user }) => {
               </span>
             } 
           />
-          <InfoItem label="Subscription Type" value={coach.subscriptionType} />
+          <InfoItem 
+            label="Subscription Type" 
+            value={
+              coach.subscriptionType === 'ANNUAL' 
+                ? 'Annual (Financial Year: Apr 1 - Mar 31)' 
+                : coach.subscriptionType || 'N/A'
+            } 
+          />
           <InfoItem 
             label="Subscription Expires" 
             value={coach.subscriptionExpiresAt ? new Date(coach.subscriptionExpiresAt).toLocaleDateString() : 'N/A'} 

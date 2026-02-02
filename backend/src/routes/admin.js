@@ -1066,6 +1066,10 @@ router.get('/users/:uniqueId/details', authenticate, requireAdmin, async (req, r
       }
 
       if (user.role === 'COACH' && user.coachProfile) {
+        // Auto-normalize subscription (fix MONTHLY to ANNUAL for paid coaches)
+        const { normalizeCoachSubscription } = require('../utils/coachSubscriptionHelper');
+        user.coachProfile = await normalizeCoachSubscription(user.coachProfile, prisma);
+        
         const events = await prisma.event.findMany({
           where: { coachId: user.coachProfile.id },
           select: {
@@ -3275,15 +3279,20 @@ router.get('/users/:userId/payment-status', authenticate, requireAdmin, async (r
       const coach = await prisma.coach.findUnique({
         where: { userId },
         select: {
+          id: true,
           paymentStatus: true,
           subscriptionType: true,
           subscriptionExpiresAt: true
         }
       });
       if (coach) {
-        paymentStatus = coach.paymentStatus;
-        subscriptionType = coach.subscriptionType;
-        subscriptionExpiresAt = coach.subscriptionExpiresAt;
+        // Auto-normalize subscription (fix MONTHLY to ANNUAL for paid coaches)
+        const { normalizeCoachSubscription } = require('../utils/coachSubscriptionHelper');
+        const normalizedCoach = await normalizeCoachSubscription(coach, prisma);
+        
+        paymentStatus = normalizedCoach.paymentStatus;
+        subscriptionType = normalizedCoach.subscriptionType;
+        subscriptionExpiresAt = normalizedCoach.subscriptionExpiresAt;
       }
     } else if (user.role === 'CLUB') {
       const club = await prisma.club.findUnique({
@@ -3987,8 +3996,12 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
       .sort((a, b) => b.totalSpent - a.totalSpent)
       .slice(0, 10);
 
+    // Normalize coach subscriptions before formatting
+    const { normalizeCoachSubscriptions } = require('../utils/coachSubscriptionHelper');
+    const normalizedPremiumCoaches = await normalizeCoachSubscriptions(premiumCoaches, prisma);
+    
     // Format premium members
-    const premiumMembers = premiumCoaches.map(coach => ({
+    const premiumMembers = normalizedPremiumCoaches.map(coach => ({
       id: coach.id,
       name: coach.name,
       uniqueId: coach.user?.uniqueId,
@@ -4411,6 +4424,32 @@ router.get('/revenue/dashboard', authenticate, requireAdmin, async (req, res) =>
         eventRevenueBreakdown[eventId].paymentCount++;
       }
     });
+    // Enrich events (fix "Unknown Event" and missing sport) by fetching from DB
+    const eventIdsToEnrich = Object.values(eventRevenueBreakdown)
+      .filter(e => e.eventId && e.eventId !== 'unknown' && (!e.eventName || e.eventName === 'Unknown Event' || !e.sport))
+      .map(e => e.eventId);
+
+    if (eventIdsToEnrich.length > 0) {
+      try {
+        const uniqueIds = [...new Set(eventIdsToEnrich)];
+        const events = await prisma.event.findMany({
+          where: { id: { in: uniqueIds } },
+          select: { id: true, name: true, sport: true }
+        });
+        const byId = new Map(events.map(e => [e.id, e]));
+        uniqueIds.forEach((id) => {
+          const src = byId.get(id);
+          if (!src) return;
+          const dst = eventRevenueBreakdown[id];
+          if (!dst) return;
+          if (!dst.eventName || dst.eventName === 'Unknown Event') dst.eventName = src.name || dst.eventName;
+          if (!dst.sport) dst.sport = src.sport || '';
+        });
+      } catch (enrichErr) {
+        console.warn('⚠️ Could not enrich eventWiseRevenue:', enrichErr.message);
+      }
+    }
+
     // Calculate net revenue for each event
     Object.values(eventRevenueBreakdown).forEach(event => {
       event.netRevenue = event.totalRevenue - event.totalCommission;

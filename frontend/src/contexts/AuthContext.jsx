@@ -295,7 +295,12 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('lastAuthRole', user.role);
     }
     localStorage.removeItem('authToken');
+    // Legacy key used by older OTP flow
+    localStorage.removeItem('token');
     localStorage.removeItem('user');
+    // Clear transient auth/payment flow state
+    localStorage.removeItem('pendingPayment');
+    localStorage.removeItem('pendingEventRegistration');
     setToken(null);
     setUser(null);
     delete api.defaults.headers.common['Authorization'];

@@ -75,7 +75,11 @@ router.get('/profile', authenticate, requireCoach, async (req, res) => {
       return res.status(404).json(errorResponse('Coach profile not found.', 404));
     }
 
-    res.json(successResponse(coach, 'Coach profile retrieved successfully.'));
+    // Auto-normalize subscription (fix MONTHLY to ANNUAL for paid coaches)
+    const { normalizeCoachSubscription } = require('../utils/coachSubscriptionHelper');
+    const normalizedCoach = await normalizeCoachSubscription(coach, prisma);
+
+    res.json(successResponse(normalizedCoach, 'Coach profile retrieved successfully.'));
 
   } catch (error) {
     console.error('Get coach profile error:', error);
