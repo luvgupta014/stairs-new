@@ -459,7 +459,7 @@ export default function AdminDashboard() {
     return user.email || 'Unknown User';
   };
 
-  // Filter recent users based on filters with pagination
+  // Filter recent users based on filters with pagination (pure computation)
   const getFilteredRecentUsers = () => {
     const filtered = recentUsers.filter(user => {
       const userName = getUserName(user);
@@ -474,18 +474,21 @@ export default function AdminDashboard() {
         (user.uniqueId && user.uniqueId.toLowerCase().includes(search));
       return matchesRole && matchesStatus && matchesSearch;
     });
-    
-    // Update pagination total
-    setRegistrationPagination(prev => ({
-      ...prev,
-      total: filtered.length,
-      totalPages: Math.ceil(filtered.length / prev.limit)
-    }));
-    
-    // Apply pagination
-    const start = (registrationPagination.page - 1) * registrationPagination.limit;
-    const end = start + registrationPagination.limit;
-    return filtered.slice(start, end);
+
+    const total = filtered.length;
+    const limit = registrationPagination.limit;
+    const totalPages = Math.max(1, Math.ceil((total || 1) / (limit || 10)));
+    const currentPage = Math.min(registrationPagination.page, totalPages);
+
+    const start = (currentPage - 1) * limit;
+    const end = start + limit;
+
+    return {
+      users: filtered.slice(start, end),
+      total,
+      totalPages,
+      page: currentPage
+    };
   };
 
   const getStatusColor = (status) => {
@@ -529,6 +532,14 @@ export default function AdminDashboard() {
       </div>
     );
   }
+
+  // Derived data for recent registrations (filtered + paginated)
+  const {
+    users: paginatedRecentUsers,
+    total: totalRecentUsers,
+    totalPages: totalRecentPages,
+    page: currentRecentPage
+  } = getFilteredRecentUsers();
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -795,7 +806,7 @@ export default function AdminDashboard() {
         {/* Recent Users Section */}
         <div ref={recentRegistrationsRef} className="bg-white rounded-xl shadow-lg p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold text-gray-900">Recent Registrations ({registrationPagination.total})</h3>
+            <h3 className="text-xl font-semibold text-gray-900">Recent Registrations ({totalRecentUsers})</h3>
             <button
               onClick={() => fetchDashboardData(true)}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors"
@@ -858,11 +869,11 @@ export default function AdminDashboard() {
             </div>
           </div>
           
-          {getFilteredRecentUsers().length > 0 ? (
+          {paginatedRecentUsers.length > 0 ? (
             <>
-              <UserTable users={getFilteredRecentUsers()} getUserName={getUserName} showDetailModal={showDetailModal} />
+              <UserTable users={paginatedRecentUsers} getUserName={getUserName} showDetailModal={showDetailModal} />
               {/* Pagination for Recent Registrations */}
-              {registrationPagination.totalPages > 1 && (
+              {totalRecentPages > 1 && (
                 <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200">
                   <button
                     className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50 text-sm"
@@ -870,20 +881,20 @@ export default function AdminDashboard() {
                       const newPage = Math.max(1, registrationPagination.page - 1);
                       setRegistrationPagination({ ...registrationPagination, page: newPage });
                     }}
-                    disabled={registrationPagination.page <= 1}
+                    disabled={currentRecentPage <= 1}
                   >
                     Previous
                   </button>
                   <span className="text-sm text-gray-700">
-                    Page {registrationPagination.page} of {registrationPagination.totalPages} ({registrationPagination.total} users)
+                    Page {currentRecentPage} of {totalRecentPages} ({totalRecentUsers} users)
                   </span>
                   <button
                     className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50 text-sm"
                     onClick={() => {
-                      const newPage = Math.min(registrationPagination.totalPages, registrationPagination.page + 1);
+                      const newPage = Math.min(totalRecentPages, registrationPagination.page + 1);
                       setRegistrationPagination({ ...registrationPagination, page: newPage });
                     }}
-                    disabled={registrationPagination.page >= registrationPagination.totalPages}
+                    disabled={currentRecentPage >= totalRecentPages}
                   >
                     Next
                   </button>
