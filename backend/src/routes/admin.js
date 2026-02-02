@@ -104,7 +104,6 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
           OR: [
             { AND: [{ role: 'STUDENT' }, { studentProfile: { isNot: null } }] },
             { AND: [{ role: 'COACH' }, { coachProfile: { isNot: null } }] },
-            { AND: [{ role: 'COORDINATOR' }, { coachProfile: { isNot: null } }] },
             { AND: [{ role: 'INSTITUTE' }, { instituteProfile: { isNot: null } }] },
             { AND: [{ role: 'CLUB' }, { clubProfile: { isNot: null } }] },
             { AND: [{ role: 'ADMIN' }, { adminProfile: { isNot: null } }] }
@@ -903,28 +902,57 @@ router.get('/users', authenticate, requireAdmin, async (req, res) => {
 
     const { skip, take } = getPaginationParams(page, limit);
 
+    const roleUpper = role ? String(role).toUpperCase() : '';
+    const statusLower = status ? String(status).toLowerCase() : '';
+    const searchStr = search ? String(search).trim() : '';
+
+    // Role mapping:
+    // - Prisma UserRole does NOT include "COORDINATOR". In this system coordinators are stored as COACH with applyingAs containing "coordinator".
+    const roleWhere = (() => {
+      if (!roleUpper) return {};
+      if (roleUpper === 'COORDINATOR') {
+        return {
+          role: 'COACH',
+          coachProfile: {
+            is: {
+              applyingAs: { contains: 'coordinator', mode: 'insensitive' }
+            }
+          }
+        };
+      }
+      return { role: roleUpper };
+    })();
+
+    // Status mapping (there is no `status` field on User):
+    // - active: isActive=true AND isVerified=true
+    // - pending: NOT(active) i.e. isActive=false OR isVerified=false
+    const statusWhere = (() => {
+      if (!statusLower) return {};
+      if (statusLower === 'active') return { isActive: true, isVerified: true };
+      if (statusLower === 'pending') return { OR: [{ isActive: false }, { isVerified: false }] };
+      if (statusLower === 'inactive') return { isActive: false };
+      return {};
+    })();
+
+    const searchWhere = searchStr
+      ? {
+          OR: [
+            { uniqueId: { contains: searchStr, mode: 'insensitive' } },
+            { email: { contains: searchStr, mode: 'insensitive' } },
+            { phone: { contains: searchStr, mode: 'insensitive' } },
+            { studentProfile: { is: { name: { contains: searchStr, mode: 'insensitive' } } } },
+            { coachProfile: { is: { name: { contains: searchStr, mode: 'insensitive' } } } },
+            { instituteProfile: { is: { name: { contains: searchStr, mode: 'insensitive' } } } },
+            { clubProfile: { is: { name: { contains: searchStr, mode: 'insensitive' } } } },
+            { adminProfile: { is: { name: { contains: searchStr, mode: 'insensitive' } } } }
+          ]
+        }
+      : {};
+
     const where = {
-      ...(role && { role: role.toUpperCase() }),
-      ...(status && { status: status.toUpperCase() }),
-      ...(search && {
-        OR: [
-          { uniqueId: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } },
-          { phone: { contains: search, mode: 'insensitive' } },
-          { studentProfile: { 
-            OR: [
-              { name: { contains: search, mode: 'insensitive' } }
-            ]
-          }},
-          { coachProfile: { 
-            OR: [
-              { name: { contains: search, mode: 'insensitive' } }
-            ]
-          }},
-          { instituteProfile: { name: { contains: search, mode: 'insensitive' } } },
-          { clubProfile: { name: { contains: search, mode: 'insensitive' } } }
-        ]
-      })
+      ...roleWhere,
+      ...statusWhere,
+      ...searchWhere
     };
 
     const [users, total] = await Promise.all([
@@ -948,7 +976,6 @@ router.get('/users', authenticate, requireAdmin, async (req, res) => {
               dateOfBirth: true,
               gender: true,
               address: true,
-              city: true,
               state: true,
               district: true,
               pincode: true,
