@@ -1277,6 +1277,122 @@ router.get('/history', authenticate, async (req, res) => {
   }
 });
 
+// Sync payment status from Razorpay Order Status API
+router.post('/sync-payment-status', authenticate, async (req, res) => {
+  try {
+    const { razorpayOrderId } = req.body;
+
+    if (!razorpayOrderId) {
+      return res.status(400).json(errorResponse('Razorpay Order ID is required.', 400));
+    }
+
+    console.log(`🔄 Syncing payment status from Razorpay for order: ${razorpayOrderId}`);
+
+    // Fetch order status from Razorpay
+    let razorpayOrder;
+    try {
+      razorpayOrder = await razorpay.orders.fetch(razorpayOrderId);
+      console.log(`✅ Razorpay order fetched:`, {
+        id: razorpayOrder.id,
+        status: razorpayOrder.status,
+        amount: razorpayOrder.amount,
+        amount_paid: razorpayOrder.amount_paid
+      });
+    } catch (razorpayError) {
+      console.error('❌ Razorpay API error:', razorpayError);
+      return res.status(400).json(errorResponse(`Failed to fetch order from Razorpay: ${razorpayError.message}`, 400));
+    }
+
+    // Check if order is paid
+    const isPaid = razorpayOrder.status === 'paid' || razorpayOrder.amount_paid >= razorpayOrder.amount;
+
+    if (!isPaid) {
+      return res.json(successResponse({
+        razorpayOrderId,
+        status: razorpayOrder.status,
+        amount: razorpayOrder.amount / 100, // Convert from paise to rupees
+        amountPaid: razorpayOrder.amount_paid / 100,
+        isPaid: false,
+        message: 'Payment is still pending on Razorpay'
+      }, 'Payment status synced. Payment is pending.'));
+    }
+
+    // Find all payment records with this order ID
+    const payments = await prisma.payment.findMany({
+      where: {
+        razorpayOrderId: razorpayOrderId
+      }
+    });
+
+    if (payments.length === 0) {
+      return res.status(404).json(errorResponse('No payment records found for this order ID.', 404));
+    }
+
+    // Update all pending payments to SUCCESS
+    let updatedCount = 0;
+    for (const payment of payments) {
+      if (payment.status !== 'SUCCESS') {
+        // Get payment ID from Razorpay payments
+        let razorpayPaymentId = payment.razorpayPaymentId;
+        
+        if (!razorpayPaymentId) {
+          try {
+            const payments = await razorpay.orders.fetchPayments(razorpayOrderId);
+            if (payments.items && payments.items.length > 0) {
+              razorpayPaymentId = payments.items[0].id;
+            }
+          } catch (err) {
+            console.warn('Could not fetch payment ID from Razorpay:', err);
+          }
+        }
+
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: 'SUCCESS',
+            razorpayPaymentId: razorpayPaymentId || payment.razorpayPaymentId
+          }
+        });
+        updatedCount++;
+
+        // Update user profiles if needed
+        if (payment.userType === 'COACH') {
+          await prisma.coach.updateMany({
+            where: { userId: payment.userId },
+            data: { paymentStatus: 'SUCCESS', isActive: true }
+          });
+        } else if (payment.userType === 'INSTITUTE') {
+          await prisma.institute.updateMany({
+            where: { userId: payment.userId },
+            data: { paymentStatus: 'SUCCESS', isActive: true }
+          });
+        } else if (payment.userType === 'CLUB') {
+          await prisma.club.updateMany({
+            where: { userId: payment.userId },
+            data: { paymentStatus: 'SUCCESS', isActive: true }
+          });
+        }
+      }
+    }
+
+    console.log(`✅ Updated ${updatedCount} payment records to SUCCESS`);
+
+    res.json(successResponse({
+      razorpayOrderId,
+      status: 'SUCCESS',
+      amount: razorpayOrder.amount / 100,
+      amountPaid: razorpayOrder.amount_paid / 100,
+      isPaid: true,
+      updatedPayments: updatedCount,
+      message: `Successfully synced ${updatedCount} payment record(s)`
+    }, 'Payment status synced successfully from Razorpay.'));
+
+  } catch (error) {
+    console.error('❌ Sync payment status error:', error);
+    res.status(500).json(errorResponse('Failed to sync payment status: ' + error.message, 500));
+  }
+});
+
 // Get event payment status (coach-accessible + admin-accessible)
 router.get('/event/:eventId/payment-status', authenticate, async (req, res) => {
   try {

@@ -121,6 +121,9 @@ const VerifyOtp = () => {
               navigate('/dashboard/institute');
             } else if (role === 'CLUB') {
               navigate('/dashboard/club');
+            } else {
+              // For any other role or if role is not recognized, redirect to general login
+              navigate('/');
             }
           }, 1500);
         }

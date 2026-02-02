@@ -876,6 +876,19 @@ export const markStudentEventPaymentAttempt = async (eventId, razorpayOrderId, s
   }
 };
 
+// Sync payment status from Razorpay Order Status API
+export const syncPaymentStatus = async (razorpayOrderId) => {
+  try {
+    const response = await api.post('/api/payment/sync-payment-status', {
+      razorpayOrderId
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Sync payment status error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 // Coordinator/coach event fee payment (event payment for certificate/results workflow)
 export const createEventPaymentOrder = async (eventId) => {
   try {

@@ -60,6 +60,14 @@ export default function AdminDashboard() {
     status: '',
     search: ''
   });
+  
+  // Pagination for recent registrations
+  const [registrationPagination, setRegistrationPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1
+  });
 
   // Modal states
   const [infoModal, setInfoModal] = useState({
@@ -451,9 +459,9 @@ export default function AdminDashboard() {
     return user.email || 'Unknown User';
   };
 
-  // Filter recent users based on filters
+  // Filter recent users based on filters with pagination
   const getFilteredRecentUsers = () => {
-    return recentUsers.filter(user => {
+    const filtered = recentUsers.filter(user => {
       const userName = getUserName(user);
       const matchesRole = !registrationFilters.role || user.role === registrationFilters.role;
       const matchesStatus = !registrationFilters.status || 
@@ -466,6 +474,18 @@ export default function AdminDashboard() {
         (user.uniqueId && user.uniqueId.toLowerCase().includes(search));
       return matchesRole && matchesStatus && matchesSearch;
     });
+    
+    // Update pagination total
+    setRegistrationPagination(prev => ({
+      ...prev,
+      total: filtered.length,
+      totalPages: Math.ceil(filtered.length / prev.limit)
+    }));
+    
+    // Apply pagination
+    const start = (registrationPagination.page - 1) * registrationPagination.limit;
+    const end = start + registrationPagination.limit;
+    return filtered.slice(start, end);
   };
 
   const getStatusColor = (status) => {
@@ -775,7 +795,7 @@ export default function AdminDashboard() {
         {/* Recent Users Section */}
         <div ref={recentRegistrationsRef} className="bg-white rounded-xl shadow-lg p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold text-gray-900">Recent Registrations ({getFilteredRecentUsers().length})</h3>
+            <h3 className="text-xl font-semibold text-gray-900">Recent Registrations ({registrationPagination.total})</h3>
             <button
               onClick={() => fetchDashboardData(true)}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors"
@@ -795,8 +815,9 @@ export default function AdminDashboard() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 >
                   <option value="">All Roles</option>
-                  <option value="ATHLETE">Athletes</option>
+                  <option value="STUDENT">Athletes</option>
                   <option value="COACH">Coaches</option>
+                  <option value="COORDINATOR">Coordinators</option>
                   <option value="INSTITUTE">Institutes</option>
                   <option value="CLUB">Clubs</option>
                 </select>
@@ -838,7 +859,37 @@ export default function AdminDashboard() {
           </div>
           
           {getFilteredRecentUsers().length > 0 ? (
-            <UserTable users={getFilteredRecentUsers()} getUserName={getUserName} showDetailModal={showDetailModal} />
+            <>
+              <UserTable users={getFilteredRecentUsers()} getUserName={getUserName} showDetailModal={showDetailModal} />
+              {/* Pagination for Recent Registrations */}
+              {registrationPagination.totalPages > 1 && (
+                <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200">
+                  <button
+                    className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50 text-sm"
+                    onClick={() => {
+                      const newPage = Math.max(1, registrationPagination.page - 1);
+                      setRegistrationPagination({ ...registrationPagination, page: newPage });
+                    }}
+                    disabled={registrationPagination.page <= 1}
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-700">
+                    Page {registrationPagination.page} of {registrationPagination.totalPages} ({registrationPagination.total} users)
+                  </span>
+                  <button
+                    className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50 text-sm"
+                    onClick={() => {
+                      const newPage = Math.min(registrationPagination.totalPages, registrationPagination.page + 1);
+                      setRegistrationPagination({ ...registrationPagination, page: newPage });
+                    }}
+                    disabled={registrationPagination.page >= registrationPagination.totalPages}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-center py-8 text-gray-500">
               {Object.values(registrationFilters).some(filter => filter) ? (

@@ -98,11 +98,13 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
       prisma.event.count({ where: { status: 'APPROVED' } }),
       prisma.event.count({ where: { status: 'ACTIVE' } }),
       // Recent registrations with reduced data - only users with valid profiles
+      // Note: This is limited to 10 for dashboard overview. Use /users endpoint for paginated access
       prisma.user.findMany({
         where: {
           OR: [
             { AND: [{ role: 'STUDENT' }, { studentProfile: { isNot: null } }] },
             { AND: [{ role: 'COACH' }, { coachProfile: { isNot: null } }] },
+            { AND: [{ role: 'COORDINATOR' }, { coachProfile: { isNot: null } }] },
             { AND: [{ role: 'INSTITUTE' }, { instituteProfile: { isNot: null } }] },
             { AND: [{ role: 'CLUB' }, { clubProfile: { isNot: null } }] },
             { AND: [{ role: 'ADMIN' }, { adminProfile: { isNot: null } }] }
@@ -123,7 +125,7 @@ router.get('/dashboard', authenticate, requireAdmin, async (req, res) => {
           adminProfile: { select: { name: true } }
         },
         orderBy: { createdAt: 'desc' },
-        take: 10
+        take: 50 // Increased limit for better filtering
       }),
       // Recent pending events with reduced data
       prisma.event.findMany({
@@ -942,7 +944,20 @@ router.get('/users', authenticate, requireAdmin, async (req, res) => {
               id: true,
               name: true,
               sport: true,
-              level: true
+              level: true,
+              dateOfBirth: true,
+              gender: true,
+              address: true,
+              city: true,
+              state: true,
+              district: true,
+              pincode: true,
+              fatherName: true,
+              aadhaar: true,
+              school: true,
+              club: true,
+              coachName: true,
+              achievements: true
             }
           },
           coachProfile: {

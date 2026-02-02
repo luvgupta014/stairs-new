@@ -577,10 +577,19 @@ router.post('/request-verification-otp', async (req, res) => {
       'User';
 
     try {
-      await sendOTPEmail(email, otp, profileName);
+      const emailResult = await sendOTPEmail(email, otp, profileName);
+      
+      if (!emailResult.success) {
+        console.error('❌ Failed to send verification OTP email:', emailResult.error);
+        // Return error so user knows email failed
+        return res.status(500).json(errorResponse(`Failed to send verification email: ${emailResult.error || 'Email service unavailable'}. Please contact support.`, 500));
+      }
+      
+      console.log(`✅ Verification OTP sent to ${email}: ${otp}`);
     } catch (emailError) {
       console.error('❌ Failed to send verification OTP email:', emailError?.message || emailError);
-      // Still respond success to avoid leaking state; user can retry.
+      // Return error so user knows email failed
+      return res.status(500).json(errorResponse(`Failed to send verification email: ${emailError.message || 'Email service error'}. Please contact support.`, 500));
     }
 
     return res.json(successResponse({
@@ -669,11 +678,17 @@ router.post('/resend-otp', async (req, res) => {
                       user.instituteProfile?.name || 
                       user.clubProfile?.name || 
                       'User';
-      await sendOTPEmail(user.email, otp, userName);
+      const emailResult = await sendOTPEmail(user.email, otp, userName);
+      
+      if (!emailResult.success) {
+        console.error('❌ Failed to send OTP email:', emailResult.error);
+        return res.status(500).json(errorResponse(`Failed to send OTP email: ${emailResult.error || 'Email service unavailable'}. Please contact support.`, 500));
+      }
+      
       console.log(`✅ New OTP sent to email ${user.email}: ${otp}`);
     } catch (emailError) {
       console.error('❌ Failed to send OTP email:', emailError);
-      return res.status(500).json(errorResponse('Failed to send OTP email.', 500));
+      return res.status(500).json(errorResponse(`Failed to send OTP email: ${emailError.message || 'Email service error'}. Please contact support.`, 500));
     }
 
     console.log('🎉 === RESEND OTP COMPLETED ===');
@@ -1564,14 +1579,22 @@ router.post('/forgot-password', async (req, res) => {
                       user.instituteProfile?.name || 
                       user.clubProfile?.name || 
                       'User';
-      await sendPasswordResetEmail(email, resetToken, userName);
+      const emailResult = await sendPasswordResetEmail(email, resetToken, userName);
+      
+      if (!emailResult.success) {
+        console.error('❌ Failed to send password reset email:', emailResult.error);
+        // Return error so user knows email failed
+        return res.status(500).json(errorResponse(`Failed to send reset email: ${emailResult.error || 'Email service unavailable'}. Please contact support.`, 500));
+      }
+      
       console.log(`✅ Password reset token sent to ${email}: ${resetToken}`);
     } catch (emailError) {
       console.error('❌ Failed to send password reset email:', {
         error: emailError.message,
         stack: emailError.stack
       });
-      // Don't reveal if email exists, but log the error
+      // Return error so user knows email failed
+      return res.status(500).json(errorResponse(`Failed to send reset email: ${emailError.message || 'Email service error'}. Please contact support.`, 500));
     }
 
     console.log('🎉 === FORGOT PASSWORD COMPLETED ===');

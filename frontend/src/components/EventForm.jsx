@@ -98,7 +98,14 @@ const EventForm = ({
     if (!formData.sport.trim()) newErrors.sport = 'Sport is required';
     if (!formData.startDate) newErrors.startDate = 'Start date is required';
     if (!formData.endDate) newErrors.endDate = 'End date is required';
-    if (!formData.venue.trim()) newErrors.venue = 'Venue is required';
+    
+    // Venue is optional for online events
+    const eventFormat = (formData.eventFormat || 'OFFLINE').toString().toUpperCase();
+    const isOnline = eventFormat === 'ONLINE';
+    if (!isOnline && !formData.venue.trim()) {
+      newErrors.venue = 'Venue is required for offline events';
+    }
+    
     if (!formData.city.trim()) newErrors.city = 'City is required';
     if (!formData.state.trim()) newErrors.state = 'State is required';
     if (!formData.maxParticipants) newErrors.maxParticipants = 'Maximum participants is required';

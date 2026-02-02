@@ -6,8 +6,9 @@ import { HiOutlineExternalLink, HiOutlineDownload } from 'react-icons/hi';
 
 const ROLES = [
   { value: '', label: 'All Roles' },
-  { value: 'STUDENT', label: 'Students' },
+  { value: 'STUDENT', label: 'Athletes' },
   { value: 'COACH', label: 'Coaches' },
+  { value: 'COORDINATOR', label: 'Coordinators' },
   { value: 'INSTITUTE', label: 'Institutes' },
   { value: 'CLUB', label: 'Clubs' },
   { value: 'ADMIN', label: 'Admins' },
@@ -78,18 +79,43 @@ const AllUsers = () => {
       const res = await getAllUsers(params);
       const allUsers = res.data.users || [];
 
-      // Convert to CSV
-      const headers = ['Name', 'Email', 'UID', 'Phone', 'Role', 'Status', 'Verified', 'Joined'];
-      const rows = allUsers.map(user => [
-        user.studentProfile?.name || user.coachProfile?.name || user.instituteProfile?.name || user.clubProfile?.name || user.adminProfile?.name || 'N/A',
-        user.email || 'N/A',
-        user.uniqueId || 'N/A',
-        user.phone || 'N/A',
-        user.role || 'N/A',
-        user.isActive ? 'Active' : 'Inactive',
-        user.isVerified ? 'Yes' : 'No',
-        user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'
-      ]);
+      // Convert to CSV with complete profile details
+      const headers = [
+        'Name', 'Email', 'UID', 'Phone', 'Role', 'Status', 'Verified', 'Joined',
+        'Date of Birth', 'Gender', 'Sport', 'Level', 'Address', 'City', 'State', 'District', 'Pincode',
+        'Father Name', 'Aadhaar', 'School', 'Club', 'Coach Name', 'Achievements'
+      ];
+      const rows = allUsers.map(user => {
+        const profile = user.studentProfile || user.coachProfile || user.instituteProfile || user.clubProfile || user.adminProfile || {};
+        const name = profile.name || user.email || 'N/A';
+        
+        return [
+          name,
+          user.email || 'N/A',
+          user.uniqueId || 'N/A',
+          user.phone || 'N/A',
+          user.role || 'N/A',
+          user.isActive ? 'Active' : 'Inactive',
+          user.isVerified ? 'Yes' : 'No',
+          user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A',
+          // Student profile details
+          profile.dateOfBirth ? new Date(profile.dateOfBirth).toLocaleDateString() : 'N/A',
+          profile.gender || 'N/A',
+          profile.sport || 'N/A',
+          profile.level || 'N/A',
+          profile.address || 'N/A',
+          profile.city || 'N/A',
+          profile.state || 'N/A',
+          profile.district || 'N/A',
+          profile.pincode || 'N/A',
+          profile.fatherName || 'N/A',
+          profile.aadhaar || 'N/A',
+          profile.school || 'N/A',
+          profile.club || 'N/A',
+          profile.coachName || 'N/A',
+          profile.achievements || 'N/A'
+        ];
+      });
 
       const csvContent = [
         headers.join(','),

@@ -7,111 +7,90 @@
 // All sports in alphabetical order
 export const ALL_SPORTS = [
   // A
-  '3x3 Basketball',
   'Archery',
-  'Artistic Swimming',
   'Athletics',
+  'Atya Patya',
   
   // B
   'Badminton',
-  'Baseball',
-  'Basketball', // 5x5 Basketball
+  'Basketball',
+  'Basketball 3x3',
   'Beach Volleyball',
+  'Bmx Freestyle, Racing',
   'Boxing',
   'Breaking',
-  'Bridge',
   
   // C
-  'Canoeing',
+  'Canoe Slalom, Sprint',
   'Chess',
-  'Cricket', // Adding common sports not in table
-  'Cycling',
+  'Cricket',
+  'Cultural Activities',
+  'Cycling Track',
   
   // D
+  'Dance Sports',
   'Diving',
   
-  // E
-  'Equestrian',
-  'Esports', // New category
-  
   // F
-  'Fencing',
-  'Flag Football',
   'Football',
   
   // G
-  'Gatka',
-  'Go',
   'Golf',
-  'Gymnastics',
+  'Gymnastics (Rhythmic, Artistic, trampoline)',
   
   // H
   'Handball',
   'Hockey',
   
   // J
-  'Ju-jitsu',
   'Judo',
+  'Jump Rope',
   
   // K
   'Kabaddi',
-  'Kalaripayattu',
   'Karate',
-  'Kho-Kho',
-  'Kurash',
-  
-  // L
-  'Lacrosse',
-  'Lawn Bowls',
+  'Kho Kho',
+  'Kick Boxing',
   
   // M
-  'Mallakhamb',
   'Modern Pentathlon',
-  
-  // N
-  'Netball',
-  
-  // O
-  'Open Water Swimming',
-  'Other', // For any sport not listed
+  'Mountain Biking',
   
   // P
-  'Para Powerlifting',
+  'Physical Education & Sports Sciences',
   
   // R
+  'Road Cycling',
   'Rowing',
   'Rugby',
-  'Rugby Sevens',
   
   // S
   'Sailing',
-  'Sepak Takraw',
   'Shooting',
+  'Silambam',
   'Skateboarding',
-  'Softball',
+  'Skating',
   'Sport Climbing',
-  'Squash',
   'Surfing',
-  'Swimming',
+  'Swimming (Artistic, Marathon, Regular)',
   
   // T
   'Table Tennis',
   'Taekwondo',
   'Tennis',
-  'Thang-Ta',
+  'Tennis Cricket',
+  'Throwball',
   'Triathlon',
+  'Tug Of War',
   
   // V
-  'Volleyball', // Indoor Volleyball
+  'Volleyball',
   
   // W
   'Water Polo',
   'Weightlifting',
   'Wrestling',
   'Wushu',
-  
-  // X
-  'Xiangqi',
   
   // Y
   'Yogasana'
@@ -120,42 +99,34 @@ export const ALL_SPORTS = [
 // Sports organized by category
 export const SPORTS_BY_CATEGORY = {
   'Olympic Sports': [
-    '3x3 Basketball',
     'Archery',
-    'Artistic Swimming',
     'Athletics',
     'Badminton',
-    'Baseball',
     'Basketball',
+    'Basketball 3x3',
     'Beach Volleyball',
     'Boxing',
     'Breaking',
-    'Canoeing',
-    'Cycling',
+    'Canoe Slalom, Sprint',
+    'Cycling Track',
     'Diving',
-    'Equestrian',
-    'Fencing',
-    'Flag Football',
     'Football',
     'Golf',
-    'Gymnastics',
+    'Gymnastics (Rhythmic, Artistic, trampoline)',
     'Handball',
     'Hockey',
     'Judo',
     'Karate',
-    'Lacrosse',
     'Modern Pentathlon',
-    'Open Water Swimming',
+    'Road Cycling',
     'Rowing',
-    'Rugby Sevens',
+    'Rugby',
     'Sailing',
     'Shooting',
     'Skateboarding',
-    'Softball',
     'Sport Climbing',
-    'Squash',
     'Surfing',
-    'Swimming',
+    'Swimming (Artistic, Marathon, Regular)',
     'Table Tennis',
     'Taekwondo',
     'Tennis',
@@ -166,146 +137,98 @@ export const SPORTS_BY_CATEGORY = {
     'Wrestling'
   ],
   
-  'Commonwealth Sports': [
-    'Athletics',
-    'Badminton',
-    'Basketball',
-    'Beach Volleyball',
-    'Boxing',
-    'Bridge',
-    'Canoeing',
-    'Chess',
-    'Cycling',
-    'Diving',
-    'Equestrian',
-    'Fencing',
-    'Football',
-    'Golf',
-    'Gymnastics',
-    'Handball',
-    'Hockey',
-    'Ju-jitsu',
-    'Judo',
-    'Kabaddi',
-    'Karate',
-    'Kurash',
-    'Lawn Bowls',
-    'Modern Pentathlon',
-    'Netball',
-    'Open Water Swimming',
-    'Para Powerlifting',
-    'Rowing',
-    'Rugby Sevens',
-    'Sailing',
-    'Sepak Takraw',
-    'Shooting',
-    'Skateboarding',
-    'Sport Climbing',
-    'Squash',
-    'Surfing',
-    'Swimming',
-    'Table Tennis',
-    'Taekwondo',
-    'Tennis',
-    'Triathlon',
-    'Volleyball',
-    'Water Polo',
-    'Weightlifting',
-    'Wrestling',
-    'Wushu',
-    'Xiangqi',
-    'Go',
-    'Esports'
-  ],
-  
-  'Asian Games / KIYG Sports': [
-    '3x3 Basketball',
-    'Archery',
-    'Athletics',
-    'Badminton',
-    'Basketball',
-    'Boxing',
-    'Cycling',
-    'Football',
-    'Gatka',
-    'Gymnastics',
-    'Hockey',
-    'Judo',
-    'Kabaddi',
-    'Kalaripayattu',
-    'Kho-Kho',
-    'Mallakhamb',
-    'Rugby',
-    'Swimming',
-    'Table Tennis',
-    'Thang-Ta',
-    'Weightlifting',
-    'Wrestling',
-    'Yogasana'
-  ],
-  
-  'eSports': [
-    'Esports'
-  ],
-  
   'Traditional / Regional Sports': [
-    'Gatka',
+    'Atya Patya',
     'Kabaddi',
-    'Kalaripayattu',
-    'Kho-Kho',
-    'Mallakhamb',
-    'Sepak Takraw',
-    'Thang-Ta',
+    'Kho Kho',
+    'Silambam',
     'Wushu',
     'Yogasana'
-  ],
-  
-  'Mind Sports': [
-    'Bridge',
-    'Chess',
-    'Go',
-    'Xiangqi'
   ],
   
   'Combat Sports': [
     'Boxing',
     'Breaking',
     'Judo',
-    'Ju-jitsu',
     'Karate',
-    'Kalaripayattu',
-    'Kurash',
+    'Kick Boxing',
     'Taekwondo',
     'Wrestling',
     'Wushu'
   ],
   
   'Water Sports': [
-    'Artistic Swimming',
-    'Canoeing',
+    'Canoe Slalom, Sprint',
     'Diving',
-    'Open Water Swimming',
     'Rowing',
     'Sailing',
-    'Swimming',
+    'Swimming (Artistic, Marathon, Regular)',
     'Water Polo'
   ],
   
   'Team Sports': [
-    '3x3 Basketball',
-    'Baseball',
     'Basketball',
+    'Basketball 3x3',
     'Beach Volleyball',
+    'Cricket',
     'Football',
     'Handball',
     'Hockey',
-    'Lacrosse',
-    'Netball',
+    'Kabaddi',
     'Rugby',
-    'Rugby Sevens',
-    'Softball',
+    'Tennis Cricket',
+    'Throwball',
     'Volleyball',
     'Water Polo'
+  ],
+  
+  'Individual Sports': [
+    'Archery',
+    'Athletics',
+    'Badminton',
+    'Boxing',
+    'Chess',
+    'Cycling Track',
+    'Diving',
+    'Golf',
+    'Gymnastics (Rhythmic, Artistic, trampoline)',
+    'Judo',
+    'Karate',
+    'Road Cycling',
+    'Shooting',
+    'Skateboarding',
+    'Skating',
+    'Sport Climbing',
+    'Surfing',
+    'Swimming (Artistic, Marathon, Regular)',
+    'Table Tennis',
+    'Taekwondo',
+    'Tennis',
+    'Triathlon',
+    'Weightlifting',
+    'Wrestling'
+  ],
+  
+  'Mind Sports': [
+    'Chess'
+  ],
+  
+  'Cycling Sports': [
+    'Bmx Freestyle, Racing',
+    'Cycling Track',
+    'Mountain Biking',
+    'Road Cycling'
+  ],
+  
+  'Cultural & Educational': [
+    'Cultural Activities',
+    'Dance Sports',
+    'Physical Education & Sports Sciences'
+  ],
+  
+  'Other Sports': [
+    'Jump Rope',
+    'Tug Of War'
   ]
 };
 
@@ -319,18 +242,20 @@ export const POPULAR_SPORTS = [
   'Volleyball',
   'Hockey',
   'Athletics',
-  'Swimming',
+  'Swimming (Artistic, Marathon, Regular)',
   'Table Tennis',
   'Boxing',
   'Wrestling',
   'Kabaddi',
   'Archery',
-  'Cycling',
-  'Gymnastics',
+  'Cycling Track',
+  'Gymnastics (Rhythmic, Artistic, trampoline)',
   'Golf',
   'Shooting',
   'Weightlifting',
-  'Esports'
+  'Taekwondo',
+  'Karate',
+  'Judo'
 ];
 
 // Sort alphabetically for easy selection

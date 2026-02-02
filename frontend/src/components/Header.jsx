@@ -15,13 +15,9 @@ const Header = () => {
   const [totalItems, setTotalItems] = useState(0);
 
   const handleLogout = () => {
-    const role = (user?.role || '').toString().toUpperCase();
+    // Clear auth and return to the general landing/login page
     logout();
-    if (role === 'EVENT_INCHARGE') {
-      navigate('/login/incharge');
-    } else {
-      navigate('/login/student');
-    }
+    navigate('/');
   };
 
   // Memoized function to load notifications
