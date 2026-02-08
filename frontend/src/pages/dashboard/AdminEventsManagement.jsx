@@ -1485,7 +1485,8 @@ const AdminEventsManagement = () => {
       // Minimal required fields (HTML required covers most, but keep guardrails)
       if (!nextName) throw new Error('Event name is required.');
       if (!nextSport) throw new Error('Sport is required.');
-      if (!nextVenue) throw new Error('Venue is required.');
+      const venueRequired = nextFormat === 'OFFLINE';
+      if (venueRequired && !nextVenue) throw new Error('Venue is required for Offline events.');
       if (!nextCity) throw new Error('City is required.');
       if (!nextState) throw new Error('State is required.');
       if (!nextStartInput) throw new Error('Start date is required.');
@@ -1668,7 +1669,11 @@ const AdminEventsManagement = () => {
     // Required fields per schema - but only validate if being changed
     if (fieldsBeingChanged.includes('name')) required('name', 'Event name');
     if (fieldsBeingChanged.includes('sport')) required('sport', 'Sport');
-    if (fieldsBeingChanged.includes('venue')) required('venue', 'Venue');
+    if (fieldsBeingChanged.includes('venue')) {
+      const fmt = String(editEventForm?.eventFormat || ev?.eventFormat || 'OFFLINE').toUpperCase();
+      const venueRequired = fmt === 'OFFLINE';
+      if (venueRequired) required('venue', 'Venue');
+    }
     if (fieldsBeingChanged.includes('city')) required('city', 'City');
     if (fieldsBeingChanged.includes('state')) required('state', 'State');
     if (fieldsBeingChanged.includes('startDate')) required('startDate', 'Start date');
@@ -2549,12 +2554,14 @@ const AdminEventsManagement = () => {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label htmlFor="stable-edit-venue" className="block text-sm font-medium text-gray-700 mb-1">Venue *</label>
+                      <label htmlFor="stable-edit-venue" className="block text-sm font-medium text-gray-700 mb-1">
+                        Venue {String(event?.eventFormat || 'OFFLINE').toUpperCase() === 'OFFLINE' ? '*' : '(Optional)'}
+                      </label>
                       <input
                         id="stable-edit-venue"
                         name="venue"
                         type="text"
-                        required
+                        required={String(event?.eventFormat || 'OFFLINE').toUpperCase() === 'OFFLINE'}
                         defaultValue={event?.venue || ''}
                         disabled={editSaving}
                         autoComplete="organization"

@@ -122,6 +122,7 @@ const SPORT_CODES = {
   'Modern Pentathlon': 'MP',
   'Triathlon': 'TR',
   'Dance Sports': 'DS',
+  'Esports': 'ES',
   'Cultural Activities': 'CA',
   'Physical Education & Sports Sciences': 'PE',
   'Other': 'OT'

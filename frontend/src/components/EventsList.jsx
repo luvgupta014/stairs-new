@@ -108,20 +108,22 @@ const EventsList = ({
             return eventDate.toDateString() === now.toDateString();
           });
           break;
-        case 'week':
+        case 'week': {
           const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
           filtered = filtered.filter(event => {
             const eventDate = new Date(event.startDate);
             return eventDate >= now && eventDate <= weekFromNow;
           });
           break;
-        case 'month':
+        }
+        case 'month': {
           const monthFromNow = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
           filtered = filtered.filter(event => {
             const eventDate = new Date(event.startDate);
             return eventDate >= now && eventDate <= monthFromNow;
           });
           break;
+        }
         default:
           break;
       }

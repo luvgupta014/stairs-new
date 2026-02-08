@@ -285,7 +285,7 @@ const EventEdit = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="venue" className="block text-sm font-medium text-gray-700 mb-2">
-                Venue Name *
+                Venue Name {/esports/i.test(String(formData.sport || '')) ? '(Optional)' : '*'}
               </label>
               <GoogleMapsPlacesAutocomplete
                 onPlaceSelect={handlePlaceSelect}

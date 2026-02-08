@@ -108,7 +108,7 @@ const EventBulkRegistration = ({ event, coachStudents, onSuccess }) => {
         
         // Open Razorpay payment modal
         const options = {
-          key: process.env.REACT_APP_RAZORPAY_KEY_ID,
+          key: import.meta.env.VITE_RAZORPAY_KEY_ID,
           order_id: razorpayOrderId,
           amount: Math.round(order.totalFeeAmount * 100),
           currency: 'INR',

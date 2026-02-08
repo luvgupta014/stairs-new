@@ -30,6 +30,9 @@ export const ALL_SPORTS = [
   // D
   'Dance Sports',
   'Diving',
+
+  // E
+  'Esports',
   
   // F
   'Football',
@@ -224,6 +227,10 @@ export const SPORTS_BY_CATEGORY = {
     'Cultural Activities',
     'Dance Sports',
     'Physical Education & Sports Sciences'
+  ],
+
+  'Esports': [
+    'Esports'
   ],
   
   'Other Sports': [

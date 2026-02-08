@@ -99,10 +99,12 @@ const EventForm = ({
     if (!formData.startDate) newErrors.startDate = 'Start date is required';
     if (!formData.endDate) newErrors.endDate = 'End date is required';
     
-    // Venue is optional for online events
+    // Venue is optional for online/hybrid events
     const eventFormat = (formData.eventFormat || 'OFFLINE').toString().toUpperCase();
-    const isOnline = eventFormat === 'ONLINE';
-    if (!isOnline && !formData.venue.trim()) {
+    const isVenueOptional =
+      eventFormat === 'ONLINE' ||
+      eventFormat === 'HYBRID';
+    if (!isVenueOptional && !formData.venue.trim()) {
       newErrors.venue = 'Venue is required for offline events';
     }
     
@@ -187,6 +189,10 @@ const EventForm = ({
 
   // Use comprehensive sports list from constants
   const popularSports = SORTED_SPORTS;
+
+  // Compute venue optional status for UI (must be at component level, not inside validateForm)
+  const eventFormat = (formData.eventFormat || 'OFFLINE').toString().toUpperCase();
+  const isVenueOptional = eventFormat === 'ONLINE' || eventFormat === 'HYBRID';
 
   return (
     <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-md">
@@ -316,7 +322,7 @@ const EventForm = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label htmlFor="venue" className="block text-sm font-medium text-gray-700 mb-1">
-              Venue *
+              Venue {isVenueOptional ? '(Optional)' : '*'}
             </label>
             <input
               type="text"

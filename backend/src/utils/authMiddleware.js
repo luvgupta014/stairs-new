@@ -345,7 +345,11 @@ const authenticateToken = (req, res, next) => {
     });
   }
 
-  jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key', (err, user) => {
+  if (!process.env.JWT_SECRET) {
+    return res.status(500).json(errorResponse('Server misconfigured: JWT_SECRET is not set.', 500));
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) {
       return res.status(403).json({
         error: 'Invalid token',
@@ -365,9 +369,12 @@ const authenticateToken = (req, res, next) => {
  * @returns {string} JWT Token
  */
 const generateToken = (payload, expiresIn = '24h') => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('Server misconfigured: JWT_SECRET is not set.');
+  }
   return jwt.sign(
     payload,
-    process.env.JWT_SECRET || 'fallback_secret_key',
+    process.env.JWT_SECRET,
     { expiresIn }
   );
 };
@@ -464,7 +471,10 @@ const checkEventPermission = async ({ user, eventId, permissionKey }) => {
  */
 const verifyToken = (token) => {
   try {
-    return jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
+    if (!process.env.JWT_SECRET) {
+      throw new Error('Server misconfigured: JWT_SECRET is not set.');
+    }
+    return jwt.verify(token, process.env.JWT_SECRET);
   } catch (error) {
     throw new Error('Invalid token');
   }

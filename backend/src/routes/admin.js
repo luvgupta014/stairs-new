@@ -4954,9 +4954,23 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
       categoriesAvailable
     } = req.body;
 
-    // Validation
-    if (!name || !description || !sport || !venue || !startDate) {
-      return res.status(400).json(errorResponse('Name, description, sport, venue, and start date are required.', 400));
+    // Normalize format early (used for validation)
+    const validFormats = ['OFFLINE', 'ONLINE', 'HYBRID'];
+    const normalizedFormat = eventFormat ? String(eventFormat).toUpperCase() : 'OFFLINE';
+    if (!validFormats.includes(normalizedFormat)) {
+      return res.status(400).json(errorResponse(`Invalid event format. Must be one of: ${validFormats.join(', ')}`, 400));
+    }
+
+    // Validation (end-to-end): venue is optional for ONLINE/HYBRID
+    const venueNorm = (venue || '').toString().trim();
+    const venueRequired = normalizedFormat === 'OFFLINE';
+    const cityNorm = (city || '').toString().trim();
+    const stateNorm = (state || '').toString().trim();
+    if (!name || !description || !sport || !startDate || !cityNorm || !stateNorm) {
+      return res.status(400).json(errorResponse('Name, description, sport, city, state, and start date are required.', 400));
+    }
+    if (venueRequired && !venueNorm) {
+      return res.status(400).json(errorResponse('Venue is required for Offline events.', 400));
     }
 
     // Load global payment defaults
@@ -5005,11 +5019,6 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
     }
 
     // Validate event format + tournament links
-    const validFormats = ['OFFLINE', 'ONLINE', 'HYBRID'];
-    const normalizedFormat = eventFormat ? String(eventFormat).toUpperCase() : 'OFFLINE';
-    if (!validFormats.includes(normalizedFormat)) {
-      return res.status(400).json(errorResponse(`Invalid event format. Must be one of: ${validFormats.join(', ')}`, 400));
-    }
     const bracket = (tournamentBracketUrl || '').toString().trim();
     const comms = (tournamentCommsUrl || '').toString().trim();
     const looksLikeUrl = (v) => !v || /^https?:\/\/\S+/i.test(v);
@@ -5073,10 +5082,10 @@ router.post('/events', authenticate, requireAdmin, async (req, res) => {
         description,
         sport,
         level: normalizedLevel || 'DISTRICT',
-        venue,
+        venue: venueNorm,
         address,
-        city,
-        state,
+        city: cityNorm,
+        state: stateNorm,
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
         startDate: startDateObj,

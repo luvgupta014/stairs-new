@@ -274,6 +274,23 @@ const EventCreate = ({ adminMode = false }) => {
       return;
     }
 
+    // Venue: required only for OFFLINE events
+    const venueRequired = fmt === 'OFFLINE';
+    if (venueRequired && !String(formData.venue || '').trim()) {
+      setError('Venue is required for Offline events.');
+      return;
+    }
+
+    // City/State are required by backend schema (even for Online/Hybrid)
+    if (!String(formData.city || '').trim()) {
+      setError('City is required.');
+      return;
+    }
+    if (!String(formData.state || '').trim()) {
+      setError('State is required.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -325,6 +342,9 @@ const EventCreate = ({ adminMode = false }) => {
       setLoading(false);
     }
   };
+
+  const fmtUI = (formData.eventFormat || 'OFFLINE').toString().toUpperCase();
+  const venueRequiredUI = fmtUI === 'OFFLINE';
 
   const handlePlaceSelect = (placeData) => {
     console.log('Place selected:', placeData);
@@ -640,11 +660,11 @@ const EventCreate = ({ adminMode = false }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="venue" className="block text-sm font-medium text-gray-700 mb-2">
-                Venue Name *
+                Venue Name {venueRequiredUI ? '*' : '(Optional)'}
               </label>
               <GoogleMapsPlacesAutocomplete
                 onPlaceSelect={handlePlaceSelect}
-                placeholder="Search for venue (e.g., stadium, sports complex)"
+                placeholder={venueRequiredUI ? "Search for venue (e.g., stadium, sports complex)" : "Optional: add venue / location (e.g., studio, campus, city)"}
                 value={formData.venue}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
@@ -657,6 +677,11 @@ const EventCreate = ({ adminMode = false }) => {
               {formData.venue && formData.latitude && (
                 <p className="mt-1 text-xs text-green-600">
                   ✓ Venue location confirmed with coordinates
+                </p>
+              )}
+              {!venueRequiredUI && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Venue is optional for Online and Hybrid events.
                 </p>
               )}
             </div>
@@ -701,12 +726,13 @@ const EventCreate = ({ adminMode = false }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-2">
-                City
+                City *
               </label>
               <input
                 type="text"
                 id="city"
                 name="city"
+                required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 placeholder="City will be auto-filled"
                 value={formData.city}
@@ -716,12 +742,13 @@ const EventCreate = ({ adminMode = false }) => {
 
             <div>
               <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-2">
-                State
+                State *
               </label>
               <input
                 type="text"
                 id="state"
                 name="state"
+                required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 placeholder="State will be auto-filled"
                 value={formData.state}

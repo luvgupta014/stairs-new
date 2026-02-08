@@ -86,12 +86,14 @@ const AdminEventResults = () => {
         switch (filters.dateRange) {
           case 'today':
             return uploadDate >= startOfToday;
-          case 'week':
+          case 'week': {
             const weekAgo = new Date(startOfToday.getTime() - 7 * 24 * 60 * 60 * 1000);
             return uploadDate >= weekAgo;
-          case 'month':
+          }
+          case 'month': {
             const monthAgo = new Date(startOfToday.getTime() - 30 * 24 * 60 * 60 * 1000);
             return uploadDate >= monthAgo;
+          }
           default:
             return true;
         }

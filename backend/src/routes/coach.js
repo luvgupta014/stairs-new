@@ -1180,11 +1180,6 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
       return res.status(403).json(errorResponse('Your account is not active. Please complete payment to create events.', 403));
     }
 
-    // Validation
-    if (!name || !description || !sport || !venue || !startDate) {
-      return res.status(400).json(errorResponse('Name, description, sport, venue, and start date are required.', 400));
-    }
-
     // Validate level (EventLevel enum)
     const validLevels = ['DISTRICT', 'STATE', 'NATIONAL', 'SCHOOL'];
     const normalizedLevel = level ? String(level).toUpperCase() : 'DISTRICT';
@@ -1206,6 +1201,18 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
     }
     if (!looksLikeUrl(bracket) || !looksLikeUrl(comms)) {
       return res.status(400).json(errorResponse('Tournament links must be valid URLs starting with http:// or https://', 400));
+    }
+
+    // Validation (end-to-end): venue is optional for ONLINE/HYBRID
+    const venueNorm = (venue || '').toString().trim();
+    const venueRequired = normalizedFormat === 'OFFLINE';
+    const cityNorm = (city || '').toString().trim();
+    const stateNorm = (state || '').toString().trim();
+    if (!name || !description || !sport || !startDate || !cityNorm || !stateNorm) {
+      return res.status(400).json(errorResponse('Name, description, sport, city, state, and start date are required.', 400));
+    }
+    if (venueRequired && !venueNorm) {
+      return res.status(400).json(errorResponse('Venue is required for Offline events.', 400));
     }
 
     // Parse dates for India (IST) only platform
@@ -1265,10 +1272,10 @@ router.post('/events', authenticate, requireCoach, async (req, res) => {
         eventFormat: normalizedFormat,
         tournamentBracketUrl: bracket || null,
         tournamentCommsUrl: comms || null,
-        venue,
+        venue: venueNorm,
         address,
-        city,
-        state,
+        city: cityNorm,
+        state: stateNorm,
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
         startDate: startDateObj,
